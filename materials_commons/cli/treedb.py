@@ -6,10 +6,10 @@ import warnings
 from tabulate import tabulate
 
 import materials_commons.api as mcapi
-from . import exceptions as cliexcept
-from . import functions as clifuncs
-from . import file_functions as filefuncs
-from .sqltable import SqlTable, sql_iter
+import materials_commons.cli.exceptions as cliexcept
+import materials_commons.cli.functions as clifuncs
+import materials_commons.cli.file_functions as filefuncs
+from materials_commons.cli.sqltable import SqlTable, sql_iter
 
 
 # tree:

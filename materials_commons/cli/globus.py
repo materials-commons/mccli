@@ -2,9 +2,9 @@ import globus_sdk
 import os
 
 import materials_commons.api as mcapi
-from . import file_functions as filefuncs
-from . import tree_functions as treefuncs
-from .user_config import Config
+import materials_commons.cli.file_functions as filefuncs
+import materials_commons.cli.tree_functions as treefuncs
+from materials_commons.cli.user_config import Config
 
 CLIENT_ID = '1e4aacbc-8c10-4812-a54a-8434d2030a41'
 

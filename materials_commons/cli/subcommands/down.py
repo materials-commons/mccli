@@ -6,12 +6,12 @@ import sys
 import time
 
 import materials_commons.api as mcapi
-from .. import exceptions as cliexcept
-from .. import functions as clifuncs
-from .. import globus as cliglobus
-from .. import tree_functions as treefuncs
-from .. import file_functions as filefuncs
-from ..treedb import LocalTree, RemoteTree
+import materials_commons.cli.exceptions as cliexcept
+import materials_commons.cli.functions as clifuncs
+import materials_commons.cli.globus as cliglobus
+import materials_commons.cli.tree_functions as treefuncs
+import materials_commons.cli.file_functions as filefuncs
+from materials_commons.cli.treedb import LocalTree, RemoteTree
 
 def _get_current_globus_download(pconfig, proj, verbose=True):
     all_downloads = {download.id:download for download in proj.remote.get_all_globus_download_requests(proj.id)}
@@ -216,13 +216,8 @@ def print_file(proj, path):
     print(printpath + ":")
     print(s, end='')
 
-def down_subcommand(argv):
-    """
-    download files from Materials Commons
-
-    mc down [-r] [<pathspec> ...]
-
-    """
+def make_parser():
+    """Make argparse.ArgumentParser for `mc down`"""
     parser = argparse.ArgumentParser(
         description='download files',
         prog='mc down')
@@ -240,9 +235,16 @@ def down_subcommand(argv):
                         help='Globus transfer label to make finding tasks simpler.')
     parser.add_argument('--no-compare', action="store_true", default=False,
                         help='Download remote without checking if local is equivalent.')
+    return parser
 
+def down_subcommand(argv):
+    """
+    download files from Materials Commons
 
-    # ignore 'mc down'
+    mc down [-r] [<pathspec> ...]
+
+    """
+    parser = make_parser()
     args = parser.parse_args(argv)
 
     pconfig = clifuncs.read_project_config()

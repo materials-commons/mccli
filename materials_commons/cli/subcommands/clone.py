@@ -4,7 +4,16 @@ import os
 import sys
 
 import materials_commons.api as mcapi
-from .. import functions as clifuncs
+import materials_commons.cli.functions as clifuncs
+
+def make_parser():
+    """Make argparse.ArgumentParser for `mc clone`"""
+    parser = argparse.ArgumentParser(
+        description='Clone an existing project',
+        prog='mc clone')
+    parser.add_argument('id', help='Project id')
+    clifuncs.add_remote_option(parser, 'Remote to clone project from')
+    return parser
 
 def clone_subcommand(argv):
     """
@@ -14,13 +23,7 @@ def clone_subcommand(argv):
     mc clone <projid> [--remote <remotename>]
 
     """
-    parser = argparse.ArgumentParser(
-        description='Clone an existing project',
-        prog='mc clone')
-    parser.add_argument('id', help='Project id')
-    clifuncs.add_remote_option(parser, 'Remote to clone project from')
-
-    # ignore 'mc clone'
+    parser = make_parser()
     args = parser.parse_args(argv)
 
     # get remote, from command line option or default

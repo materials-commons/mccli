@@ -5,10 +5,10 @@ import sys
 import time
 
 import materials_commons.api as mcapi
-from .. import functions as clifuncs
-from .. import tree_functions as treefuncs
-from .. import file_functions as filefuncs
-from ..treedb import LocalTree, RemoteTree
+import materials_commons.cli.functions as clifuncs
+import materials_commons.cli.tree_functions as treefuncs
+import materials_commons.cli.file_functions as filefuncs
+from materials_commons.cli.treedb import LocalTree, RemoteTree
 
 #  Want to print() something like:
 #
@@ -135,14 +135,8 @@ def _ls_print(proj, data, refpath=None, printjson=False, checksum=False, checkds
             if refpath:
                 print(os.path.relpath(refpath, os.getcwd()) + ": no contents")
 
-
-def ls_subcommand(argv):
-    """
-    'ls' a project directory to see local and remote files and directories.
-
-    mc ls [<pathspec> ...]
-
-    """
+def make_parser():
+    """Make argparse.ArgumentParser for `mc ls`"""
     parser = argparse.ArgumentParser(
         description='List local & remote directory contents',
         prog='mc ls')
@@ -158,8 +152,16 @@ def ls_subcommand(argv):
     parser.add_argument('--include', action="store_true", default=False, help='Include files and directories in the specified dataset. Including a directory includes all files and sub-directories recursively, unless prevented by --exclude-files.')
     parser.add_argument('--exclude', action="store_true", default=False, help='Exclude file and directories from the specified dataset. Excluding prevents inclusion of files and directories that would otherwise be included due to a higher-level directory being included.')
     parser.add_argument('--clear', action="store_true", default=False, help='Clear files and directories from the include/exclude selection lists of the specified dataset. A file or directory may still be included in or excluded from the dataset afterwards if a higher level directory is included or excluded')
+    return parser
 
-    # ignore 'mc ls'
+def ls_subcommand(argv):
+    """
+    'ls' a project directory to see local and remote files and directories.
+
+    mc ls [<pathspec> ...]
+
+    """
+    parser = make_parser()
     args = parser.parse_args(argv)
     updatetime = time.time()
 

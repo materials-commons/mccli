@@ -2,9 +2,21 @@ import argparse
 import os
 import sys
 
-from .. import functions as clifuncs
-from .. import tree_functions as treefuncs
-from ..treedb import RemoteTree
+import materials_commons.cli.functions as clifuncs
+import materials_commons.cli.tree_functions as treefuncs
+from materials_commons.cli.treedb import RemoteTree
+
+def make_parser():
+    """Make argparse.ArgumentParser for `mc mv`"""
+    desc = "Move files. Use `mc move <src> <target>` to move and/or rename a file or directory. Use `mc move <src> ... <directory>` to move a list of files or directories into an existing directory."
+
+    parser = argparse.ArgumentParser(
+        description=desc,
+        prog='mc mv')
+    parser.add_argument('paths', nargs="*", help='Sources and target or directory destination')
+    parser.add_argument('--remote-only', action="store_true", default=False,
+                        help='Move remote files only. Does not compare to local files.')
+    return parser
 
 def mv_subcommand(argv):
     """
@@ -14,17 +26,7 @@ def mv_subcommand(argv):
     mc move <src> ... <directory>
 
     """
-
-    desc = "Move files. Use `mc move <src> <target>` to move and/or rename a file or directory. Use `mc move <src> ... <directory>` to move a list of files or directories into an existing directory."
-
-    parser = argparse.ArgumentParser(
-        description=desc,
-        prog='mc mv')
-    parser.add_argument('paths', nargs="*", help='Sources and target or directory destination')
-    parser.add_argument('--remote-only', action="store_true", default=False,
-                        help='Move remote files only. Does not compare to local files.')
-
-    # ignore 'mc ls'
+    parser = make_parser()
     args = parser.parse_args(argv)
 
     if not args.paths or len(args.paths) < 2:

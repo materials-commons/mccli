@@ -5,13 +5,26 @@ import requests
 import sys
 
 import materials_commons.api as mcapi
-from ..functions import print_remotes
-from ..user_config import Config, RemoteConfig
+from materials_commons.cli.functions import print_remotes
+from materials_commons.cli.user_config import Config, RemoteConfig
 
 def print_known_remotes():
     print("Known remotes:")
     print("    https://materialscommons.org/api")
     # print("    https://lift.materialscommons.org/api") TODO: update with lift
+
+def make_parser():
+    """Make argparse.ArgumentParser for `mc remote`"""
+    parser = argparse.ArgumentParser(
+        description='Server settings',
+        prog='mc remote')
+
+    parser.add_argument('-l', '--list', action="store_true", default=False,  help='List known remote urls.')
+    parser.add_argument('--show-apikey', action="store_true", default=False,  help='Show apikey.')
+    parser.add_argument('--add', nargs=2, metavar=('EMAIL', 'URL'), help='Add a new remote.')
+    parser.add_argument('--remove', nargs=2, metavar=('EMAIL', 'URL'), help='Remove a remote from the list.')
+    parser.add_argument('--set-default', nargs=2, metavar=('EMAIL', 'URL'), help='Set default remote to be used when not in a project.')
+    return parser
 
 def remote_subcommand(argv):
     """
@@ -25,17 +38,7 @@ def remote_subcommand(argv):
         mc remote --set-project <email> <url>  # change the remote used for the current project
 
     """
-    parser = argparse.ArgumentParser(
-        description='Server settings',
-        prog='mc remote')
-
-    parser.add_argument('-l', '--list', action="store_true", default=False,  help='List known remote urls.')
-    parser.add_argument('--show-apikey', action="store_true", default=False,  help='Show apikey.')
-    parser.add_argument('--add', nargs=2, metavar=('EMAIL', 'URL'), help='Add a new remote.')
-    parser.add_argument('--remove', nargs=2, metavar=('EMAIL', 'URL'), help='Remove a remote from the list.')
-    parser.add_argument('--set-default', nargs=2, metavar=('EMAIL', 'URL'), help='Set default remote to be used when not in a project.')
-
-    # ignore 'mc remote'
+    parser = make_parser()
     args = parser.parse_args(argv)
 
     if args.list:

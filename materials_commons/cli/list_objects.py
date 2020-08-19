@@ -5,8 +5,8 @@ import contextlib
 import json
 import re
 
-from . import functions as clifuncs
-from .exceptions import MCCLIException
+import materials_commons.cli.functions as clifuncs
+from materials_commons.cli.exceptions import MCCLIException
 
 @contextlib.contextmanager
 def output_method(file=None, force=False):
@@ -110,7 +110,6 @@ class ListObjects(object):
         self.cmdname = cmdname
         self.typename = typename
         self.typename_plural = typename_plural
-        self.desc = desc
         self.requires_project = requires_project
         self.non_proj_member = non_proj_member
         self.proj_member = proj_member
@@ -129,11 +128,15 @@ class ListObjects(object):
         self.custom_selection_actions = custom_selection_actions
         self.request_confirmation_actions = request_confirmation_actions
 
-    def parse_args(self, argv):
-        """
-        Parse CLI arguments, returning result of argparse.ArgumentParser.parse_args(argv)
-        """
+        self.desc = desc
+        if self.desc is None:
+            if self.creatable:
+                self.desc = 'List and create ' + self.typename_plural
+            else:
+                self.desc = 'List ' + self.typename_plural.lower()
 
+    def make_parser(self):
+        """Make argparse.ArgumentParser"""
         expr_help = 'select ' + self.typename_plural + ' that match the given regex (default matches name)'
         id_help = 'match id instead of name'
         uuid_help = 'match uuid instead of name'
@@ -150,12 +153,6 @@ class ListObjects(object):
         create_help = 'create a ' + self.typename
         delete_help = 'delete a ' + self.typename + ', specified by uuid'
         dry_run_help = 'dry run deletion'
-
-        if self.desc is None:
-            if self.creatable:
-                self.desc = 'List and create ' + self.typename_plural
-            else:
-                self.desc = 'List ' + self.typename_plural.lower()
 
         cmd = "mc "
         for n in self.cmdname:
@@ -194,7 +191,14 @@ class ListObjects(object):
             self.add_create_options(parser)
         if hasattr(self, 'add_custom_options'):
             self.add_custom_options(parser)
+        return parser
 
+
+    def parse_args(self, argv):
+        """
+        Parse CLI arguments, returning result of argparse.ArgumentParser.parse_args(argv)
+        """
+        parser = self.make_parser()
         # ignore 'mc proc'
         args = parser.parse_args(argv)
         if not self.dry_runable:

@@ -3,9 +3,13 @@ import sys
 import yaml
 
 import materials_commons.api as mcapi
-from .. import functions as clifuncs
-from ..list_objects import ListObjects
-from ..exceptions import MCCLIException
+import materials_commons.cli.functions as clifuncs
+from materials_commons.cli.list_objects import ListObjects
+from materials_commons.cli.exceptions import MCCLIException
+
+def make_parser():
+    """Make argparse.ArgumentParser for `mc dataset`"""
+    return DatasetSubcommand().make_parser()
 
 class DatasetSubcommand(ListObjects):
 

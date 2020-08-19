@@ -4,10 +4,14 @@ import yaml
 from collections import OrderedDict
 
 import materials_commons.api.models as models
-from ..exceptions import MCCLIException
-from ..list_objects import ListObjects
-from ..functions import read_project_config, getit, trunc, format_time, remove_hidden_project_files
+from materials_commons.cli.exceptions import MCCLIException
+from materials_commons.cli.list_objects import ListObjects
+from materials_commons.cli.functions import read_project_config, getit, trunc, format_time, \
+    remove_hidden_project_files
 
+def make_parser():
+    """Make argparse.ArgumentParser for `mc ls`"""
+    return ProjSubcommand().make_parser()
 
 class ProjSubcommand(ListObjects):
     def __init__(self):

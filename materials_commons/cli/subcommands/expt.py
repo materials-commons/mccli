@@ -1,8 +1,8 @@
 import json
 import sys
 import materials_commons.api as mcapi
-from .. import functions as clifuncs
-from ..list_objects import ListObjects
+import materials_commons.cli.functions as clifuncs
+from materials_commons.cli.list_objects import ListObjects
 
 def set_current_experiment(project_local_path, expt=None):
     pconfig = clifuncs.read_project_config(project_local_path)
@@ -13,6 +13,10 @@ def set_current_experiment(project_local_path, expt=None):
         pconfig.experiment_id = expt.id
         pconfig.experiment_uuid = expt.uuid
     pconfig.save()
+
+def make_parser():
+    """Make argparse.ArgumentParser for `mc expt`"""
+    return ExptSubcommand().make_parser()
 
 class ExptSubcommand(ListObjects):
     """

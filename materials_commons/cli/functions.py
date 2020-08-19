@@ -7,14 +7,14 @@ import requests
 import sys
 import time
 
+import materials_commons.api.models as models
 from tabulate import tabulate
 
-from .exceptions import MCCLIException, MissingRemoteException, MultipleRemoteException, \
-    NoDefaultRemoteException
-from .print_formatter import PrintFormatter, trunc
-from .sqltable import SqlTable
-from .user_config import Config, RemoteConfig
-import materials_commons.api.models as models
+from materials_commons.cli.exceptions import MCCLIException, MissingRemoteException, \
+    MultipleRemoteException, NoDefaultRemoteException
+from materials_commons.cli.print_formatter import PrintFormatter, trunc
+from materials_commons.cli.sqltable import SqlTable
+from materials_commons.cli.user_config import Config, RemoteConfig
 
 # TODO: mcapi.Config, mcapi.Remote, mcapi.RemoteConfig
 

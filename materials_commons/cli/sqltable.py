@@ -3,7 +3,7 @@ import re
 import sqlite3
 import warnings
 
-from .print_formatter import PrintFormatter
+from materials_commons.cli.print_formatter import PrintFormatter
 
 def dbpath(proj_local_path):
     """Location of a sqlite database to cache project data locally"""

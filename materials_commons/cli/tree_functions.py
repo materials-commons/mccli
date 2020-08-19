@@ -7,9 +7,9 @@ from sortedcontainers import SortedSet
 import time
 
 import materials_commons.api as mcapi
-from . import exceptions as cliexcept
-from . import functions as clifuncs
-from . import file_functions as filefuncs
+import materials_commons.cli.exceptions as cliexcept
+import materials_commons.cli.functions as clifuncs
+import materials_commons.cli.file_functions as filefuncs
 
 def clipaths_to_mcpaths(proj_local_path, clipaths, workdir=None):
     """Convert CLI paths input to Materials Commons standardized paths

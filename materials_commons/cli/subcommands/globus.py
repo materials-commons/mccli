@@ -6,10 +6,12 @@ import yaml
 from io import StringIO
 
 import materials_commons.api as mcapi
-from .. import functions as clifuncs
-from .. import globus as cliglobus
-from ..list_objects import ListObjects
-from ..exceptions import MCCLIException
+import materials_commons.cli.functions as clifuncs
+import materials_commons.cli.globus as cliglobus
+from materials_commons.cli.exceptions import MCCLIException
+from materials_commons.cli.list_objects import ListObjects
+from materials_commons.cli.user_config import Config
+
 
 def set_current_globus_upload(project_local_path, upload=None):
     pconfig = clifuncs.read_project_config(project_local_path)
@@ -26,6 +28,10 @@ def set_current_globus_download(project_local_path, download=None):
     else:
         pconfig.globus_download_id = download.id
     pconfig.save()
+
+def make_globus_upload_parser():
+    """Make argparse.ArgumentParser for `mc globus download`"""
+    return GlobusUploadTaskSubcommand().make_parser()
 
 class GlobusUploadTaskSubcommand(ListObjects):
 
@@ -263,6 +269,9 @@ class GlobusUploadTaskSubcommand(ListObjects):
         out.write("Unset Globus upload\n")
         return
 
+def make_globus_download_parser():
+    """Make argparse.ArgumentParser for `mc globus download`"""
+    return GlobusDownloadTaskSubcommand().make_parser()
 
 class GlobusDownloadTaskSubcommand(ListObjects):
 
@@ -480,39 +489,65 @@ globus_interface_usage = [
     {'name': 'upload', 'desc': 'Manage Globus uploads', 'subcommand': GlobusUploadTaskSubcommand()}
 ]
 
-def globus_subcommand(argv):
-    """
-    Manage Globus uploads and downloads.
-
-    mc globus download [... download options ...]
-    mc globus upload [... upload options ...]
-
-    """
-
+def make_globus_parser():
+    """Make argparse.ArgumentParser for `mc globus`"""
     usage_help = StringIO()
     usage_help.write("mc globus <transfertype> [<args>]\n\n")
     usage_help.write("The transfer types are:\n")
 
     for interface in globus_interface_usage:
         usage_help.write("  {:10} {:40}\n".format(interface['name'], interface['desc']))
-    globus_interfaces = {d['name']: d for d in globus_interface_usage}
 
     parser = argparse.ArgumentParser(
         description='Manage Globus transfers',
         usage=usage_help.getvalue())
-    parser.add_argument('transfertype', help='Type of transfer to manage.')
+    parser.add_argument('transfertype', nargs='?', default=None, help='Type of transfer to manage.')
 
+    parser.add_argument('--set-globus-endpoint-id', type=str, help='Set local globus endpoint ID')
+    parser.add_argument('--clear-globus-endpoint-id', action="store_true", default=False, help='Clear local globus endpoint ID')
+
+    return parser
+
+def globus_subcommand(argv):
+    """
+    Manage Globus uploads, downloads, and configuration.
+
+    mc globus download [... download options ...]
+    mc globus upload [... upload options ...]
+    mc globus --set-globus-endpoint-id <id>
+    mc globus --clear-globus-endpoint-id <id>
+    mc globus
+    """
+    parser = make_globus_parser()
     if len(argv) < 1:
-        parser.print_help()
+        endpoint_id = cliglobus.get_local_endpoint_id()
+        print("Globus endpoint id:", endpoint_id)
         return
 
     # parse_args defaults to [1:] for args, but you need to
     # exclude the rest of the args too, or validation will fail
     args = parser.parse_args([argv[0]])
 
-    if args.transfertype in globus_interfaces:
-        globus_interfaces[args.transfertype]['subcommand'](argv[1:])
+    if args.transfertype:
+
+        globus_interfaces = {d['name']: d for d in globus_interface_usage}
+        if args.transfertype in globus_interfaces:
+            globus_interfaces[args.transfertype]['subcommand'](argv[1:])
+        else:
+            print('Unrecognized transfertype')
+            parser.print_help()
+            return
+
+    elif args.set_globus_endpoint_id:
+        config = Config()
+        config.globus.endpoint_id = args.set_globus_endpoint_id
+        config.save()
+
+    elif args.clear_globus_endpoint_id:
+        config = Config()
+        config.globus.endpoint_id = None
+        config.save()
+
     else:
-        print('Unrecognized transfertype')
         parser.print_help()
-        exit(1)
+        return

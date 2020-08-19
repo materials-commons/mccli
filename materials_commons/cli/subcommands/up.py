@@ -3,22 +3,17 @@ import os
 import sys
 import time
 
-from .. import exceptions as cliexcept
-from .. import functions as clifuncs
-from .. import globus as cliglobus
-from .. import tree_functions as treefuncs
-from ..treedb import LocalTree, RemoteTree
+import materials_commons.cli.exceptions as cliexcept
+import materials_commons.cli.functions as clifuncs
+import materials_commons.cli.globus as cliglobus
+import materials_commons.cli.tree_functions as treefuncs
+from materials_commons.cli.treedb import LocalTree, RemoteTree
 
 globus_help = """Use globus to upload files. Uses the current active upload or creates a new upload.
  Use `globus task list` to monitor transfer tasks. Use `mc globus upload` to manage uploads."""
 
-def up_subcommand(argv):
-    """
-    upload files to Materials Commons
-
-    mc up [-r] [<pathspec> ...]
-
-    """
+def make_parser():
+    """Make argparse.ArgumentParser for `mc up`"""
     parser = argparse.ArgumentParser(
         description='upload files',
         prog='mc up')
@@ -33,8 +28,16 @@ def up_subcommand(argv):
                         help='Globus transfer label to make finding tasks simpler. Default is `<project name>-<upload name>.')
     parser.add_argument('--no-compare', action="store_true", default=False,
                         help='Upload without checking if remote is equivalent.')
+    return parser
 
-    # ignore 'mc up'
+def up_subcommand(argv):
+    """
+    upload files to Materials Commons
+
+    mc up [-r] [<pathspec> ...]
+
+    """
+    parser = make_parser()
     args = parser.parse_args(argv)
 
     proj = clifuncs.make_local_project()

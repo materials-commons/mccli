@@ -5,8 +5,8 @@ import requests
 import sys
 
 import materials_commons.api as mcapi
-from .. import functions as clifuncs
-from ..exceptions import MCCLIException
+import materials_commons.cli.functions as clifuncs
+from materials_commons.cli.exceptions import MCCLIException
 
 
 def init_project(name, description="", prefix=None, remote_config=None):
@@ -80,6 +80,15 @@ def init_project(name, description="", prefix=None, remote_config=None):
 
     return proj
 
+def make_parser():
+    """Make argparse.ArgumentParser for `mc init`"""
+    parser = argparse.ArgumentParser(
+        description='Initialize current working directory as a new project',
+        prog='mc init')
+    clifuncs.add_remote_option(parser, 'Remote to create project at')
+    parser.add_argument('--desc', type=str, default='', help='Project description')
+    return parser
+
 def init_subcommand(argv):
     """
     Initialize a new project
@@ -87,13 +96,7 @@ def init_subcommand(argv):
     mc init [--remote <remote>] [--desc <description>]
 
     """
-    parser = argparse.ArgumentParser(
-        description='Initialize current working directory as a new project',
-        prog='mc init')
-    clifuncs.add_remote_option(parser, 'Remote to create project at')
-    parser.add_argument('--desc', type=str, default='', help='Project description')
-
-    # ignore 'mc init'
+    parser = make_parser()
     args = parser.parse_args(argv)
 
     # get remote, from command line option or default
