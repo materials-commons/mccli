@@ -32,6 +32,12 @@ Existing Materials Commons projects can be deleted, for example specifying by ID
 
 This will prompt for confirmation before deleting, but after confirmation ***the project, and all of its files and data on Materials Commons will be deleted and cannot be recovered***. Local files will not be deleted.
 
+The ``--goto`` option provides a shortcut for launching the Materials Commons project webpage: ::
+
+    mc proj --goto <project_name>
+
+You will be prompted to confirm and to login, if necessary.
+
 
 ``mc proj --help`` documentation
 --------------------------------
