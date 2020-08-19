@@ -106,12 +106,11 @@ def random_name(n=3, max_letters=6, sep='-'):
 def print_table(data, columns=[], headers=[], out=None):
     """Print table from list of dict
 
-    Arguments
-    ---------
-    data: list of dict, Data to print
-    columns: list of str, Keys of data to print, in order
-    headers: list of str, Header strings
-    out: stream, Output stream
+    Args:
+        data: list of dict, Data to print
+        columns: list of str, Keys of data to print, in order
+        headers: list of str, Header strings
+        out: stream, Output stream
     """
     tabulate_in = []
     if out is None:
@@ -396,20 +395,15 @@ def humanize(file_size_bytes):
 def request_confirmation(msg, force=False):
     """Request user confirmation
 
-    Arguments
-    ---------
-    msg: str
-        Ex: "Are you sure you want to permanently delete these?", will prompt user with:
+    Arguments:
+        msg (str): For example, the value "Are you sure you want to permanently delete these?", will prompt user with: ::
 
             "Are you sure you want to permanently delete these? ('Yes'/'No'): "
 
-    force: bool
-        Proceed without user confirmation
+        force (bool): Proceed without user confirmation
 
-    Returns
-    -------
-    confirmation: bool
-        True if confirmed or forced, False if not confirmed.
+    Returns:
+        confirmation (bool): True if confirmed or forced, False if not confirmed.
     """
     if not force:
         msg = msg + " ('Yes'/'No'): "
@@ -466,8 +460,10 @@ def _proj_config(path=None):
     return os.path.join(dirpath, '.mc', 'config.json')
 
 class ProjectConfig(object):
-    """
-    Format:
+    """Facilitates reading and writing a JSON file storing local project configuration values
+
+    Project ``.mc/config.json`` file format: ::
+
         {
             "remote": {
                 "mcurl": <url>,
@@ -477,21 +473,20 @@ class ProjectConfig(object):
             "project_uuid": <uuid>,
             "experiment_id": <id>,
             "experiment_uuid": <uuid>,
-            "remote_updatetime": <number>
-            "globus_upload_id": <id>
+            "remote_updatetime": <number>,
+            "globus_upload_id": <id>,
             "globus_download_id": <id>
         }
 
-    Attributes
-    ----------
-        project_id: int or None
-        project_uuid: str or None
-        experiment_id: int or None
-        experiment_uuid: str or None
-        remote: RemoteConfig
-        remote_updatetime: number or None
-        globus_upload_id: int or None
-        globus_download_id: int or None
+    Attributes:
+        project_id (int or None): Project ID
+        project_uuid (str or None): Project UUID
+        experiment_id (int or None): Current experiment ID
+        experiment_uuid (str or None): Current experiment UUID
+        remote (user_config.RemoteConfig): Configuration variables (email, url, apikey) for remote instance of Materials Commons where the project is stored.
+        remote_updatetime (number or None): For use with optional caching, holds the last time local cache data was updated from the remote.
+        globus_upload_id (int or None): ID specifying which Globus upload directory should be used for Globus uploads.
+        globus_download_id (int or None): ID specifying which Globus download directory should be used for Globus downloads.
 
     """
     def __init__(self, project_path):
@@ -527,6 +522,7 @@ class ProjectConfig(object):
         self.globus_download_id = data.get('globus_download_id', None)
 
     def to_dict(self):
+        """Return project configuration as a dict"""
         return {
             'remote': {
                 'mcurl': self.remote.mcurl,
@@ -542,6 +538,7 @@ class ProjectConfig(object):
         }
 
     def save(self):
+        """Save project configuration as a JSON file"""
         if not os.path.exists(self.config_dir):
             os.mkdir(self.config_dir)
         with open(self.config_path, 'w') as f:

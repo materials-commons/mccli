@@ -8,7 +8,7 @@ from materials_commons.cli.treedb import RemoteTree
 
 def make_parser():
     """Make argparse.ArgumentParser for `mc mv`"""
-    desc = "Move files. Use `mc move <src> <target>` to move and/or rename a file or directory. Use `mc move <src> ... <directory>` to move a list of files or directories into an existing directory."
+    desc = "Move files. Use `mc mv <src> <target>` to move and/or rename a file or directory. Use `mc mv <src> ... <directory>` to move a list of files or directories into an existing directory."
 
     parser = argparse.ArgumentParser(
         description=desc,

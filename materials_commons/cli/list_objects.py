@@ -26,29 +26,49 @@ def output_method(file=None, force=False):
 
 class ListObjects(object):
     """
-    Base class to create an 'mc X' CLI command for listing objects of type X.
+    Base class to create ``mc X`` CLI program commands that list objects of type X.
 
-    Expects derived class members:
-        get_all_from_experiment(self, expt), if expt_member
-        get_all_from_dataset(self, dataset), if dataset_member
-        get_all_from_project(self, proj), if proj_member
-        get_all(self), if non_proj_member
-        list_data(self, obj)
-        print_details(self, obj, out=sys.stdout)
+    Expected derived class members:
+
+    +-----------------------------------------+---------------------------------------+
+    |list_data(self, obj)                     |required                               |
+    +-----------------------------------------+---------------------------------------+
+    |print_details(self, obj, out=sys.stdout) |required                               |
+    +-----------------------------------------+---------------------------------------+
+    |get_all_from_experiment(self, expt)      |required if self.expt_member==True     |
+    +-----------------------------------------+---------------------------------------+
+    |get_all_from_dataset(self, dataset)      |required if self.dataset_member==True  |
+    +-----------------------------------------+---------------------------------------+
+    |get_all_from_project(self, proj)         |required if self.proj_member==True     |
+    +-----------------------------------------+---------------------------------------+
+    |get_all(self)                            |required if self.non_proj_member==True |
+    +-----------------------------------------+---------------------------------------+
 
     Optional derived class members:
-        create(self, args), should be implemented if type is createable
-        delete(self, objects, dry_run, out=sys.stdout), should be implemented if type is createable
-        add_create_options(self, parser), called if exists in derived class
-        add_custom_options(self, parser), called if exists in derived class
 
-    Custom derived class actions should have the form:
-        <name>(self, args, out=sys.stdout)
+    +--------------------------------------------------+---------------------------------+
+    |create(self, args)                                |implement if type is createable  |
+    +--------------------------------------------------+---------------------------------+
+    |delete(self, objects, dry_run, out=sys.stdout)    |implemented if type is deleteable|
+    +--------------------------------------------------+---------------------------------+
+    |add_create_options(self, parser)                  |called if exists in derived class|
+    +--------------------------------------------------+---------------------------------+
+    |add_custom_options(self, parser)                  |called if exists in derived class|
+    +--------------------------------------------------+---------------------------------+
 
-    Custom derived class "selection" actions should have the form:
-        <name>(self, objects, args, out=sys.stdout)
+    Custom derived class actions (derived class member functions) should have the form:
 
-    See ProcSubcommand for an example.
+    +-----------------------------------+
+    |<name>(self, args, out=sys.stdout) |
+    +-----------------------------------+
+
+    Custom derived class "selection" actions (derived class member functions that act on a selection of objects) should have the form:
+
+    +--------------------------------------------+
+    |<name>(self, objects, args, out=sys.stdout) |
+    +--------------------------------------------+
+
+    See :class:`materials_commons.cli.subcommands.proj.ProjSubcommand` for an example.
 
     """
 
@@ -60,7 +80,7 @@ class ListObjects(object):
                  custom_actions=[], custom_selection_actions=[], request_confirmation_actions={}):
         """
 
-        Arguments:
+        Args:
             cmdname: List[str]
                 Names to use for 'mc X Y ...', for instance: ["casm", "prim"] for "mc casm prim"
             typename: str

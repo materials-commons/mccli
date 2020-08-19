@@ -24,7 +24,7 @@ class SqlTable(object):
 
     This is a base class. Derived classes must implement:
 
-        - @staticmethod default_print_fmt(): list of tuple, see an example
+        - @staticmethod default_print_fmt(): list of tuple, used to format a table
         - @staticmethod tablecolumns(): dict, column name as key, list of table creation args for value
         - @staticmethod tablename(): str, table name in sqlite database
 
