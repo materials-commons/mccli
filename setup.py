@@ -1,18 +1,11 @@
 # build with: python setup.py install --user
 
 from setuptools import setup, find_namespace_packages
-
-
-try:
-    with open('materials_commons/cli/VERSION.txt') as f:
-        version = f.read().strip()
-except IOError:
-    version = '2.0.0'
-
+from materials_commons.cli import __version__
 
 setup(
     name='materials_commons-cli',
-    version=version,
+    version=__version__,
     description='Materials Commons CLI',
     long_description="""This package contains the materials_commons.cli module. This module is an interface
     to the Materials Commons project. We assume you have used (or are otherwise familiar with) the Materials
