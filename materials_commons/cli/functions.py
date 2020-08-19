@@ -19,36 +19,67 @@ from materials_commons.cli.user_config import Config, RemoteConfig
 # TODO: mcapi.Config, mcapi.Remote, mcapi.RemoteConfig
 
 def mkdir_if(path):
+    """Convenience function for making a directory, if it does not exist. """
     if not os.path.exists(path):
         os.mkdir(path)
 
 def remove_if(path):
+    """Convenience function for removing a file, if it exists. """
     if os.path.exists(path):
         os.remove(path)
 
 def rmdir_if(path):
+    """Convenience function for removing a directory, if it exists. """
     if os.path.exists(path):
         os.rmdir(path)
 
 def make_file(path, text):
+    """Convenience function for writing "text" to a file at "path". """
     with open(path, 'w') as f:
         f.write(text)
 
 def remove_hidden_project_files(project_path):
+    """Removes a local project's configuration files and directory"""
     remove_if(os.path.join(project_path, ".mc", "config.json"))
     remove_if(os.path.join(project_path, ".mc", "project.db"))
     rmdir_if(os.path.join(project_path, ".mc"))
 
 def getit(obj, name, default=None):
+    """Returns the "name" attribute (or default value) whether "obj" is a dict or an object."""
     if isinstance(obj, dict):
         return obj.get(name, default)
     else:
         return getattr(obj, name, default)
 
 def as_is(value):
+    """Returns value without any changes. A placeholder for when a function is needed."""
     return value
 
 def epoch_time(time_value):
+    """Attempts to convert various time representations into s since the epoch
+
+    Args:
+        time_value: A representation of time.
+
+    Returns:
+        An integer s since the epoch. Uses the following:
+
+            +-------------------+------------------------------------------------------------+
+            | If this type      | Then do this conversion                                    |
+            +-------------------+------------------------------------------------------------+
+            | str               | time.mktime(dateutil.parser.parse(time_value).timetuple()) |
+            +-------------------+------------------------------------------------------------+
+            | float, int        | time_value                                                 |
+            +-------------------+------------------------------------------------------------+
+            | datetime.datetime | time.mktime(time_value.timetuple())                        |
+            +-------------------+------------------------------------------------------------+
+            | dict              | time_value['epoch_time']                                   |
+            +-------------------+------------------------------------------------------------+
+            | None              | None                                                       |
+            +-------------------+------------------------------------------------------------+
+            | Else              | str(type(time_value))                                      |
+            +-------------------+------------------------------------------------------------+
+    """
     if isinstance(time_value, str): # expect ISO 8601 str
         return time.mktime(dateutil.parser.parse(time_value).timetuple())
     elif isinstance(time_value, (float, int)):
@@ -63,6 +94,32 @@ def epoch_time(time_value):
         return str(type(time_value))
 
 def format_time(time_value, fmt="%Y %b %d %H:%M:%S"):
+    """Attempts to put various time representations into specified format for printing
+
+    Args:
+        time_value: A representation of time.
+
+        fmt (str): Format to use for the return value.
+
+    Returns:
+        A string representation using the specified format. Uses the following:
+
+            +-------------------+-------------------------------------------------+
+            | If this type      | Then do this conversion                         |
+            +-------------------+-------------------------------------------------+
+            | str               | dateutil.parser.parse(time_value).strftime(fmt) |
+            +-------------------+-------------------------------------------------+
+            | float, int        | time.strftime(fmt, time.localtime(time_value))  |
+            +-------------------+-------------------------------------------------+
+            | datetime.datetime | time.strftime(fmt, time.localtime(time_value))  |
+            +-------------------+-------------------------------------------------+
+            | dict              | format_time(time_value['epoch_time'])           |
+            +-------------------+-------------------------------------------------+
+            | None              | "-"                                             |
+            +-------------------+-------------------------------------------------+
+            | Else              | str(type(time_value))                           |
+            +-------------------+-------------------------------------------------+
+    """
     if isinstance(time_value, str): # expect ISO 8601 str
         return dateutil.parser.parse(time_value).strftime(fmt)
     elif isinstance(time_value, (float, int)):
@@ -77,10 +134,12 @@ def format_time(time_value, fmt="%Y %b %d %H:%M:%S"):
         return str(type(time_value))
 
 def checksum(path):
+    """Generate MD5 checksum for the file at "path" """
     with open(path, 'rb') as f:
         return hashlib.md5(f.read()).hexdigest()
 
 def random_name(n=3, max_letters=6, sep='-'):
+    """Generates a random name for "n" words of max "max_letters" length, joined by "sep" """
     import random
     word_file = "/usr/share/dict/words"
     if os.path.exists(word_file):
@@ -121,12 +180,11 @@ def print_table(data, columns=[], headers=[], out=None):
     out.write('\n')
 
 def print_projects(projects, current=None):
-    """
-    Print list of projects, include '*' for current project
+    """Prints a list of projects, including a '*' indicating the project containing the current working directory
 
-    Arguments:
-        projects: List[materials_commons.api.models.Project]
-        current: materials_commons.api.models.Project containing os.getcwd()
+    Args:
+        projects: A list of :class:`materials_commons.api.Project`
+        current: A `materials_commons.api.Project` containing the current working directory as determined by "os.getcwd()", or None if not in a local project directory.
     """
     data = []
     for p in projects:
@@ -148,6 +206,7 @@ def print_projects(projects, current=None):
     print_table(data, columns=columns, headers=headers)
 
 def print_remote_help():
+    """Print a help message for cases when no remotes are configured"""
     print("Add a remote with:")
     print("    mc remote --add EMAIL URL")
     print("List current remotes with:")
@@ -157,17 +216,26 @@ def print_remote_help():
 
 
 def add_remote_option(parser, help):
-    """Add --remote cli option"""
+    """Add the "--remote <email> <url>" cli option to an ArgumentParser
+
+    - This standardizes the use of the "--remote <email> <url>" cli option which is needed in some contexts, but not others
+
+    Args:
+        parser (:class:`argparse.ArgumentParser`): The initial ArgumentParser
+
+    Returns:
+        :class:`argparse.ArgumentParser`: The ArgumentParser, with the added option "--remote <email> <url>".
+    """
     parser.add_argument('--remote', nargs=2, metavar=('EMAIL', 'URL'), help=help)
 
 def optional_remote_config(args):
-    """Return RemoteConfig specified by cli option --remote, or default remote
+    """Return remote configuration parameters specified by cli option "--remote", or the user's default remote
 
-    Arguments:
-        args: argparse args, with attribute `remote`
+    Args:
+        args (argparse.Namespace): The result of argparse's "parse_args()" method. Checks for "args.remote".
 
     Returns:
-        remote: RemoteConfig
+        :class:`materials_commons.api.Client`: The remote configuration parameters for the appropriate client: either the value specified using the "--remote <email> <url>" option, or else the user's configured default.
     """
     config = Config()
     if args.remote:
@@ -184,15 +252,16 @@ def optional_remote_config(args):
         return config.default_remote
 
 def optional_remote(args, default_client=None):
-    """Return remote specified by cli option --remote, or default remote
+    """Return remote specified by cli option "--remote", or the user's default remote
 
-    Arguments:
-        args: argparse args, with attribute `remote`
-        default_client: mcapi.Client, the default client to use. If None, uses
-            `Config().default_remote.make_client()`.
+    Args:
+        args (argparse args): The result of argparse's "parse_args()" method. Checks for "args.remote".
+        default_client (:class:`materials_commons.api.Client`): The default client to use. If None, uses the default remote specified in the user's configuration file: ::
+
+            `materials_commons.cli.user_config.Config().default_remote.make_client()`.
 
     Returns:
-        remote: mcapi.Client
+        :class:`materials_commons.api.Client`: The appropriate client: the value specified using the "--remote <email> <url>" option, or else the user's configured default.
     """
     config = Config()
     if args.remote:
@@ -214,10 +283,11 @@ def optional_remote(args, default_client=None):
             return default_client
 
 def print_remotes(config_remotes, show_apikey=False):
-    """Print list of remotes
+    """Print a table with remote Materials Commons instance configuration parameters (email, url, apikey)
 
-    Arguments:
-        remote_configs: RemoteConfigs, grouped like: {<url>: {<email>: RemoteConfig, ...}, ...}
+    Args:
+        config_remotes: A dict of :class:`materials_commons.cli.user_config.RemoteConfig`, grouped like: "{<url>: {<email>: RemoteConfig, ...}, ...}"
+        show_apikey (bool): If True, print apikeys also.
     """
     if not len(config_remotes):
         print("No remotes")
@@ -259,6 +329,14 @@ def print_remotes(config_remotes, show_apikey=False):
         pformatter.print(record)
 
 def make_local_project_client(path=None):
+    """Construct a client to access project data from the local project configuration
+
+    Args:
+        path (str): Path to anywhere inside a local project directory
+
+    Returns:
+        :class:`materials_commons.api.Client`: A client for the instance of Materials Commons that is storing the project
+    """
     project_config = read_project_config(path)
     if not project_config:
         return None
@@ -273,11 +351,11 @@ def make_local_project_client(path=None):
     return remote_config_with_apikey.make_client()
 
 class ProjectTable(SqlTable):
-    """Cache some basic project data"""
+    """The ProjectTable creates a sqlite "project" table to cache some basic project data"""
 
     @staticmethod
     def default_print_fmt():
-        """list of tuple, see an example"""
+        """Returns project table print formatting parameters"""
         return [
             ("name", "name", "<", 24, as_is),
             ("id", "id", "<", 36, as_is),
@@ -287,7 +365,11 @@ class ProjectTable(SqlTable):
 
     @staticmethod
     def tablecolumns():
-        """dict, column name as key, list of table creation args for value. Requires unique 'id'."""
+        """Returns sqlite project table creating parameters
+
+        Returns:
+            A dict, with column name as key, and list of column creation args for value.
+        """
         return {
             "id": ["integer", "UNIQUE"],
             "uuid": ["text"],
@@ -298,13 +380,14 @@ class ProjectTable(SqlTable):
 
     @staticmethod
     def tablename():
+        """Returns sqlite project table name "project" """
         return "project"
 
     def __init__(self, proj_local_path):
         """
 
-        Arguments:
-            proj_local_path: str, Path to project, locally.
+        Args:
+            proj_local_path (str): Path to local project directory
         """
         super(ProjectTable, self).__init__(proj_local_path)
 
@@ -318,13 +401,22 @@ class ProjectTable(SqlTable):
         return self.curs.fetchall()
 
 def make_local_project(path=None, data=None):
-    """Read local project config file and use to construct mcapi.Project
+    """Read local project config file and use to construct materials_commons.api.models.Project
 
-    :param str path: Path inside local project directory
-    :param dict data: Optional Project data, if already present avoids an extra API call.
+    - Checks if "path" is a path located inside a local project directory (by looking for the ".mc" directory).
+    - Use local project configuration to:
+        - Construct a "remote" instance (:class:`materials_commons.api.Client`)
+        - Call Materials Commons and construct a project instance (:class:`materials_commons.api.Project`)
+    - Add attributes to the project:
+        - "local_path" (str) providing the absolute path to the local project directory
+        - "remote" (:class:`materials_commons.api.Client`) project specific client instance
 
-    :note: Will read from local project.db cache if updated after fetch lock was set, else will
-        request data from Materials Commons.
+    Args:
+        path (str): Path inside a local project directory
+        data (dict): Optional, project data. If stored in cache this avoids an extra API call.
+
+    Notes:
+        Caching behavior is currently disabled while updating `materials_commons.cli` for MC2.0. It allows setting a "fetch lock" so that data that is not cached or older than the time the lock was set will be queried from the remote, otherwise the local cache data is used.
     """
 
     proj_path = project_path(path)
@@ -376,6 +468,16 @@ def make_local_project(path=None, data=None):
     return proj
 
 def make_local_expt(proj):
+    """Read local project configuration to construct "current experiment" object
+
+    - The "current experiment" is a default experiment for putting newly created samples or processes
+
+    Args:
+        proj (:class:`materials_commons.api.models.Project`): A Project instance, including the `materials_commons.cli` added attribute "local_path".
+
+    Returns:
+        Returns the local project's "current experiment" (:class:`materials_commons.api.models.Experiment`), or None if not set.
+    """
     project_config = read_project_config(proj.local_path)
 
     if project_config:
@@ -386,6 +488,14 @@ def make_local_expt(proj):
     return None
 
 def humanize(file_size_bytes):
+    """Get a nice string representation of file size
+
+    Args:
+        file_size_bytes (int): File size in bytes
+
+    Returns:
+        str: File size as human readable string (ex: "10B", "8K", "5M", "2G", etc.)
+    """
     abbrev = [("B", 0), ("K", 10), ("M", 20), ("G", 30), ("T", 40)]
     for key, val in abbrev:
         _size = (file_size_bytes >> val)
@@ -395,7 +505,7 @@ def humanize(file_size_bytes):
 def request_confirmation(msg, force=False):
     """Request user confirmation
 
-    Arguments:
+    Args:
         msg (str): For example, the value "Are you sure you want to permanently delete these?", will prompt user with: ::
 
             "Are you sure you want to permanently delete these? ('Yes'/'No'): "
@@ -403,7 +513,7 @@ def request_confirmation(msg, force=False):
         force (bool): Proceed without user confirmation
 
     Returns:
-        confirmation (bool): True if confirmed or forced, False if not confirmed.
+        bool: True if confirmed or forced, False if not confirmed.
     """
     if not force:
         msg = msg + " ('Yes'/'No'): "
@@ -418,7 +528,7 @@ def request_confirmation(msg, force=False):
         return True
 
 def _proj_path(path=None):
-    """Find project path if .mc directory already exists, else return None"""
+    """Returns the path to a local project directory if it contains "path", else None"""
     if path is None:
         path = os.getcwd()
     # if not os.path.isdir(path):
@@ -436,10 +546,11 @@ def _proj_path(path=None):
     return None
 
 def project_path(path=None):
-    """Return path to local project, else None"""
+    """Returns the path to a local project directory if it contains "path", else None"""
     return _proj_path(path)
 
 def project_exists(path=None):
+    """Returns True if a local project directory exists containing "path" """
     if _proj_path(path):
         return True
     return False
@@ -479,17 +590,25 @@ class ProjectConfig(object):
         }
 
     Attributes:
+        project_path (str): Absolute path to local project directory.
+        config_dir (str): Absolute path to local project configuration directory (".mc").
+        config_path (str): Absolute path to local project configuration file (".mc/config.json").
         project_id (int or None): Project ID
         project_uuid (str or None): Project UUID
         experiment_id (int or None): Current experiment ID
         experiment_uuid (str or None): Current experiment UUID
-        remote (user_config.RemoteConfig): Configuration variables (email, url, apikey) for remote instance of Materials Commons where the project is stored.
+        remote (user_config.RemoteConfig): Holds configuration variables (email, url, apikey) for the remote instance of Materials Commons where the project is stored.
         remote_updatetime (number or None): For use with optional caching, holds the last time local cache data was updated from the remote.
         globus_upload_id (int or None): ID specifying which Globus upload directory should be used for Globus uploads.
         globus_download_id (int or None): ID specifying which Globus download directory should be used for Globus downloads.
 
     """
     def __init__(self, project_path):
+        """Construct by reading local project configuration file if it exists
+
+        Args:
+            project_path (str): Absolute path to local project directory. Will read `<project_path>/.mc/config.json`. All attributes will be None if the configuration file does not exist.
+        """
         self.project_path = project_path
         self.config_dir = os.path.join(self.project_path, ".mc")
         self.config_path = os.path.join(self.config_dir, "config.json")
@@ -522,7 +641,7 @@ class ProjectConfig(object):
         self.globus_download_id = data.get('globus_download_id', None)
 
     def to_dict(self):
-        """Return project configuration as a dict"""
+        """Returns the project configuration as a dict"""
         return {
             'remote': {
                 'mcurl': self.remote.mcurl,
@@ -546,7 +665,11 @@ class ProjectConfig(object):
         return
 
 def read_project_config(path=None):
-    """Read <project>/.mc/config.json file, or return None"""
+    """Read local project configuration
+
+    Returns:
+         If the project configuration file ("<project>/.mc/config.json") exists, returns a :class:`ProjectConfig` instance. Else, returns None.
+    """
     # get config
     proj_config_path = _proj_config(path)
     if proj_config_path:
@@ -557,13 +680,16 @@ def read_project_config(path=None):
 def clone_project(remote_config, project_id, parent_dest):
     """Clone a remote project to a local directory
 
-    :param user_config.RemoteConfig remote_config: Configuration for the materials commons instance
-        where the project exists
-    :param mcapi.Project project_id: ID of the project to clone
-    :param str parent_dest: Path to a local directory which will become the parent of the cloned project
-        directory.
-    :return: The cloned project
-    :rtype: Project
+    - Will create the local project directory "<parent_dest>/<project_name>"
+    - Will save local project configuration "<parent_dest>/.mc/config.json" with project info
+
+    Args:
+        remote_config (:class:`user_config.RemoteConfig`): Holds configuration variables (email, url, apikey) for the remote instance of Materials Commons where the project to be cloned is stored.
+        project_id (int): ID of the project to clone
+        parent_dest (str): Absolute path to a local directory which will become the parent of the cloned project directory.
+
+    Returns:
+        :class:`materials_commons.api.models.Project`: Object representing the cloned project
     """
     # get Project
     client = remote_config.make_client()

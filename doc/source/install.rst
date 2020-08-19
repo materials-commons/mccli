@@ -18,7 +18,7 @@ or, to install in your user directory:
    	pip install --user materials-commons-cli
 
 If installing to a user directory, you may need to set your PATH to find the
-installed scripts. This can be done using:
+installed ``mc`` program. This can be done using:
 
 ::
 

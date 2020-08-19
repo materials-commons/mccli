@@ -10,7 +10,7 @@ This is the Materials Commons CLI program, `mc`.
 
     install
     manual/index
-    reference/materials_commons/modules
+    Reference <reference/materials_commons/modules>
     help
     license
 
