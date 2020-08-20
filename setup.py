@@ -51,10 +51,11 @@ setup(
     install_requires=[
         "globus-cli",
         "globus-sdk",
+        "materials-commons-api",
         "python-dateutil",
         "pyyaml",
         "requests",
-        "sortedcontainers>=1.5.7",
-        "tabulate>=0.8.1"
+        "sortedcontainers",
+        "tabulate"
     ]
 )
