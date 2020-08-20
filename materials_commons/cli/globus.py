@@ -109,6 +109,34 @@ def get_local_endpoint_id_or_exit():
         exit(1)
     return local_endpoint_id
 
+def check_transfer_types(source_type, target_type, recursive, verbose, printpath):
+    """Check if source and target types are valid
+
+    Args:
+        source_type: 'file', 'directory', or None
+        target_type: 'file', 'directory', or None
+        recursive (bool): If True, upload directories recursively
+        verbose (bool): If True, print error messages
+        printpath (str): If verbose==True, print error messages referring using this path.
+
+    Returns:
+        True if transfer may proceed, False if transfer may not proceed
+    """
+    if source_type == 'directory' and not recursive:
+        if verbose:
+            print(printpath + ": is a directory (skipping)")
+        return False
+
+    if source_type == 'directory' and target_type == 'file':
+        if verbose:
+            print(printpath + ": not a directory (skipping)")
+        return False
+
+    if source_type == 'file' and target_type == 'directory':
+        if verbose:
+            print(printpath + ": is a directory (skipping)")
+        return False
+    return True
 
 class GlobusOperations(object):
     """Used to perform Globus operations
@@ -173,7 +201,7 @@ class GlobusOperations(object):
         return
 
 
-    def upload_v0(self, proj, paths, upload, recursive=False, label=None):
+    def upload_v0(self, proj, paths, upload, recursive=False, label=None, localtree=None, remotetree=None):
         """Upload files and directories to project
 
         Arguments:
@@ -186,25 +214,47 @@ class GlobusOperations(object):
         Returns:
             None or task_id: str, transfer task id. Returns nothing to transfer.
         """
-        refpath = os.path.dirname(proj.local_path)
         paths = treefuncs.make_paths_for_upload(proj.local_path, paths)
 
         if not len(paths):
             return None
 
+        files_data, dirs_data, child_data, non_existing = treefuncs.treecompare(proj, paths, checksum=True, localtree=localtree, remotetree=remotetree)
+
         # https://globus-sdk-python.readthedocs.io/en/stable/clients/transfer/#globus_sdk.TransferData
         tdata = globus_sdk.TransferData(self.tc, self.local_endpoint_id, upload.globus_endpoint_id, label=label)
 
         # add items
+        n_items = 0
         for p in paths:
 
             local_abspath = filefuncs.make_local_abspath(proj.local_path, p)
             relpath = os.path.relpath(local_abspath, proj.local_path)
-            destpath = os.path.join(upload.globus_path, relpath)
+            printpath = os.path.relpath(local_abspath)
 
+            if p in non_existing:
+                if self.verbose:
+                    print(printpath + ": No such file or directory (skipping)")
+                continue
+
+            local_type, remote_type = treefuncs.get_types(p, files_data, dirs_data)
+
+            if not check_transfer_types(local_type, remote_type, recursive, self.verbose, printpath):
+                continue
+
+            # note: remote files are versioned, so we skip overwrite checking / force option
+
+            # create missing remote parent directories
             self.create_all_directories_on_path(os.path.dirname(relpath), upload.globus_endpoint_id, upload.globus_path)
 
+            destpath = os.path.join(upload.globus_path, relpath)
             tdata.add_item(local_abspath, destpath, recursive=(recursive and os.path.isdir(local_abspath)))
+            n_items += 1
+
+        if not n_items:
+            if self.verbose:
+                print("Nothing to transfer")
+            return None
 
         # submit transfer request
         transfer_result = self.tc.submit_transfer(tdata)
@@ -216,7 +266,7 @@ class GlobusOperations(object):
 
         return task_id
 
-    def download_v0(self, proj, paths, download, recursive=False, label=None, localtree=None, remotetree=None):
+    def download_v0(self, proj, paths, download, recursive=False, label=None, localtree=None, remotetree=None, force=False):
         """Download files and directories from project
 
         Arguments:
@@ -226,12 +276,14 @@ class GlobusOperations(object):
             download: mcapi.GlobusDownload, Globus download request
             recursive: bool, If True, download directories recursively
             label: str, Globus transfer label to make finding tasks simpler
+            force: bool, If True force download even if local file exists
 
         Returns:
             None or task_id: str, transfer task id. Returns nothing to transfer.
         """
 
-        refpath = os.path.dirname(proj.local_path)
+        if not len(paths):
+            return None
 
         files_data, dirs_data, child_data, non_existing = treefuncs.treecompare(proj, paths, checksum=True, localtree=localtree, remotetree=remotetree)
 
@@ -244,35 +296,53 @@ class GlobusOperations(object):
 
             local_abspath = filefuncs.make_local_abspath(proj.local_path, p)
             relpath = os.path.relpath(local_abspath, proj.local_path)
-            remotepath = os.path.join(download.globus_path, relpath)
             printpath = os.path.relpath(local_abspath)
+
             if p in non_existing:
                 if self.verbose:
-                    print(printpath + ": No such file or directory")
-                continue
-            elif p in files_data:
-                remote_type = files_data[p]['r_type']
-            elif p in dirs_data:
-                remote_type = dirs_data[p]['r_type']
-
-            if remote_type == 'directory' and not recursive:
-                if self.verbose:
-                    print(printpath + ": is a directory")
+                    print(printpath + ": No such file or directory (skipping)")
                 continue
 
-            if os.path.exists(local_abspath):
-                if self.verbose:
-                    print(local_abspath + ": Already exists (will not overwrite)")
+            local_type, remote_type = treefuncs.get_types(p, files_data, dirs_data)
+
+            if not check_transfer_types(remote_type, local_type, recursive, self.verbose, printpath):
                 continue
 
+            # local files may not be backed up, so we check before downloading something that may
+            # cause overwriting, unless force==True
+            if os.path.exists(local_abspath) and not force:
+
+                what = remote_type
+                if remote_type == 'directory':
+                    print("Downloading a directory which exists locally may cause remote files to overwrite existing local files")
+
+                print("Overwrite " + what + " '" + os.path.relpath(local_abspath, os.getcwd()) + "'?")
+                overwrite = False
+                while True:
+                    ans = input('y/n: ')
+                    if ans == 'y':
+                        overwrite = True
+                        break
+                    elif ans == 'n':
+                        overwrite = False
+                        break
+                if not overwrite:
+                    if self.verbose:
+                        print(os.path.relpath(local_abspath, os.getcwd()) + \
+                            ": Already exists (will not overwrite)")
+                    continue
+
+            # create missing local parent directories
             local_dir = os.path.dirname(local_abspath)
             if not os.path.exists(local_dir):
                 os.path.makedirs(local_dir)
             if not os.path.isdir(local_dir):
                 if self.verbose:
-                    print(local_dir + ": Not a directory")
+                    print(printpath + ": parent not a directory (skipping)")
+                continue
 
-            tdata.add_item(remotepath, local_abspath, recursive=(recursive and remote_type=='directory'))
+            sourcepath = os.path.join(download.globus_path, relpath)
+            tdata.add_item(sourcepath, local_abspath, recursive=(recursive and remote_type=='directory'))
             n_items += 1
 
         if not n_items:

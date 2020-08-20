@@ -107,9 +107,6 @@ def _format_path_data(proj, data, columns, refpath=None, checksum=False):
 def _ls_print(proj, data, refpath=None, printjson=False, checksum=False, checkdset=False):
     """Print treecompare output for a set of files, or directory children"""
 
-    # print warnings for type mismatches
-    treefuncs.warn_for_type_mismatches(data)
-
     if checksum:
         columns = ['l_mtime', 'l_size', 'l_type', 'r_mtime', 'r_size', 'r_type', 'eq', 'name', 'id']
         headers = ['l_updated_at', 'l_size', 'l_type', 'r_updated_at', 'r_size', 'r_type', 'eq', 'name', 'id']
@@ -189,6 +186,10 @@ def ls_subcommand(argv):
     for p in mcpaths:
         if treefuncs.is_type_mismatch(p, files_data, dirs_data):
             print("** WARNING: ", p, "local and remote types do not match! **")
+        for dirpath in child_data:
+            for childpath, record in child_data[dirpath].items():
+                if treefuncs.is_child_data_mismatch(record):
+                    print("** WARNING: ", childpath, "local and remote types do not match! **")
 
     if pconfig.remote_updatetime:
         print("** Fetch lock ON at:", clifuncs.format_time(pconfig.remote_updatetime), "**")

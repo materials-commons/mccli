@@ -14,15 +14,12 @@ import materials_commons.cli.file_functions as filefuncs
 def clipaths_to_mcpaths(proj_local_path, clipaths, workdir=None):
     """Convert CLI paths input to Materials Commons standardized paths
 
-    Arguments
-    ---------
-    proj_local_path: str, Path to Materials Commons project
-    clipaths: List of str, Indicates files and directories, either absolute paths or relative to current working directory
-    workdir: None or str, Directory cli_paths are relative to. If None, uses os.getcwd().
+    Args:
+        proj_local_path (str): Path to Materials Commons project
+        clipaths (List of str): Indicates files and directories, either absolute paths or relative to current working directory
+        workdir (None or str): Directory cli_paths are relative to. If None, uses os.getcwd().
 
-    Returns
-    -------
-    mcpaths: List of str,
+    Returns:
         List Materials Commons paths (does not include project top directory, starts with "/") to
         upload, excluding the `.mc` directory.
     """
@@ -44,17 +41,12 @@ def make_paths_for_upload(proj_local_path, paths):
     This is written for identifying uploads. If the top directory is included it replaces it with
     all children except `.mc`.
 
-    Arguments
-    ---------
-        proj_local_path: str, Path to project
+    Args:
+        proj_local_path (str): Path to project
+        paths (iterable of str): Paths to filter and convert to absolute paths
 
-        paths: iterable of str, Paths to filter and convert to absolute paths
-
-
-    Returns
-    -------
-        paths: List of str, Materials Commons paths, filtered as described above.
-
+    Returns:
+        List of str: Materials Commons paths, filtered as described above.
     """
     _paths = []
     for path in paths:
@@ -70,36 +62,24 @@ def make_paths_for_upload(proj_local_path, paths):
 def standard_upload(proj, paths, recursive=False, limit=50, no_compare=False, localtree=None, remotetree=None):
     """Upload files to Materials Commons
 
-    Arguments
-    ---------
-    proj: mcapi.Project
-        Project instance with proj.local_path indicating local project location
+    Args:
+        proj (:class:`materials_commons.api.Project`): Project instance with proj.local_path
+            indicating local project location
+        paths (List of str):
+            List of Materials Commons style paths (absolute path, not including project name
+            directory) to remove.
+        recursive (bool): If True, remove directories recursively. Otherwise, will not remove
+            directories.
+        limit (int): The limit in MB on the size of the file allowed to be uploaded.
+        no_compare (bool): By default, this function checks local and remote file checksum to avoid
+            downloading files that already exist. If no_compare is True, this check is skipped and
+            all specified files are downloaded, even if an equivalent file already exists locally.
+        localtree (LocalTree): A LocalTree object stores local file checksums to avoid unnecessary
+            hashing. Optional, will be used and updated if provided and checksum == True.
+        remotetree (RemoteTree): A RemoteTree object stores remote file and directory information
+            to minimize API calls and data transfer. Optional, will be used and updated if provided.
 
-    paths: List of str
-        List of Materials Commons style paths (absolute path, not including project name directory)
-        to remove.
-
-    recursive: bool (optional, default=False)
-        If True, remove directories recursively. Otherwise, will not remove directories.
-
-    limit: int (optional, default=50)
-        The limit in MB on the size of the file allowed to be uploaded.
-
-    no_compare: bool (optional, default=False)
-        By default, this function checks local and remote file checksum to avoid downloading files
-        that already exist. If no_compare is True, this check is skipped and all specified files are
-        downloaded, even if an equivalent file already exists locally.
-
-    localtree: LocalTree object (optional, default=None)
-        A LocalTree object stores local file checksums to avoid unnecessary hashing. Will be used
-        and updated if provided and checksum == True.
-
-    remotetree: RemoteTree object (optional, default=None)
-        A RemoteTree object stores remote file and directory information to minimize API calls and
-        data transfer. Will be used and updated if provided.
-
-    Returns
-    -------
+    Returns:
         (file_results, error_results):
 
         file_results: dict of path: file
@@ -129,9 +109,11 @@ def standard_upload(proj, paths, recursive=False, limit=50, no_compare=False, lo
             file_results[path] = files_data[path]['r_obj']
             continue
 
+        # note: remote files are versioned, so we skip overwrite checking / force option
+
+        # create missing remote parent directories
         parent_path = os.path.dirname(path)
-        parent = mkdir(proj, parent_path, remote_only=True, create_intermediates=True,
-            remotetree=remotetree)
+        parent = mkdir(proj, parent_path, remote_only=True, create_intermediates=True, remotetree=remotetree)
         if parent.path != parent_path:
             msg = "Upload error: "
             msg += " expected parent_path=" + os.path.dirname(path)
@@ -157,6 +139,8 @@ def standard_upload(proj, paths, recursive=False, limit=50, no_compare=False, lo
                     error_results[path] = error_msg
                     print(error_msg)
                     continue
+                else:
+                    print("uploaded:", printpath)
                 file_results[path] = result
 
             elif os.path.isdir(local_abspath):
@@ -520,8 +504,17 @@ def treecompare(proj, paths, checksum=False, localtree=None, remotetree=None):
     _treecomparer = _TreeCompare(proj, localtree=localtree, remotetree=remotetree)
     return _treecomparer(paths, checksum=checksum)
 
-def is_type_mismatch(path, files_data, dirs_data):
-    """Use treecompare output to check for type mismatch"""
+def get_types(path, files_data, dirs_data):
+    """Use treecompare output to get local and remote types
+
+    Args:
+        path (str): Path to check for type
+        files_data: The "files_data" output from :func:`treecompare`
+        dirs_data: The "dirs_data" output from :func:`treecompare`
+
+    Returns:
+        Tuple with (local_type, remote_type) of path.
+    """
 
     l_type = None
     if path in files_data and files_data[path]['l_type']:
@@ -535,18 +528,21 @@ def is_type_mismatch(path, files_data, dirs_data):
     if path in dirs_data and dirs_data[path]['r_type']:
         r_type = dirs_data[path]['r_type']
 
+    return (l_type, r_type)
+
+def is_type_mismatch(path, files_data, dirs_data):
+    """Check treecompare filds_data and dirs_data output to check for type mismatch"""
+    l_type, r_type = get_types(path, files_data, dirs_data)
+
     if l_type and r_type and l_type != r_type:
         return True
     return False
 
-def warn_for_type_mismatches(data):
-    """Check treecompare output for type mismatches and print warnings"""
-    for path, file_or_dir in data.items():
-        if file_or_dir['l_type'] == 'file' and file_or_dir['r_type'] == 'directory':
-            print("** WARNING: ", path, "is a local file and remote directory! **")
-        if file_or_dir['r_type'] == 'file' and file_or_dir['l_type'] == 'directory':
-            print("** WARNING: ", path, "is a local directory and remote file! **")
-
+def is_child_data_mismatch(child_data):
+    """Check treecompare child_data file comparison for type mismatch"""
+    if child_data['l_type'] and child_data['r_type'] and child_data['l_type'] != child_data['r_type']:
+        return True
+    return False
 
 class _Mover(object):
     """Helper for the move function"""

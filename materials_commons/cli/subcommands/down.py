@@ -50,11 +50,11 @@ def _check_download_file(proj_id, file_id, local_path, remote, force=False):
 
     Returns
     -------
-    local_ath: str or None, Location of downloaded file or None if not downloaded
+    local_path: str or None, Location of downloaded file or None if not downloaded
     """
     if not os.path.exists(local_path) or force:
         dir = os.path.dirname(local_path)
-        if not os.path.exists(dir):
+        if not os.path.isdir(dir):
             os.makedirs(dir)
         remote.download_file(proj_id, file_id, local_path)
         return local_path
@@ -151,7 +151,11 @@ def standard_download(proj, path, force=False, output=None, recursive=False, no_
             print(printpath + ": local is equivalent to remote (skipping)")
             return True
         else:
-            result_path =  _check_download_file(proj.id, files_data[path]['id'], output, remote=proj.remote, force=force)
+            try:
+                result_path =  _check_download_file(proj.id, files_data[path]['id'], output, remote=proj.remote, force=force)
+            except Exception as e:
+                print(printpath + ": " + str(e) + " (skipping)")
+                return False
             if result_path:
                 if output != local_abspath:
                     print("downloaded:", os.path.relpath(output))
@@ -295,7 +299,7 @@ def down_subcommand(argv):
             label = args.label[0]
 
         globus_ops = cliglobus.GlobusOperations()
-        task_id = globus_ops.download_v0(proj, paths, download, recursive=args.recursive, label=label, localtree=localtree, remotetree=remotetree)
+        task_id = globus_ops.download_v0(proj, paths, download, recursive=args.recursive, label=label, localtree=localtree, remotetree=remotetree, force=args.force)
 
         if task_id:
             print("Globus transfer task initiated.")
@@ -303,7 +307,7 @@ def down_subcommand(argv):
             print("Use `mc globus download` to manage Globus downloads.")
             print("Multiple transfer tasks may be initiated.")
             print("When all tasks finish downloading, use `mc globus download --id " + str(download.id) +
-                " --finish` " + "to close the download.")
+                " --delete` " + "to close the download.")
 
     elif args.print:
         print_file(proj, paths[0])
@@ -315,6 +319,6 @@ def down_subcommand(argv):
             output = os.path.abspath(args.output[0])
 
         for path in paths:
-            standard_download(proj, path, output=output, recursive=args.recursive, no_compare=args.no_compare, localtree=localtree, remotetree=remotetree)
+            standard_download(proj, path, force=args.force, output=output, recursive=args.recursive, no_compare=args.no_compare, localtree=localtree, remotetree=remotetree)
 
     return
