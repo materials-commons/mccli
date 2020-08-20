@@ -95,7 +95,6 @@ def main(argv=None):
 
         config = Config()
         if config.REST_logging:
-            import materials_commons.api as mcapi
             mcapi.Client.set_debug_on()
             pass
 
