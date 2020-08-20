@@ -186,10 +186,10 @@ def ls_subcommand(argv):
     for p in mcpaths:
         if treefuncs.is_type_mismatch(p, files_data, dirs_data):
             print("** WARNING: ", p, "local and remote types do not match! **")
-        for dirpath in child_data:
-            for childpath, record in child_data[dirpath].items():
-                if treefuncs.is_child_data_mismatch(record):
-                    print("** WARNING: ", childpath, "local and remote types do not match! **")
+    for dirpath in child_data:
+        for childpath, record in child_data[dirpath].items():
+            if treefuncs.is_child_data_mismatch(record):
+                print("** WARNING: ", childpath, "local and remote types do not match! **")
 
     if pconfig.remote_updatetime:
         print("** Fetch lock ON at:", clifuncs.format_time(pconfig.remote_updatetime), "**")
