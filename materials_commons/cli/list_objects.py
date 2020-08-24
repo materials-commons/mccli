@@ -332,7 +332,10 @@ class ListObjects(object):
                 return []
 
         def _any_match(obj, attrname, remethod):
-            value = str(clifuncs.getit(obj, attrname))
+            if attrname == 'owner':
+                value = obj.owner.email
+            else:
+                value = str(clifuncs.getit(obj, attrname))
             for n in args.expr:
                 if remethod(n, value):
                     return True
@@ -351,7 +354,7 @@ class ListObjects(object):
             elif args.uuid:
                 attrname = 'uuid'
             elif self.has_owner and args.owner:
-                attrname = 'owner_id'
+                attrname = 'owner'
             else:
                 attrname = 'name'
             objects = [d for d in data if _any_match(d, attrname, remethod)]
