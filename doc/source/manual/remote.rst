@@ -10,30 +10,30 @@ A remote is a version of Materials Commons hosted on the internet or on a networ
 
     https://materialscommons.org
 
-Organizations may host their own instance of Materials, for example at: ::
+Organizations may host their own instance of Materials Commons, for example at: ::
 
-    https:://materialscommons.other_institution.org
+    https://materialscommons.other_institution.org
 
-In order to access your projects and data on a particular instance of Materials Commons, you must login with your email and password to receive your "apikey". The ``mc`` program will store the apikey in your local user directory in a configuration file: ::
+In order to access your projects and data on a particular instance of Materials Commons, you must login with your email and password to receive your "apikey". The ``mc`` program will store the apikey in a configuration file located in your local user directory at: ::
 
-    ~/.materialscommons/config.json``
+    $HOME/.materialscommons/config.json
 
-Keep this file secure because anyone who has the apikeys inside can use them to access and edit the projects and data you have access to at the instance of Materials Commons you logged in to.
+Keep this file secure. Anyone who knows one of the apikeys found inside it can use them to access, edit, and delete all of your projects and data associated with that account.
 
-You may store credentials for multiple accounts and multiple instances of Materials Commons locally and set one as the "default remote". The default remote is the account and instance of Materials Commons which is queried for any calls in which the remote is neither explicitly given (using ``--remote <email> <url>``) nor implicitly specified because ``mc`` is called from inside an existing local project directory.
+You may store credentials for multiple accounts and multiple instances of Materials Commons locally and set one as the "default remote". The default remote is the account and instance of Materials Commons which is queried for any calls in which the remote is neither explicitly given (using ``--remote <email> <url>``) nor implicitly specified (because ``mc`` is called from within an existing local project directory).
 
 Getting started
 ---------------
 
-Assuming you have an account on "materialscommons.org", login to get and save your apikey: ::
+Assuming you have an account on "materialscommons.org", add it as a remote, using the email address used for your account.  Note that "/api" is included at the end of the URL. ::
 
-    mc remote --login <email> https:://materialscommons/api
+    mc remote --add <email> https://materialscommons.org/api
 
-Set that account and instance of Materials Commons as the "default remote": ::
+This will prompt you for your password in order to get and save your apikey locally. Next, set that account and instance of Materials Commons as the "default remote": ::
 
-    mc remote --set-default <email> https:://materialscommons/api
+    mc remote --set-default <email> https://materialscommons.org/api
 
-List projects you have access to at "materialscommons.org": ::
+Once done successfully, you will be able to list projects you have access to at "materialscommons.org" using: ::
 
     mc proj
 
@@ -58,7 +58,7 @@ Remove a remote, deleting your apikey.
 
    	mc remote --remote <email> <url>
 
-List remotes that have been added and show the current default. Optionally print the apikeys.
+List remotes that have been added and show the current default. Optionally, print the apikeys.
 
 ::
 
