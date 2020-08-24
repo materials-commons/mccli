@@ -12,7 +12,12 @@ import materials_commons.api as mcapi
 from materials_commons.cli.file_functions import isfile, isdir
 from materials_commons.cli.functions import checksum
 
-from .cli_test_project import make_basic_project_1, test_project_directory, remove_if
+from .cli_test_project import make_basic_project_1, test_project_directory, remove_if, \
+    upload_project_files
+
+def get_dataset(client, project_id, dataset_id):
+    """Temporary workaround because Client.get_dataset is returning the wrong dataset"""
+    return client.update_dataset_file_selection(project_id, dataset_id, {})
 
 class TestAPI(unittest.TestCase):
 
@@ -36,10 +41,6 @@ class TestAPI(unittest.TestCase):
         password = os.environ.get("MC_API_PASSWORD")
         client = mcapi.Client.login(email, password, base_url=mcurl)
 
-        print("email:", email)
-        print("client.base_url:", client.base_url)
-        print("client.token:", client.apikey)
-
         project_names = [
             "__clitest__test_project_api_1",
             "__clitest__test_project_api_2",
@@ -48,7 +49,6 @@ class TestAPI(unittest.TestCase):
         # make sure test projects do not already exist
         result = client.get_all_projects()
         for proj in result:
-            print("proj.name:", proj.name)
             if proj.name in project_names:
                 client.delete_project(proj.id)
 
@@ -148,6 +148,7 @@ class TestAPI(unittest.TestCase):
         result = client.get_file_by_path(proj.id, "/")
         self.assertEqual(isdir(result), True)
         root_directory_id = result.id
+        self.assertEqual(proj.root_dir.id, root_directory_id)
 
         # get root directory by id
         result = client.get_directory(proj.id, root_directory_id)
@@ -360,6 +361,187 @@ class TestAPI(unittest.TestCase):
         client.delete_directory(proj.id, example_dir_id)
         result = client.list_directory(proj.id, root_directory_id)
         self.assertEqual(len(result), 0)
+
+        # clean up
+        basic_project_1.clean_files()
+        client.delete_project(proj.id)
+
+    def test_unpublished_dataset_basics_api(self):
+        """Test the (unpublished) dataset API independently of the CLI"""
+
+        mcurl = os.environ.get("MC_API_URL")
+        email = os.environ.get("MC_API_EMAIL")
+        password = os.environ.get("MC_API_PASSWORD")
+        client = mcapi.Client.login(email, password, base_url=mcurl)
+
+        # make sure test project does not already exist
+        result = client.get_all_projects()
+        for proj in result:
+            if proj.name == "__clitest__dataset_api":
+                client.delete_project(proj.id)
+
+        proj = client.create_project("__clitest__dataset_api")
+
+        ### test basics: create / get / get_all / update / delete ###
+        dataset_1_name = "test_dataset_1"
+        dataset_2_name = "test_dataset_2"
+        dataset_request = mcapi.CreateDatasetRequest()
+        dataset_request.description = "dataset description"
+        dataset_request.summary = "dataset summary"
+        dataset_request.license = "dataset license"
+        dataset_request.authors = "dataset authors"
+        dataset_request.tags = "#tag1, #tag2, #tag3"
+        dataset_1 = client.create_dataset(proj.id, dataset_1_name, dataset_request)
+        dataset_2 = client.create_dataset(proj.id, dataset_2_name, dataset_request)
+
+        self.assertEqual(isinstance(dataset_1, mcapi.Dataset), True)
+        self.assertEqual(dataset_1.name, dataset_1_name)
+        self.assertEqual(dataset_1.description, dataset_request.description)
+        self.assertEqual(dataset_1.summary, dataset_request.summary)
+
+        # TODO: should create_dataset result have more details?
+        # self.assertEqual(dataset_1.license, dataset_request.license) # TODO
+        # self.assertEqual(dataset_1.authors, dataset_request.authors) # TODO
+        # self.assertEqual(dataset_1.tags, dataset_request.tags) # TODO
+
+        # test get_dataset
+        # result = client.get_dataset(proj.id, dataset_1.id)  # TODO: get details from Client.get_dataset
+        result = get_dataset(client, proj.id, dataset_1.id)
+        self.assertEqual(isinstance(result, mcapi.Dataset), True)
+        self.assertEqual(result.id, dataset_1.id)
+        self.assertEqual(result.name, dataset_1_name)
+        self.assertEqual(result.description, dataset_request.description)
+        self.assertEqual(result.summary, dataset_request.summary)
+        # self.assertEqual(result.license, dataset_request.license) # TODO
+        # self.assertEqual(result.authors, dataset_request.authors) # TODO
+        # self.assertEqual(result.tags, dataset_request.tags) # TODO
+
+        #result = client.get_dataset(proj.id, dataset_2.id) # TODO: get details from Client.get_dataset
+        result = get_dataset(client, proj.id, dataset_2.id)
+        self.assertEqual(isinstance(result, mcapi.Dataset), True)
+        self.assertEqual(result.id, dataset_2.id)
+        self.assertEqual(result.name, dataset_2_name)
+
+        # test get_all_datasets, update, delete
+        all_datasets = client.get_all_datasets(proj.id)
+
+        self.assertEqual(len(all_datasets), 2)
+
+        all_datasets_ids = {dataset.id:dataset for dataset in all_datasets}
+        for dataset in [dataset_1, dataset_2]:
+            self.assertEqual(dataset.id in all_datasets_ids, True)
+
+        for dataset in all_datasets:
+            self.assertEqual(isinstance(dataset, mcapi.Dataset), True)
+            # dset = client.get_dataset(proj.id, dataset.id) # TODO
+            dset = get_dataset(client, proj.id, dataset.id)
+            self.assertEqual(dset.id, dataset.id)
+            dset_request = mcapi.CreateDatasetRequest(description="<new description>")
+            updated_dset = client.update_dataset(proj.id, dataset.id, dset.name, dset_request)
+            self.assertEqual(updated_dset.description, "<new description>")
+            client.delete_dataset(proj.id, dataset.id)
+
+        all_datasets = client.get_all_datasets(proj.id)
+        self.assertEqual(len(all_datasets), 0)
+
+        # clean up
+        client.delete_project(proj.id)
+
+    def _check_file_in_dataset(self, file_path, expected, client, proj, dataset):
+        file = client.get_file_by_path(proj.id, file_path)
+        result = client.check_file_by_path_in_dataset(proj.id, dataset.id, file_path)
+        self.assertEqual(result["in_dataset"], expected)
+
+        result = client.check_file_in_dataset(proj.id, dataset.id, file.id)
+        self.assertEqual(result["in_dataset"], expected)
+
+    def test_unpublished_dataset_updates_api(self):
+        """Test the (unpublished, updates) dataset API independently of the CLI"""
+        mcurl = os.environ.get("MC_API_URL")
+        email = os.environ.get("MC_API_EMAIL")
+        password = os.environ.get("MC_API_PASSWORD")
+        client = mcapi.Client.login(email, password, base_url=mcurl)
+
+        # make sure test project does not already exist
+        result = client.get_all_projects()
+        for proj in result:
+            if proj.name == "__clitest__dataset_api":
+                client.delete_project(proj.id)
+
+        proj = client.create_project("__clitest__dataset_api")
+
+        # write and upload local project files and directories
+        proj_path = os.path.join(test_project_directory(), proj.name)
+        proj.local_path = proj_path
+        proj.remote = client
+        basic_project_1 = make_basic_project_1(proj_path)
+        self.assertEqual(os.path.isdir(proj_path), True)
+        upload_project_files(proj, basic_project_1, self)
+
+        ### test dataset updates: updating and checking file selection ###
+
+        # client.update_dataset_file_selection(project_id, dataset_id, file_selection)
+        #  file_selection: {"include_files": [], "exclude_files": [], "include_dirs": [], "exclude_dirs": []}
+        # client.check_file_in_dataset(project_id, dataset_id, file_id)
+        # client.check_file_by_path_in_dataset(project_id, dataset_id, file_path)
+
+        dataset_1_name = "test_dataset_1"
+        dataset_request = mcapi.CreateDatasetRequest()
+        dataset_request.description = "dataset description"
+        dataset_1 = client.create_dataset(proj.id, dataset_1_name, dataset_request)
+        self.assertEqual(isinstance(dataset_1, mcapi.Dataset), True)
+
+        # test update_dataset_file_selection
+        # TODO: can "/" be included? currently causes inconsistencies so avoid
+        # file_selection_update = {"include_dir": "/"}
+
+        self._check_file_in_dataset("/level_1", False, client, proj, dataset_1)
+        self._check_file_in_dataset("/file_A.txt", False, client, proj, dataset_1)
+        self._check_file_in_dataset("/level_1/file_A.txt", False, client, proj, dataset_1)
+
+        parent = proj.root_dir
+        children = client.list_directory(proj.id, parent.id)
+        # add files and directories to selection
+        for file in children:
+            try:
+                if isfile(file):
+                    update = {"include_file": os.path.join(parent.path, file.name)}
+                else:
+                    update = {"include_dir": file.path}
+                dataset = client.update_dataset_file_selection(proj.id, dataset_1.id, update)
+            except Exception as e:
+                print(client.r.text)
+                raise e
+        dataset = get_dataset(client, proj.id, dataset_1.id)
+        self.assertEqual(dataset._data["file_selection"]["include_dirs"], ["/level_1"])
+        self.assertEqual(dataset._data["file_selection"]["exclude_dirs"], [])
+        self.assertEqual(dataset._data["file_selection"]["include_files"], ["/file_A.txt", "/file_B.txt"])
+        self.assertEqual(dataset._data["file_selection"]["exclude_files"], [])
+
+        self._check_file_in_dataset("/level_1", False, client, proj, dataset_1) # TODO: shouldn't this be true?
+        self._check_file_in_dataset("/file_A.txt", True, client, proj, dataset_1)
+        self._check_file_in_dataset("/level_1/file_A.txt", True, client, proj, dataset_1)
+
+        # remove files and directories from selection
+        for file in children:
+            try:
+                if isfile(file):
+                    update = {"remove_include_file": os.path.join(parent.path, file.name)}
+                else:
+                    update = {"remove_include_dir": file.path}
+                dataset = client.update_dataset_file_selection(proj.id, dataset_1.id, update)
+            except Exception as e:
+                print(client.r.text)
+                raise e
+        dataset = get_dataset(client, proj.id, dataset_1.id)
+        self.assertEqual(dataset._data["file_selection"]["include_dirs"], [])
+        self.assertEqual(dataset._data["file_selection"]["exclude_dirs"], [])
+        self.assertEqual(dataset._data["file_selection"]["include_files"], [])
+        self.assertEqual(dataset._data["file_selection"]["exclude_files"], [])
+
+        self._check_file_in_dataset("/level_1", False, client, proj, dataset_1)
+        self._check_file_in_dataset("/file_A.txt", False, client, proj, dataset_1)
+        self._check_file_in_dataset("/level_1/file_A.txt", False, client, proj, dataset_1)
 
         # clean up
         basic_project_1.clean_files()
