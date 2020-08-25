@@ -172,6 +172,6 @@ class Config(object):
             user = getpass.getuser()
             config_dir_path = join(os.path.expanduser('~' + user), '.materialscommons')
             if not os.path.exists(config_dir_path):
-                os.path.mkdir(config_dir_path)
+                os.mkdir(config_dir_path)
         with open(self.config_file, 'w') as f:
             f.write(json.dumps(config, indent=2))
