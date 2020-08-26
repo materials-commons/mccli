@@ -8,6 +8,7 @@ import materials_commons.api as mcapi
 import materials_commons.cli.functions as clifuncs
 import materials_commons.cli.tree_functions as treefuncs
 import materials_commons.cli.file_functions as filefuncs
+import materials_commons.cli.tmp_functions as tmpfuncs
 from materials_commons.cli.treedb import LocalTree, RemoteTree
 
 #  Want to print() something like:
@@ -116,6 +117,7 @@ def _ls_print(proj, data, refpath=None, printjson=False, checksum=False, checkds
 
     if checkdset:
         columns += ['selected', 'selected_by']
+        headers += ['selected', 'selected_by']
 
     if printjson:
         for path, record in data.items():
@@ -142,14 +144,135 @@ def make_parser():
     parser.add_argument('--json', action="store_true", default=False, help='Print JSON exactly')
 
     # TODO: re-implement w/datasets
-    # # --include-files file_or_dir
-    # # --exclude-files file_or_dir
-    # # --clear-files file_or_dir
+    # # --include file_or_dir
+    # # --exclude file_or_dir
+    # # --clear file_or_dir
     parser.add_argument('--dataset', type=str, default="", metavar='DATASET_ID', help='Specify a dataset to act on.')
-    parser.add_argument('--include', action="store_true", default=False, help='Include files and directories in the specified dataset. Including a directory includes all files and sub-directories recursively, unless prevented by --exclude-files.')
+    parser.add_argument('--include', action="store_true", default=False, help='Include files and directories in the specified dataset. Including a directory includes all files and sub-directories recursively, unless prevented by --exclude.')
     parser.add_argument('--exclude', action="store_true", default=False, help='Exclude file and directories from the specified dataset. Excluding prevents inclusion of files and directories that would otherwise be included due to a higher-level directory being included.')
     parser.add_argument('--clear', action="store_true", default=False, help='Clear files and directories from the include/exclude selection lists of the specified dataset. A file or directory may still be included in or excluded from the dataset afterwards if a higher level directory is included or excluded')
     return parser
+
+def update_file_selection(proj, file_selection, mcpaths, files_data, dirs_data, \
+    include=False, exclude=False, clear=False, out=sys.stdout):
+    """Update the file selection dict
+
+    Args:
+        proj (mcapi.Project): Current project
+        file_selection (dict): File selection before update
+        mcpaths (list of str): Materials Commons format file and directory paths
+        files_data: File comparisons from the `treecompare` function
+        dirs_data: Directory comparisons from the `treecompare` function
+        include (bool): If True, include files and directories in "mcpaths" to the file selection
+        exclude (bool): If True, exclude files and directories in "mcpaths" to the file selection
+        clear (bool): If True, remove files and directories in "mcpaths" from the file selection so they are not included or excluded
+        out: Output stream
+
+    Returns:
+        The file selection dict, updated.
+
+    """
+    for p in mcpaths:
+        local_abspath = filefuncs.make_local_abspath(proj.local_path, path)
+        printpath = os.path.relpath(local_abspath)
+
+        if treefuncs.is_type_mismatch(p, files_data, dirs_data) and not clear:
+            out.write(printpath + ": Local and remote types do not match, skipping\n")
+            continue
+
+        if include:
+            if p in files_data:
+                file_selection['include_files'].append(p)
+                if p in file_selection['exclude_files']:
+                    file_selection['exclude_files'].remove(p)
+            if p in dirs_data:
+                file_selection['include_dirs'].append(p)
+                if p in file_selection['exclude_dirs']:
+                    file_selection['exclude_dirs'].remove(p)
+        elif exclude:
+            if p in files_data:
+                file_selection['exclude_files'].append(p)
+                if p in file_selection['include_files']:
+                    file_selection['include_files'].remove(p)
+            elif p in dirs_data:
+                file_selection['exclude_dirs'].append(p)
+                if p in file_selection['include_dirs']:
+                    file_selection['include_dirs'].remove(p)
+        elif clear:
+            for name in ['include_files', 'exclude_files', 'include_dirs', 'exclude_dirs']:
+                if p in file_selection[name]:
+                    file_selection[name].remove(p)
+
+    # remove duplicates
+    for name in ['include_files', 'exclude_files', 'include_dirs', 'exclude_dirs']:
+        file_selection[name] = list(set(file_selection[name]))
+
+    return file_selection
+
+def update_dataset_file_selection(proj, dataset_id, mcpaths, files_data, dirs_data, \
+    include=False, exclude=False, clear=False, out=sys.stdout):
+    """Update a dataset file selection
+
+    Args:
+        proj (mcapi.Project): Current project, expected to have "remote" and "local_path" attributes
+        dataset_id (str): ID of dataset to be updated
+        mcpaths (list of str): Materials Commons format file and directory paths
+        files_data: File comparisons from the `treecompare` function
+        dirs_data: Directory comparisons from the `treecompare` function
+        include (bool): If True, include files and directories in "mcpaths" to the file selection
+        exclude (bool): If True, exclude files and directories in "mcpaths" to the file selection
+        clear (bool): If True, remove files and directories in "mcpaths" from the file selection so they are not included or excluded
+        out: Output stream
+
+    Returns:
+        The file selection dict, updated.
+
+    """
+
+    file_selection = tmpfuncs.get_dataset_file_selection(proj.remote, proj.id, dataset_id)
+
+    # local function
+    def _do(action, path):
+        update = {action: path}
+        out.write("Update: " + str(update) + '\n')
+        proj.remote.update_dataset_file_selection(proj.id, dataset_id, update)
+
+    for p in mcpaths:
+        local_abspath = filefuncs.make_local_abspath(proj.local_path, p)
+        printpath = os.path.relpath(local_abspath)
+
+        if treefuncs.is_type_mismatch(p, files_data, dirs_data) and not clear:
+            out.write(printpath + ": Local and remote types do not match, skipping\n")
+            continue
+
+        if include:
+            if p in files_data:
+                if p not in file_selection['include_files']:
+                    _do("include_file", p)
+                if p in file_selection['exclude_files']:
+                    _do("remove_exclude_file", p)
+            if p in dirs_data:
+                if p not in file_selection['include_dirs']:
+                    _do("include_dir", p)
+                if p in file_selection['exclude_dirs']:
+                    _do("remove_exclude_dir", p)
+        elif exclude:
+            if p in files_data:
+                if p not in file_selection['exclude_files']:
+                    _do("exclude_file", p)
+                if p in file_selection['include_files']:
+                    _do("remove_include_file", p)
+            elif p in dirs_data:
+                if p not in file_selection['exclude_dirs']:
+                    _do("exclude_dir", p)
+                if p in file_selection['include_dirs']:
+                    _do("remove_include_dir", p)
+        elif clear:
+            for name in ['include_files', 'exclude_files', 'include_dirs', 'exclude_dirs']:
+                if p in file_selection[name]:
+                    _do("remove_" + name[:-1], p)
+
+    return tmpfuncs.get_dataset_file_selection(proj.remote, proj.id, dataset_id)
 
 def ls_subcommand(argv):
     """
@@ -201,62 +324,20 @@ def ls_subcommand(argv):
         print("")
 
     if args.dataset:
-        raise MCCLIException("dataset actions are not yet implemented") #TODO datasets
-        dataset = mcapi.get_dataset(proj.id, args.dataset, remote=proj.remote)
-        file_selection = dataset.input_data['file_selection']
-        # print(json.dumps(file_selection, indent=2))
-
         if args.include or args.exclude or args.clear:
-            for p in mcpaths:
-
-                if treefuncs.is_type_mismatch(p, files_data, dirs_data) and not args.clear:
-                    print(p + ": Local and remote types do not match, skipping")
-                    continue
-
-                if args.include:
-                    raise MCCLIException("--include is not yet implemented") #TODO w/datasets
-                    if p in files_data:
-                        file_selection['include_files'].append(p)
-                        if p in file_selection['exclude_files']:
-                            file_selection['exclude_files'].remove(p)
-                    if p in dirs_data:
-                        file_selection['include_dirs'].append(p)
-                        if p in file_selection['exclude_dirs']:
-                            file_selection['exclude_dirs'].remove(p)
-                elif args.exclude:
-                    raise MCCLIException("--exclude is not yet implemented") #TODO w/datasets
-                    if p in files_data:
-                        file_selection['exclude_files'].append(p)
-                        if p in file_selection['include_files']:
-                            file_selection['include_files'].remove(p)
-                    elif p in dirs_data:
-                        file_selection['exclude_dirs'].append(p)
-                        if p in file_selection['include_dirs']:
-                            file_selection['include_dirs'].remove(p)
-                elif args.clear:
-                    raise MCCLIException("--clear is not yet implemented") #TODO w/datasets
-                    for name in ['include_files', 'exclude_files', 'include_dirs', 'exclude_dirs']:
-                        if p in file_selection[name]:
-                            file_selection[name].remove(p)
-
-            # remove duplicates
-            for name in ['include_files', 'exclude_files', 'include_dirs', 'exclude_dirs']:
-                file_selection[name] = list(set(file_selection[name]))
-
-            dataset = mcapi.update_dataset_file_selection(proj.id, dataset.id, file_selection)
-            file_selection = dataset.input_data['file_selection']
-            # print("Updated dataset file selection:")
-            # print(json.dumps(file_selection, indent=2))
+            file_selection = update_dataset_file_selection(proj, args.dataset, mcpaths, files_data, dirs_data, include=args.include, exclude=args.exclude, clear=args.clear, out=sys.stdout)
+        else:
+            file_selection = tmpfuncs.get_dataset_file_selection(proj.remote, proj.id, args.dataset)
 
         for f in files_data:
-            selected, selected_by = mcapi.check_file_selection(f, file_selection)
+            selected, selected_by = filefuncs.check_file_selection(f, file_selection)
             files_data[f]['selected'] = selected
             if selected_by:
                 files_data[f]['selected_by'] = selected_by
 
         for key, child_files_data in child_data.items():
             for f in child_files_data:
-                selected, selected_by = mcapi.check_file_selection(f, file_selection)
+                selected, selected_by = filefuncs.check_file_selection(f, file_selection)
                 child_files_data[f]['selected'] = selected
                 if selected_by:
                     child_files_data[f]['selected_by'] = selected_by

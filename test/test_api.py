@@ -291,7 +291,7 @@ class TestAPI(unittest.TestCase):
             client.download_file(proj.id, file_id, filepath)
         except mcapi.MCAPIError as e:
             if e.response.status_code == 500:
-                msg = "download_file error: " + str(e) + "\nAborting: Please restart materialscommmons"
+                msg = "download_file error: " + str(e) + "\nExiting: Please restart materialscommmons"
                 pytest.exit(msg)
             raise e
         self.assertEqual(os.path.exists(filepath), True)
