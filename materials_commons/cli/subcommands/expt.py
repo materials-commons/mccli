@@ -51,7 +51,7 @@ class ExptSubcommand(ListObjects):
             expt.owner = users_by_id[expt.owner_id]
         return all_project_experiments
 
-    def list_data(self, obj):
+    def list_data(self, obj, args):
 
         _is_current = ' '
         pconfig = clifuncs.read_project_config()
@@ -68,7 +68,7 @@ class ExptSubcommand(ListObjects):
             'updated_at': clifuncs.format_time(obj.updated_at)
         }
 
-    def print_details(self, obj, out=sys.stdout):
+    def print_details(self, obj, args, out=sys.stdout):
         description = None
         if obj.description:
             description = obj.description
@@ -90,10 +90,10 @@ class ExptSubcommand(ListObjects):
         expt_names = {e.name: e for e in expt_list}
 
         if len(args.expr) != 1:
-            out.write('create one experiment at a time\n')
-            out.write('example: mc expt ExptName --create --desc "short description"\n')
-            parser.print_help(file=out)
-            exit(1)
+            out.write('Creating an experiment requires one name argument\n')
+            out.write('example: mc expt --create --desc "experiment description" <experiment_name>\n')
+            return
+
         for name in args.expr:
             if name not in expt_names:
                 expt_request = mcapi.CreateExperimentRequest(description=args.desc)
@@ -108,7 +108,7 @@ class ExptSubcommand(ListObjects):
     def delete(self, objects, args, dry_run, out=sys.stdout):
         if dry_run:
             out.write('Dry-run is not possible when deleting experiments.\n')
-            out.write('Aborting\n')
+            out.write('Exiting\n')
             return
 
         proj = clifuncs.make_local_project()

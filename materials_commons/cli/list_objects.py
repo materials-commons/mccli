@@ -30,19 +30,19 @@ class ListObjects(object):
 
     Expected derived class members:
 
-    +-----------------------------------------+---------------------------------------+
-    |list_data(self, obj)                     |required                               |
-    +-----------------------------------------+---------------------------------------+
-    |print_details(self, obj, out=sys.stdout) |required                               |
-    +-----------------------------------------+---------------------------------------+
-    |get_all_from_experiment(self, expt)      |required if self.expt_member==True     |
-    +-----------------------------------------+---------------------------------------+
-    |get_all_from_dataset(self, dataset)      |required if self.dataset_member==True  |
-    +-----------------------------------------+---------------------------------------+
-    |get_all_from_project(self, proj)         |required if self.proj_member==True     |
-    +-----------------------------------------+---------------------------------------+
-    |get_all(self)                            |required if self.non_proj_member==True |
-    +-----------------------------------------+---------------------------------------+
+    +-----------------------------------------------+---------------------------------------+
+    |list_data(self, args, obj)                     |required                               |
+    +-----------------------------------------------+---------------------------------------+
+    |print_details(self, obj, args, out=sys.stdout) |required                               |
+    +-----------------------------------------------+---------------------------------------+
+    |get_all_from_experiment(self, expt)            |required if self.expt_member==True     |
+    +-----------------------------------------------+---------------------------------------+
+    |get_all_from_dataset(self, dataset)            |required if self.dataset_member==True  |
+    +-----------------------------------------------+---------------------------------------+
+    |get_all_from_project(self, proj)               |required if self.proj_member==True     |
+    +-----------------------------------------------+---------------------------------------+
+    |get_all(self)                                  |required if self.non_proj_member==True |
+    +-----------------------------------------------+---------------------------------------+
 
     Optional derived class members:
 
@@ -262,7 +262,7 @@ class ListObjects(object):
                     msg = "Are you sure you want to permanently delete these? ('Yes'/'No'): "
                     input_str = input(msg)
                     if input_str != 'Yes':
-                        out.write("Aborting\n")
+                        out.write("Exiting\n")
                         return
                     else:
                         self.delete(objects, args, dry_run=args.dry_run, out=out)
@@ -291,7 +291,7 @@ class ListObjects(object):
                     if clifuncs.request_confirmation(self.request_confirmation_actions[name]):
                         getattr(self, name)(objects, args, out)
                     else:
-                        out.write("Aborting\n")
+                        out.write("Exiting\n")
                         return
                 else:
                     getattr(self, name)(objects, args, out)
@@ -308,7 +308,7 @@ class ListObjects(object):
 
         if self.requires_project and not clifuncs.project_exists():
             out.write("Not in a Materials Commons project directory.\n")
-            out.write("Aborting\n")
+            out.write("Exiting\n")
             exit(1)
 
         if hasattr(args, 'expt') and args.expt:
@@ -318,7 +318,9 @@ class ListObjects(object):
             if not len(data):
                 out.write("No " + self.typename_plural + " found in experiment\n")
                 return []
-        elif (self.non_proj_member and not self.proj_member) or (hasattr(args, 'all') and args.all):
+        elif (self.non_proj_member and not self.proj_member) \
+            or (self.non_proj_member and self.proj_member and hasattr(args, 'all') and args.all) \
+            or (self.non_proj_member and self.proj_member and not clifuncs.project_exists()):
             remote = self.get_remote(args)
             data = self.get_all_from_remote(remote=remote)
             if not len(data):
@@ -378,7 +380,7 @@ class ListObjects(object):
                 out.write("--details not currently possible for this type of object\n")
                 return
             for obj in objects:
-                self.print_details(obj, out=out)
+                self.print_details(obj, args, out=out)
                 out.write("\n")
         elif args.json:
             for obj in objects:
@@ -394,7 +396,7 @@ class ListObjects(object):
         else:
             data = []
             for obj in objects:
-                data.append(self.list_data(obj))
+                data.append(self.list_data(obj, args))
 
             for col in reversed(args.sort_by):
                 data = sorted(data, key=lambda k: k[col])

@@ -4,6 +4,7 @@ import yaml
 from collections import OrderedDict
 
 import materials_commons.api.models as models
+import materials_commons.cli.tmp_functions as tmpfuncs
 from materials_commons.cli.exceptions import MCCLIException
 from materials_commons.cli.list_objects import ListObjects
 from materials_commons.cli.functions import read_project_config, getit, trunc, format_time, \
@@ -39,14 +40,11 @@ class ProjSubcommand(ListObjects):
         # return remote.get_all_projects()
 
         # add owner to project
-        users = remote.list_users()
-        users_by_id = {u.id:u for u in users}
         projects = remote.get_all_projects()
-        for p in projects:
-            p.owner = users_by_id[p.owner_id]
+        tmpfuncs.add_owner(remote, projects)
         return projects
 
-    def list_data(self, obj):
+    def list_data(self, obj, args):
         _is_current = ' '
         project_config = read_project_config()
         if project_config and getit(obj, 'id') == project_config.project_id:
@@ -61,7 +59,7 @@ class ProjSubcommand(ListObjects):
             'updated_at': format_time(getit(obj, 'updated_at'))
         }
 
-    def print_details(self, obj, out=sys.stdout):
+    def print_details(self, obj, args, out=sys.stdout):
         description = None
         if obj.description:
             description = obj.description
@@ -79,7 +77,7 @@ class ProjSubcommand(ListObjects):
         # TODO: this needs testing
         if dry_run:
             out.write('Dry-run is not yet possible when deleting projects.\n')
-            out.write('Aborting\n')
+            out.write('Exiting\n')
             return
         remote = self.get_remote(args)
         for obj in objects:

@@ -84,7 +84,7 @@ class GlobusUploadTaskSubcommand(ListObjects):
             results += self.get_all_from_project(project)
         return results
 
-    def list_data(self, obj):
+    def list_data(self, obj, args):
         _is_current = ' '
         pconfig = clifuncs.read_project_config()
         if pconfig and obj.id == pconfig.globus_upload_id:
@@ -101,7 +101,7 @@ class GlobusUploadTaskSubcommand(ListObjects):
             "status": obj.status_message
         }
 
-    def print_details(self, obj, out=sys.stdout):
+    def print_details(self, obj, args, out=sys.stdout):
         description = None
         if obj.description:
             description = obj.description
@@ -231,7 +231,7 @@ class GlobusUploadTaskSubcommand(ListObjects):
         """
         if dry_run:
             out.write('Dry-run is not yet possible when deleting Globus uploads.\n')
-            out.write('Aborting\n')
+            out.write('Exiting\n')
             return
 
         proj = clifuncs.make_local_project()
@@ -324,7 +324,7 @@ class GlobusDownloadTaskSubcommand(ListObjects):
             results += self.get_all_from_project(project)
         return results
 
-    def list_data(self, obj):
+    def list_data(self, obj, args):
         _is_current = ' '
         pconfig = clifuncs.read_project_config()
         if pconfig and obj.id == pconfig.globus_download_id:
@@ -341,7 +341,7 @@ class GlobusDownloadTaskSubcommand(ListObjects):
             "status": obj.status_message
         }
 
-    def print_details(self, obj, out=sys.stdout):
+    def print_details(self, obj, args, out=sys.stdout):
         description = None
         if obj.description:
             description = obj.description
@@ -414,7 +414,7 @@ class GlobusDownloadTaskSubcommand(ListObjects):
         """
         if dry_run:
             out.write('Dry-run is not yet possible when deleting Globus downloads.\n')
-            out.write('Aborting\n')
+            out.write('Exiting\n')
             return
 
         proj = clifuncs.make_local_project()
