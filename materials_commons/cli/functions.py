@@ -672,7 +672,7 @@ def read_project_config(path=None):
     """
     # get config
     proj_config_path = _proj_config(path)
-    if proj_config_path:
+    if proj_config_path and os.path.exists(proj_config_path):
         return ProjectConfig(project_path(path))
     else:
         return None

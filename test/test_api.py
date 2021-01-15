@@ -65,6 +65,7 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(len(result) - n_projects_init, 3)
 
         # test "get_project"
+        self.maxDiff = None
         for proj in result:
             tmp_proj = client.get_project(proj.id)
             self.assertEqual(isinstance(tmp_proj, mcapi.Project), True)
@@ -261,7 +262,7 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(isfile(result[0]), True)
         self.assertEqual(result[0].name, "file_A.txt")
         self.assertEqual(result[0].id, file_id)
-        self.assertEqual(result[0].path, None)
+        self.assertEqual(result[0].path, "/file_A.txt")
         self.assertEqual(isinstance(result[0].size, int), True)
         self.assertEqual(isinstance(result[0].checksum, str), True)
 

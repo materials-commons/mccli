@@ -7,7 +7,12 @@
 #   local instance of Materials Commons
 
 # Materials Commons URL
-export MC_API_URL="http://localhost:8181/api"
+
+# Docker container
+# export MC_API_URL="http://localhost:8181/api"
+
+# Local install
+export MC_API_URL="http://127.0.0.1:8000/api"
 
 # A local directory where test data can be written
 export MC_TEST_DATA_DIR="${PWD}/test/local_test_projects"

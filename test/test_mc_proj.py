@@ -45,9 +45,11 @@ class TestMCProj(unittest.TestCase):
                 pass
 
     def test_parse_args(self):
-        testargs = ['mc', 'proj']
+        # exclude 'mc', 'proj'
+        testargs = []
         args = self.proj_subcommand.parse_args(testargs)
         self.assertEqual(isinstance(args, argparse.Namespace), True)
+        self.assertEqual(len(args.expr), 0)
 
     def test_get_all_from_experiment(self):
         print(os.getcwd())
@@ -76,7 +78,8 @@ class TestMCProj(unittest.TestCase):
         """Get all from remote should succeed and not require an existing local project"""
 
         # setUpClass ensures at least 3 projects should exist
-        testargs = ['mc', 'proj']
+        # exclude 'mc', 'proj'
+        testargs = []
         args = self.proj_subcommand.parse_args(testargs)
         client = self.proj_subcommand.get_remote(args)
         result = self.proj_subcommand.get_all_from_remote(client)
