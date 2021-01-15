@@ -96,7 +96,6 @@ class GlobusUploadTaskSubcommand(ListObjects):
             "type": obj.transfer_type,
             "name": clifuncs.trunc(obj.name, 40),
             "id": obj.id,
-            "uuid": obj.uuid,
             "created": clifuncs.format_time(obj.created_at),
             "status": obj.status_message
         }
@@ -282,8 +281,8 @@ class GlobusDownloadTaskSubcommand(ListObjects):
             ["globus", "download"], "Download", "Downloads", desc=self.desc,
             requires_project=False, non_proj_member=True, proj_member=True, expt_member=False,
             remote_help='Remote to download files from',
-            list_columns=['current', 'project_name', 'project_id', 'type', 'name', 'id', 'uuid', 'created', 'status'],
-            headers=['', 'project_name', 'project_id', 'type', 'name', 'id', 'uuid', 'created', 'status'],
+            list_columns=['current', 'project_name', 'project_id', 'type', 'name', 'id',  'created', 'status'],
+            headers=['', 'project_name', 'project_id', 'type', 'name', 'id', 'created', 'status'],
             deletable=True,
             creatable=True,
             custom_selection_actions=['goto'],
@@ -336,7 +335,6 @@ class GlobusDownloadTaskSubcommand(ListObjects):
             "type": obj.transfer_type,
             "name": clifuncs.trunc(obj.name, 40),
             "id": obj.id,
-            "uuid": obj.uuid,
             "created": clifuncs.format_time(obj.created_at),
             "status": obj.status_message
         }

@@ -20,8 +20,8 @@ class ProjSubcommand(ListObjects):
             ["proj"], "Project", "Projects",
             requires_project=False, non_proj_member=True, proj_member=False, expt_member=False,
             remote_help='Remote to get projects from',
-            list_columns=['current', 'name', 'owner', 'id', 'uuid', 'updated_at'],
-            headers=['', 'name', 'owner', 'id', 'uuid', 'updated_at'],
+            list_columns=['current', 'name', 'owner', 'id', 'updated_at'],
+            headers=['', 'name', 'owner', 'id', 'updated_at'],
             deletable=True,
             custom_selection_actions=['goto'],
             request_confirmation_actions={
@@ -55,7 +55,6 @@ class ProjSubcommand(ListObjects):
             'owner': trunc(obj.owner.email, 40),    # TODO: owner email
             'name': trunc(getit(obj, 'name'), 40),
             'id': getit(obj, 'id'),
-            'uuid': getit(obj, 'uuid'),
             'updated_at': format_time(getit(obj, 'updated_at'))
         }
 

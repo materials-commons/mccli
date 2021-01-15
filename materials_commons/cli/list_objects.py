@@ -159,7 +159,6 @@ class ListObjects(object):
         """Make argparse.ArgumentParser"""
         expr_help = 'select ' + self.typename_plural + ' that match the given regex (default matches name)'
         id_help = 'match id instead of name'
-        uuid_help = 'match uuid instead of name'
         owner_help = 'match owner instead of name'
         details_help = 'print detailed information'
         regxsearch_help = 'use regular expression search instead of match'
@@ -167,11 +166,11 @@ class ListObjects(object):
         json_help = 'print JSON data'
         all_help = 'list ' + self.typename_plural + ' from all projects'
         expt_help = 'restrict to ' + self.typename_plural + ' in the current experiment'
-        dataset_help = 'restrict to ' + self.typename_plural + ' in the specified (by uuid) dataset'
+        dataset_help = 'restrict to ' + self.typename_plural + ' in the specified (by id) dataset'
         output_help = 'output to file'
         force_help = 'force overwrite of existing output file'
         create_help = 'create a ' + self.typename
-        delete_help = 'delete a ' + self.typename + ', specified by uuid'
+        delete_help = 'delete a ' + self.typename + ', specified by id'
         dry_run_help = 'dry run deletion'
 
         cmd = "mc "
@@ -183,7 +182,6 @@ class ListObjects(object):
             prog=cmd)
         parser.add_argument('expr', nargs='*', default=None, help=expr_help)
         parser.add_argument('--id', action="store_true", default=False, help=id_help)
-        parser.add_argument('--uuid', action="store_true", default=False, help=uuid_help)
         if self.has_owner:
             parser.add_argument('--owner', action="store_true", default=False, help=owner_help)
         parser.add_argument('-d', '--details', action="store_true", default=False, help=details_help)
@@ -229,7 +227,7 @@ class ListObjects(object):
         """
         Execute Materials Commons CLI command.
 
-        mc proc [--all] [--expt] [--dataset] [--details | --json] [--id] [--uuid] [<name> ...]
+        mc proc [--all] [--expt] [--dataset] [--details | --json] [--id] [<name> ...]
 
         """
         args = self.parse_args(argv)
@@ -353,8 +351,6 @@ class ListObjects(object):
 
             if args.id:
                 attrname = 'id'
-            elif args.uuid:
-                attrname = 'uuid'
             elif self.has_owner and args.owner:
                 attrname = 'owner'
             else:

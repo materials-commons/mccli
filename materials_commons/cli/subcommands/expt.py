@@ -30,8 +30,8 @@ class ExptSubcommand(ListObjects):
         super(ExptSubcommand, self).__init__(
             ["expt"], "Experiment", "Experiments",
             requires_project=True, proj_member=True, expt_member=False,
-            list_columns=['current', 'name', 'description', 'owner', 'id', 'uuid', 'updated_at'],
-            headers=['', 'name', 'description', 'owner', 'id', 'uuid', 'updated_at'],
+            list_columns=['current', 'name', 'description', 'owner', 'id', 'updated_at'],
+            headers=['', 'name', 'description', 'owner', 'id', 'updated_at'],
             creatable=True,
             deletable=True,
             custom_actions=['unset'],
@@ -64,7 +64,6 @@ class ExptSubcommand(ListObjects):
             'description': clifuncs.trunc(obj.description, 100),
             'owner': clifuncs.trunc(obj.owner.email, 40),
             'id': obj.id,
-            'uuid': obj.uuid,
             'updated_at': clifuncs.format_time(obj.updated_at)
         }
 

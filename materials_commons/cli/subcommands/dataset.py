@@ -109,7 +109,7 @@ class DatasetSubcommand(ListObjects):
             ["dataset"], "Dataset", "Datasets", desc=self.desc,
             requires_project=False, non_proj_member=True, proj_member=True, expt_member=False,
             remote_help='Remote to get datasets from',
-            list_columns=['name', 'owner', 'id', 'uuid', 'updated_at', 'zipfile_size', 'published_at'],
+            list_columns=['name', 'owner', 'id', 'updated_at', 'zipfile_size', 'published_at'],
             deletable=True,
             creatable=True,
             custom_selection_actions=['down', 'unpublish', 'publish', 'clone_as'],
@@ -152,7 +152,6 @@ class DatasetSubcommand(ListObjects):
             'name': clifuncs.trunc(clifuncs.getit(obj, 'name', '-'), 40),
             'owner': clifuncs.trunc(obj.owner.email, 40),
             'id': clifuncs.trunc(clifuncs.getit(obj, 'id', '-'), 40),
-            'uuid': clifuncs.trunc(clifuncs.getit(obj, 'uuid', '-'), 40),
             'updated_at': clifuncs.format_time(clifuncs.getit(obj, 'updated_at', '-')),
             'zipfile_size': zipfile_size,
             'published_at': published_at
@@ -205,14 +204,14 @@ class DatasetSubcommand(ListObjects):
     def down(self, objects, args, out=sys.stdout):
         """Download dataset zipfile, --down
 
-        .. note:: The downloaded dataset is named <dataset_id>.zip
+        .. note:: The downloaded dataset is named dataset.<dataset_uuid>.zip
         """
         proj = clifuncs.make_local_project()
         for obj in objects:
             self.print_details(obj, args, out=out)
             out.write("Downloading...\n")
             dataset_id = obj.id
-            to = obj.uuid + ".zip"
+            to = "dataset." + obj.uuid + ".zip"
             proj.remote.download_dataset_zipfile(dataset_id, to)
             out.write("DONE\n\n")
         return

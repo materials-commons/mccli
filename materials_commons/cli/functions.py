@@ -197,12 +197,11 @@ def print_projects(projects, current=None):
             'name': trunc(p.name, 40),
             'owner': p.owner_id,    # TODO: owner email
             'id': p.id,
-            'uuid': p.uuid,
             'modified_at': format_time(p.updated_at)
         })
 
-    columns=['current', 'name', 'owner', 'id', 'uuid', 'modified_at']
-    headers=['', 'name', 'owner', 'id', 'uuid', 'modified_at']
+    columns=['current', 'name', 'owner', 'id', 'modified_at']
+    headers=['', 'name', 'owner', 'id', 'modified_at']
     print_table(data, columns=columns, headers=headers)
 
 def print_remote_help():
@@ -359,7 +358,6 @@ class ProjectTable(SqlTable):
         return [
             ("name", "name", "<", 24, as_is),
             ("id", "id", "<", 36, as_is),
-            ("uuid", "uuid", "<", 36, as_is),
             ("checktime", "checktime", "<", 24, format_time)
         ]
 
