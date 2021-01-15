@@ -10,7 +10,7 @@ from materials_commons.cli.treedb import RemoteTree
 def make_parser():
     """Make argparse.ArgumentParser for `mc mkdir`"""
     parser = argparse.ArgumentParser(
-        description='Make remote directories',
+        description='Make directories',
         prog='mc mkdir')
     parser.add_argument('paths', nargs='*', default=[os.getcwd()], help='Directory names')
     parser.add_argument('-p', action="store_true", default=False, help='Create intermediate directories as necessary')
