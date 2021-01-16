@@ -28,34 +28,12 @@ The ``mc ls`` command displays a table showing information on both local (prepen
     2020 Aug 17 23:25:48  -         directory  2020 Aug 18 03:31:49  0B        directory  -     level_2     2659319
 
 
-``mc ls --help`` documentation
-------------------------------
+Reference
+---------
 
-.. argparse::
-    :filename: materials_commons/cli/subcommands/ls.py
-    :func: make_parser
-    :prog: mc ls
+For a complete list of options, see:
 
-``mc mkdir --help`` documentation
----------------------------------
-
-.. argparse::
-    :filename: materials_commons/cli/subcommands/mkdir.py
-    :func: make_parser
-    :prog: mc mkdir
-
-``mc rm --help`` documentation
-------------------------------
-
-.. argparse::
-    :filename: materials_commons/cli/subcommands/rm.py
-    :func: make_parser
-    :prog: mc rm
-
-``mc mv --help`` documentation
-------------------------------
-
-.. argparse::
-    :filename: materials_commons/cli/subcommands/mv.py
-    :func: make_parser
-    :prog: mc mv
+- `mc ls <../reference/mc/ls.html>`_
+- `mc mkdir <../reference/mc/mkdir.html>`_
+- `mc mv <../reference/mc/mv.html>`_
+- `mc rm <../reference/mc/rm.html>`_

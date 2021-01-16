@@ -1,21 +1,21 @@
-.. prisms_jobs
+.. materials_commons.cli index
 
-The Materials Commons CLI (MCCLI)
-=================================
+The Materials Commons CLI
+=========================
 
-This is the Materials Commons CLI program, `mc`.
+`Materials Commons <https://materialscommons.org>`_ is a site for the materials community to store, share, and publish data. This package, ``materials_commons.cli``, provides a command line program, ``mc``, for use with Materials Commons.
 
 .. toctree::
-    :maxdepth: 2
+    :maxdepth: 1
 
+    overview
     install
     manual/index
-    Reference <reference/materials_commons/modules>
+    ``mc`` Reference <reference/mc/index>
+    ``materials_commons.cli`` Reference <reference/materials_commons/modules>
     help
     license
 
 ``mccli`` is available on GitHub_.
 
 .. _GitHub: https://github.com/materials-commons/mccli
-
-``mccli`` is developed by the PRISMS Center at the University of Michigan. This work is supported by the U.S. Department of Energy, Office of Basic Energy Sciences, Division of Materials Sciences and Engineering under Award #DE-SC0008637.

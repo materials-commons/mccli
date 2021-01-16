@@ -49,7 +49,8 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx.ext.githubpages',
     'sphinx.ext.napoleon',
-    'sphinxarg.ext']
+    'sphinxarg.ext',
+    'sphinxcontrib.programoutput']
 
 # Napoleon settings
 napoleon_google_docstring = True

@@ -8,15 +8,66 @@ Standard upload and download
 
 When a local project directory exists (created using ``mc init`` or ``mc clone``), files can be transferred between the local project and the remote project.
 
-File uploading and downloading is performed with: ::
+File uploading and downloading is performed with the ``mc up`` and ``mc down`` command, respectively. To upload one or more files the basic usage is: ::
 
-    mc up [paths [paths ...]]
+    mc up [-r] [local_file [local_file ...]]
 
-and: ::
+And to download one or more files the basic usage is: ::
 
-    mc down [paths [paths ...]]
+    mc down [-r] [remote_file [remote_file ...]]
 
-Use the ``-r`` option to upload and download directory contents recursively. For ``mc up``, any files given as "path" arguments existing in the local project directory will be uploaded to the corresponding directory in the remote project. Similarly, for ``mc down`` any files given as "path" arguments existing in the remote project directory will be downloaded to the corrsponding directory in the local project. Any intermediate directories that do not exist will be created automatically.
+The ``-r`` option is used to upload and download directory contents recursively. For ``mc up``, any files given as "path" arguments existing in the local project directory will be uploaded to the corresponding directory in the remote project. Similarly, for ``mc down`` any files given as "path" arguments existing in the remote project directory will be downloaded to the corrsponding directory in the local project. Any intermediate directories that do not exist will be created automatically.
+
+For example, consider a project on Materials Commons named "MyProject" that looks like this: ::
+
+    MyProject/:
+    ├── file_A.txt
+    ├── file_B.txt
+    └── level_1
+        ├── file_A.txt
+        ├── file_B.txt
+        └── level_2
+            ├── file_A.txt
+            └── file_B.txt
+
+Imagine the local project directory looks like this: ::
+
+    /Users/me/local/mc_projects/MyProject/:
+    ├── file_A.txt
+    ├── file_C.txt
+    └── level_1
+        ├── file_A.txt
+        └── file_C.txt
+
+If the current working directory is ``/Users/me/local/mc_projects/MyProject/``, then the following are all possible: ::
+
+    # upload one file
+    mc up file_C.txt
+
+    # upload two files
+    mc up file_C.txt level_1/file_C.txt
+
+    # upload a directory, and its subdirectories, recursively
+    mc up -r level_1
+
+    # upload everything in the current directory, and subdirectories, recursively
+    mc up -r .
+
+    # download one file
+    mc down file_B.txt
+
+    # download two files
+    mc down file_B.txt level_1/file_B.txt
+
+    # download a file (creating necessary directory level_1/level_2):
+    mc down level_1/level_2/file_A.txt
+
+    # download a directory and subdirectories, recursively:
+    mc down -r level_1
+
+    # download all files and subdirectories, recursively:
+    mc down -r .
+
 
 By default, ``mc up``/``mc down`` will check MD5 checksums and not transfer files that already exist. This can be skipped with the ``--no-compare`` option.
 
@@ -25,111 +76,159 @@ There is a limit to the size of files that can be uploaded using the standard fi
 When uploading a file results in "overwriting" an existing file at the same location, Materials Commons saves the previously existing file as a "version". Access to previous file versions will be enabled in a subsequent release, along with details about how ``mc rm`` and ``mc mv`` effect versions.
 
 
-Globus file transfer
---------------------
+Globus installation and configuration
+-------------------------------------
 
-The Globus_ transfer service can be used when transfering larger or more files.
-
-
-Installation and configuration
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-The Globus client should already be installed as part of the ``materials-commons-cli`` installation process. But, if it is not installed, install with: ::
+The Globus_ transfer service can be used when transfering larger or more files. The Globus client should already be installed as part of the ``materials-commons-cli`` installation process. But, if it is not installed, install with: ::
 
     pip install globus-sdk
     pip install globus-cli
 
 The following assumes you have a valid Globus_ account.
 
-If you are using Globus Personal Connect, for instance on your personal computer:
+First, add your Globus account name in your Materials Commons account `settings <https://materialscommons.org/app/accounts/show>`_. Typically, this is the email address associated with your Globus account.
 
-- Login to Globus: ::
+Second, configure the client side to use Globus. There are two typical cases:
 
-    globus login
+- Case 1) If you are using Globus Personal Connect, for instance on your personal computer, you must have Globus Personal Connect running and log in Globus: ::
 
+      globus login
 
-If you are using a Globus endpoint managed by someone else, for instance on a shared cluster:
+- Case 2) If you are using a Globus endpoint managed by someone else, for instance on a shared cluster, ``mc`` must be configured with the Globus endpoint ID. This can be done using the following steps ::
 
-- Find the Globus endpoint id for the endpoint you will use. Endpoint UUIDs can be found on the `Globus endpoints web interface`_.
-- Configure ``mc`` to use the Globus endpoint id: ::
+  - Find the Globus endpoint ID for the endpoint you will use. Endpoint UUIDs can be found on the `Globus endpoints web interface`_.
+  - Configure ``mc`` to use the Globus endpoint ID: ::
 
-    mc globus --set-globus-endpoint-id <id>
-
-
-Globus file transfer overview
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-The process for uploading files to a Materials Commons project via Globus is:
-
-1. Request that Materials Commons creates a new Globus upload directory for a project on the Materials Commons Globus endpoint. At this point Materials Commons creates a new upload directory and sets access control to allow only you to privately access it via Globus.
-2. Initiate one or more Globus transfers from any endpoints you can access to the upload directory on the Materials Commons endpoint.
-3. Finish or delete upload:
-
-  a. Tell Materials Commons that transfers are complete and files at the upload directory should be processed into the Materials Commons project. At this point Materials Commons removes access control so no more files can be uploaded while they are being processed. To upload more files via Globus repeat from (1).
-  b. Or, tell Materials Commons to discard uploaded files and do not process them into the project.
-
-The process for downloading files from a Materials Commons project via Globus is:
-
-1. Request that Materials Commons creates a new Globus download directory for a project on the Materials Commons Globus endpoint. At this point Materials Commons creates hardlinks in the download directory to the current version of all project files. For large projects this may take some time. Then it sets access control to allow only you to privately access the download directory via Globus. Any file changes in the project that occur after a download directory is created are *not* reflected in that download directory.
-2. Initiate one or more Globus transfers from the download directory on the Materials Commons endpoint to any endpoints you can access.
-3. Tell Materials Commons that transfers are complete and the download directory can be deleted. The download directory may be left as long as desired, but it will *not* reflect any file or directory changes to project.
+      mc globus --set-globus-endpoint-id <endpoint_id>
 
 
-Initiating transfers using Globus
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Uploading files with Globus
+---------------------------
 
-To initiate an upload using Globus, add the ``-g``/``--globus`` option: ::
+Globus transfers to Materials Commons take place via a temporary intermediary directory that is created on Materials Commons. The process is as follows:
 
-    mc up -g [paths [paths ...]]
+Initial state, before uploading:
 
-Since a user can have multiple existing Globus upload directories, the ``mc`` program stores, for each local project, the id of a "current" Globus upload indicating which upload directory to transfer files to. If no "current" upload exists when ``mc up`` is called, then ``mc`` will request a new upload directory with a random name and initiate a Globus transfer to it. The newly created upload directory becomes the "current" upload directory and is used when ``mc up -g`` is called subsequently.
+.. image:: ../assets/globus/up.1.png
 
-Globus downloads can be initiated similarly, with: ::
+Request that Materials Commons creates a new Globus upload for the project. This creates a new, empty, upload directory on Materials Commons. It is possible to have multiple upload directories existing at the same time, for the same project, to help manage multiple transfers. Each upload directory requested from ``mc`` is given a name made up of three random words along with an ID and UUID. Access control is set to allow only you to privately access the upload directory via Globus.: ::
 
-    mc down -g [paths [paths ...]]
+    $ mc globus upload --create
+    Created Globus upload: 293
+        project_name      project_id  type    name                   id  uuid                                  created               status
+    --  --------------  ------------  ------  -------------------  ----  ------------------------------------  --------------------  --------
+    *   MyProject                589  upload  rivage-popish-bonze   293  c3474f16-b357-4b6c-92ca-fd93a1e37840  2021 Jan  1 03:52:49  Ready
+
+.. image:: ../assets/globus/up.2.png
+
+At this point, Globus transfers to the upload directory can be initiated with ``mc up`` by adding the ``-g``/``--globus`` option. Multi-file and recursive uploads can be initiated for Globus uploads just as with standard uploads. Since a user can have multiple existing Globus upload directories, the ``mc`` program stores, for each local project, the ID of a "current" Globus upload indicating which upload directory to transfer files to.
+
+If no "current" upload exists when ``mc up`` is called, then ``mc`` will request a new upload directory with a random name and initiate a Globus transfer to it. The newly created upload directory becomes the "current" upload directory and is used when ``mc up -g`` is called subsequently.
+
+The first time a transfer is initiated Globus will generate an authorization token for the ``mc`` program, specific to the computer making the transfer. A browser should be opened automatically taking you to a page with the authorization code which ``mc`` will prompt for. Copy and paste the code into the command line and the transfer should begin. ::
+
+    $ mc up -g file_B.txt
+    Using current globus upload (name=rivage-popish-bonze, id=293).
+    Please login. If a webpage does not open automatically, go here:
+
+    https://auth.globus.org/v2/oauth2/authorize?... (long link)
 
 
-Managing Globus transfers
-^^^^^^^^^^^^^^^^^^^^^^^^^
+    Please enter the code you get after login here: abc123abc123abc123abc123abc123
+    Globus task_id: c127a968-57b1-11eb-87bb-02187389bd35
+    Globus transfer task initiated.
+    Use `globus task list` to monitor task status.
+    Use `mc globus upload` to manage Globus uploads.
+    Multiple transfer tasks may be initiated.
+    When all tasks finish uploading, use `mc globus upload --id 293 --finish` to import all uploaded files into the Materials Commons project.
 
-The command ``globus task list`` can be used to check the status of all initiated transfers.
+Any number of Globus transfers can be performed to transfer files into the upload directory. Files will be placed into the upload directory mirroring the project's directory struture, but only directories containing newly uploaded files need to be created.
 
-Globus upload and download directories on Materials Commons can be managed with ``mc globus upload``/``mc globus download``. This provides options to list, create, delete, and go to (in the Globus web UI) upload and download directories, finish an upload, and set or unset the "current" upload/download directory for the local project.
+The command ``globus task list`` can be used to check the status of all initiated transfers. ::
 
-When Globus upload transfers complete, use the ID of the upload directory to be finished, and begin processing of files into the Materials Commons project with: ::
+    $ globus task list
+    Task ID                              | Status    | Type     | Source Display Name | Dest Display Name          | Label
+    ------------------------------------ | --------- | -------- | ------------------- | -------------------------- | --------------------------------
+    c127a968-57b1-11eb-87bb-02187389bd35 | SUCCEEDED | TRANSFER | my_MacbookAir       | materials-commons-2-upload | MyProject-rivage-popish-bonze
 
-    ``mc globus upload --finish --id <id>``
+If a task will not complete (Status=`SUCCEEDED`), check that Globus Personal Connect is running, your internet connection is working, or check at address error messages in the `Globus transfer activity page <https://app.globus.org/activity>`_.
 
-Depending on the number of files, it may take some time to process uploaded files before they appear in the project.
+At any point before finishing the upload, you can as a convenience also open the Globus file manager in a web browser with the ``--goto`` command to transfer files using that interface. For example: ::
+
+    $ mc globus upload --id 293 --goto
+        project_name      project_id  type    name                   id  uuid                                  created               status
+    --  --------------  ------------  ------  -------------------  ----  ------------------------------------  --------------------  --------
+        MyProject                589  upload  rivage-popish-bonze   293  c3474f16-b357-4b6c-92ca-fd93a1e37840  2021 Jan 16 03:52:49  Ready
+
+    You want to goto these uploads in a web browser? ('Yes'/'No'): Yes
+
+If all of the "file_B.txt" files are uploaded, the directories will look like the following:
+
+.. image:: ../assets/globus/up.3.png
+
+Once all desired transfers are completed, the Materials Commons upload directory can be closed and files processed into your project with the ``--finish`` option for ``mc globus upload``: ::
+
+    mc globus upload --id 293 --finish
+
+Processing time before files appear in your project will depend on the size of the transfer. The status can be checked with ``mc globus upload``: ::
+
+    $ mc globus upload
+        project_name      project_id  type    name                   id  uuid                                  created               status
+    --  --------------  ------------  ------  -------------------  ----  ------------------------------------  --------------------  ---------
+        MyProject                589  upload  rivage-popish-bonze   293  c3474f16-b357-4b6c-92ca-fd93a1e37840  2021 Jan 16 03:52:49  Finishing
+
+Once processing is finished, the upload directory will no longer appear in ``mc globus upload`` results, and all files should appear in the project directory.
+
+Then, the final state should be:
+
+.. image:: ../assets/globus/up.4.png
+
+If you wish to delete an upload directory and not process the files that have already been uploaded, use the ``--delete`` option with ``mc globus upload``.
+
+The current Globus upload directory can be managed with the ``--set`` and ``--unset`` options for ``mc globus upload``.
 
 
-``--help`` documentation:
--------------------------
+Downloading files with Globus
+-----------------------------
 
-.. argparse::
-    :filename: materials_commons/cli/subcommands/up.py
-    :func: make_parser
-    :prog: mc up
+The Globus download process is similar to the Globus upload process. The first step is requesting that Materials Commons creates a temporary download directory using ``mc globus download --create``. This will create the temporary download directory and populate it with links to all of the files in the project. Access control is set to allow only you to privately access the download directory via Globus.  ::
 
-.. argparse::
-    :filename: materials_commons/cli/subcommands/down.py
-    :func: make_parser
-    :prog: mc down
+    $ mc globus download --create
+    Created Globus download: 295
+        project_name      project_id  type      name                   id  uuid                                  created               status
+    --  --------------  ------------  --------  -------------------  ----  ------------------------------------  --------------------  --------
+    *   MyProject                589  download  teerer-armed-gynics   295  db89ab27-92cf-4e12-9b4d-a4c3162f56da  2021 Jan 16 04:52:24  Waiting
 
-.. argparse::
-    :filename: materials_commons/cli/subcommands/globus.py
-    :func: make_globus_parser
-    :prog: mc globus
+The status of the download directory can be checked with ``mc globus download``: ::
 
-.. argparse::
-    :filename: materials_commons/cli/subcommands/globus.py
-    :func: make_globus_upload_parser
-    :prog: mc globus upload
+    $ mc globus download
+        project_name      project_id  type      name                   id  uuid                                  created               status
+    --  --------------  ------------  --------  -------------------  ----  ------------------------------------  --------------------  --------
+    *   MyProject                589  download  teerer-armed-gynics   295  db89ab27-92cf-4e12-9b4d-a4c3162f56da  2021 Jan 16 04:52:24  Waiting
 
-.. argparse::
-    :filename: materials_commons/cli/subcommands/globus.py
-    :func: make_globus_download_parser
-    :prog: mc globus download
+**Note that it is a known issue that creating the download directory for projects with a very large number of files may be very slow and even fail. An improved download method is under development.**
+
+Once the status is "Ready", downloads can be initiated by adding the the ``-g``/``--globus`` option to ``mc down``. Multi-file and recursive downloads can be initiated for Globus downloads just as with standard downloads. ::
+
+    mc down -g file_B.txt
+
+As with uploads, multiple transfers may be initiated and ``--goto`` may be used to open the Globus file manager for the download directory in a web browser. Once all desired transfers are completed, the Materials Commons download directory can be closed with the ``--delete`` option for ``mc globus download``: ::
+
+    mc globus download --id 295 --delete
+
+The download directory may be left as long as desired, but it will *not* reflect any file or directory changes to project since the time it was created.
+
+The current Globus download directory can be managed with the ``--set`` and ``--unset`` options for ``mc globus download``.
+
+
+Reference
+---------
+
+For a complete list of options, see:
+
+- `mc up <../reference/mc/up.html>`_
+- `mc down <../reference/mc/down.html>`_
+- `mc globus <../reference/mc/globus.html>`_
 
 .. _Globus: https://www.globus.org/
 .. _`Globus endpoints web interface`: https://app.globus.org/endpoints

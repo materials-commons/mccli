@@ -3,6 +3,11 @@
 Installation
 ============
 
+Requirements
+------------
+
+Installation and use of ``materials_commons.cli`` requires Python 3.
+
 
 Install using pip
 -----------------
@@ -60,3 +65,11 @@ installed scripts. This can be done using:
 ::
 
    		export PATH=$PATH:`python -m site --user-base`/bin
+
+
+Checking installation
+---------------------
+
+When ``materials_commons.cli`` is installed correctly you should be to run the ``mc`` program and view the help menu:
+
+.. command-output:: mc --help
