@@ -79,7 +79,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'materials_commons.cli'
-copyright = u'2020, PRISMS Center'
+copyright = u'2021, PRISMS Center'
 author = u'Materials Commons Developers'
 
 # The version info for the project you're documenting, acts as replacement for
