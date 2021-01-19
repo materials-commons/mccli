@@ -222,8 +222,17 @@ def print_file(proj, path):
 
 def make_parser():
     """Make argparse.ArgumentParser for `mc down`"""
+
+    mc_down_description = "Download files from Materials Commons"
+
+    mc_down_usage = """
+    mc down [-r] [-p] [-o] [-f] [--no-compare] <pathspec> [<pathspec> ...]
+    mc down -p <pathspec>
+    mc down -g [-r] [--no-compare] [--label] <pathspec> [<pathspec> ...]"""
+
     parser = argparse.ArgumentParser(
-        description='download files',
+        description=mc_down_description,
+        usage=mc_down_usage,
         prog='mc down')
     parser.add_argument('paths', nargs='*', default=None, help='Files or directories')
     parser.add_argument('-r', '--recursive', action="store_true", default=False,

@@ -9,15 +9,23 @@ import materials_commons.cli.globus as cliglobus
 import materials_commons.cli.tree_functions as treefuncs
 from materials_commons.cli.treedb import LocalTree, RemoteTree
 
-globus_help = """Use globus to upload files. Uses the current active upload or creates a new upload.
- Use `globus task list` to monitor transfer tasks. Use `mc globus upload` to manage uploads."""
-
 def make_parser():
     """Make argparse.ArgumentParser for `mc up`"""
+
+    mc_up_description = "Upload files to Materials Commons"
+
+    mc_up_usage = """
+    mc up [-r] [--no-compare] [--limit] <pathspec> [<pathspec> ...]
+    mc up -g [-r] [--no-compare] [--label] <pathspec> [<pathspec> ...]"""
+
+    globus_help = """Use globus to upload files. Uses the current active upload or creates a new upload.
+     Use `globus task list` to monitor transfer tasks. Use `mc globus upload` to manage uploads."""
+
     parser = argparse.ArgumentParser(
-        description='upload files',
+        description=mc_up_description,
+        usage=mc_up_usage,
         prog='mc up')
-    parser.add_argument('paths', nargs='*', default=None, help='Files or directories')
+    parser.add_argument('pathspec', nargs='*', default=None, help='Files or directories')
     parser.add_argument('-r', '--recursive', action="store_true", default=False,
                         help='Upload directory contents recursively')
     parser.add_argument('--limit', nargs=1, type=float, default=[50],
@@ -34,7 +42,8 @@ def up_subcommand(argv):
     """
     upload files to Materials Commons
 
-    mc up [-r] [<pathspec> ...]
+    mc up [-r] [--no-compare] [--limit] <pathspec> [<pathspec> ...]
+    mc up -g [-r] [--no-compare] [--label] <pathspec> [<pathspec> ...]
 
     """
     parser = make_parser()
