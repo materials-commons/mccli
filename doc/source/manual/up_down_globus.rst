@@ -94,7 +94,7 @@ Second, configure the client side to use Globus. There are two typical cases:
 
       globus login
 
-- Case 2) If you are using a Globus endpoint managed by someone else, for instance on a shared cluster, ``mc`` must be configured with the Globus endpoint ID. This can be done using the following steps ::
+- Case 2) If you are using a Globus endpoint managed by someone else, for instance on a shared cluster, ``mc`` must be configured with the Globus endpoint ID. This can be done using the following steps:
 
   - Find the Globus endpoint ID for the endpoint you will use. Endpoint UUIDs can be found on the `Globus endpoints web interface`_.
   - Configure ``mc`` to use the Globus endpoint ID: ::
@@ -107,11 +107,15 @@ Uploading files with Globus
 
 Globus transfers to Materials Commons take place via a temporary intermediary directory that is created on Materials Commons. The process is as follows:
 
-Initial state, before uploading:
+
+Step 1, Request a Globus upload directory
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Imagine the initial state of your local and remote projects, before uploading, looks like the following:
 
 .. image:: ../assets/globus/up.1.png
 
-Request that Materials Commons creates a new Globus upload for the project. This creates a new, empty, upload directory on Materials Commons. It is possible to have multiple upload directories existing at the same time, for the same project, to help manage multiple transfers. Each upload directory requested from ``mc`` is given a name made up of three random words along with an ID and UUID. Access control is set to allow only you to privately access the upload directory via Globus.: ::
+Imagine that you want to upload the files named "file_B.txt". Request that Materials Commons creates a new Globus upload for the project. This creates a new, empty, upload directory on Materials Commons. It is possible to have multiple upload directories existing at the same time, for the same project, to help manage multiple transfers. Each upload directory requested from ``mc`` is given a name made up of three random words along with an ID and UUID. Access control is set to allow only you to privately access the upload directory via Globus.: ::
 
     $ mc globus upload --create
     Created Globus upload: 293
@@ -120,6 +124,10 @@ Request that Materials Commons creates a new Globus upload for the project. This
     *   MyProject                589  upload  rivage-popish-bonze   293  c3474f16-b357-4b6c-92ca-fd93a1e37840  2021 Jan  1 03:52:49  Ready
 
 .. image:: ../assets/globus/up.2.png
+
+
+Step 2, Transfer files
+^^^^^^^^^^^^^^^^^^^^^^
 
 At this point, Globus transfers to the upload directory can be initiated with ``mc up`` by adding the ``-g``/``--globus`` option. Multi-file and recursive uploads can be initiated for Globus uploads just as with standard uploads. Since a user can have multiple existing Globus upload directories, the ``mc`` program stores, for each local project, the ID of a "current" Globus upload indicating which upload directory to transfer files to.
 
@@ -151,7 +159,7 @@ The command ``globus task list`` can be used to check the status of all initiate
     ------------------------------------ | --------- | -------- | ------------------- | -------------------------- | --------------------------------
     c127a968-57b1-11eb-87bb-02187389bd35 | SUCCEEDED | TRANSFER | my_MacbookAir       | materials-commons-2-upload | MyProject-rivage-popish-bonze
 
-If a task will not complete (Status=`SUCCEEDED`), check that Globus Personal Connect is running, your internet connection is working, or check at address error messages in the `Globus transfer activity page <https://app.globus.org/activity>`_.
+If a task will not complete (Status != `SUCCEEDED`), check that Globus Personal Connect is running, your internet connection is working, or check and address error messages in the `Globus transfer activity page <https://app.globus.org/activity>`_.
 
 At any point before finishing the upload, you can as a convenience also open the Globus file manager in a web browser with the ``--goto`` command to transfer files using that interface. For example: ::
 
@@ -162,6 +170,10 @@ At any point before finishing the upload, you can as a convenience also open the
 
     You want to goto these uploads in a web browser? ('Yes'/'No'): Yes
 
+
+Step 3, Finish upload
+^^^^^^^^^^^^^^^^^^^^^
+
 If all of the "file_B.txt" files are uploaded, the directories will look like the following:
 
 .. image:: ../assets/globus/up.3.png
@@ -170,7 +182,7 @@ Once all desired transfers are completed, the Materials Commons upload directory
 
     mc globus upload --id 293 --finish
 
-Processing time before files appear in your project will depend on the size of the transfer. The status can be checked with ``mc globus upload``: ::
+The processing time required before files appear in your project will depend on the size of the transfer. The status can be checked with ``mc globus upload``: ::
 
     $ mc globus upload
         project_name      project_id  type    name                   id  uuid                                  created               status
@@ -183,9 +195,19 @@ Then, the final state should be:
 
 .. image:: ../assets/globus/up.4.png
 
+
+Additional Notes
+^^^^^^^^^^^^^^^^
+
 If you wish to delete an upload directory and not process the files that have already been uploaded, use the ``--delete`` option with ``mc globus upload``.
 
 The current Globus upload directory can be managed with the ``--set`` and ``--unset`` options for ``mc globus upload``.
+
+In the example uploading all the "file_B.txt" files resulted in the remote project matching the local project. This could have also been accomplished by attempting to upload all the local files, recursively: ::
+
+    mc up -g -r .
+
+In this case, ``mc`` will compare the MD5 checksum of the local and remote files and only request that Globus upload the files that are different.
 
 
 Downloading files with Globus
