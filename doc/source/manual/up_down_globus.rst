@@ -10,11 +10,11 @@ When a local project directory exists (created using ``mc init`` or ``mc clone``
 
 File uploading and downloading is performed with the ``mc up`` and ``mc down`` command, respectively. To upload one or more files the basic usage is: ::
 
-    mc up [-r] [local_file [local_file ...]]
+    mc up [-r] local_file [local_file ...]
 
 And to download one or more files the basic usage is: ::
 
-    mc down [-r] [remote_file [remote_file ...]]
+    mc down [-r] remote_file [remote_file ...]
 
 The ``-r`` option is used to upload and download directory contents recursively. For ``mc up``, any files given as "path" arguments existing in the local project directory will be uploaded to the corresponding directory in the remote project. Similarly, for ``mc down`` any files given as "path" arguments existing in the remote project directory will be downloaded to the corrsponding directory in the local project. Any intermediate directories that do not exist will be created automatically.
 
@@ -79,18 +79,18 @@ When uploading a file results in "overwriting" an existing file at the same loca
 Globus installation and configuration
 -------------------------------------
 
-The Globus_ transfer service can be used when transfering larger or more files. The Globus client should already be installed as part of the ``materials-commons-cli`` installation process. But, if it is not installed, install with: ::
+The Globus_ transfer service can be used when transferring large files or many files. The Globus client should already be installed as part of the ``materials-commons-cli`` installation process. But, if it is not installed, install with: ::
 
     pip install globus-sdk
     pip install globus-cli
 
 The following assumes you have a valid Globus_ account.
 
-First, add your Globus account name in your Materials Commons account `settings <https://materialscommons.org/app/accounts/show>`_. Typically, this is the email address associated with your Globus account.
+First, add your Globus account name in the `Account Settings section <https://materialscommons.org/app/accounts/show>`_ on the Materials Commons website. Typically, this is the email address associated with your Globus account.
 
 Second, configure the client side to use Globus. There are two typical cases:
 
-- Case 1) If you are using Globus Personal Connect, for instance on your personal computer, you must have Globus Personal Connect running and log in Globus: ::
+- Case 1) If you are using Globus Personal Connect, for instance on your personal computer, you must have Globus Personal Connect running and log in to Globus: ::
 
       globus login
 
@@ -238,7 +238,7 @@ As with uploads, multiple transfers may be initiated and ``--goto`` may be used 
 
     mc globus download --id 295 --delete
 
-The download directory may be left as long as desired, but it will *not* reflect any file or directory changes to project since the time it was created.
+The download directory may be left as long as desired, but it will *not* reflect any file or directory changes to the project since the time the download directory was created.
 
 The current Globus download directory can be managed with the ``--set`` and ``--unset`` options for ``mc globus download``.
 

@@ -3,7 +3,7 @@
 Overview
 ========
 
-`Materials Commons <https://materialscommons.org>`_ is a site for the materials community to store, shared, and publish data. This package, ``materials_commons.cli``, provides a command line program, ``mc``, for use with Materials Commons.
+`Materials Commons <https://materialscommons.org>`_ is a site for the materials community to store, share, and publish data. This package, ``materials_commons.cli``, provides a command line program, ``mc``, for use with Materials Commons.
 
 Features of Materials Commons:
 

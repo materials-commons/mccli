@@ -6,7 +6,7 @@ Installation
 Requirements
 ------------
 
-Installation and use of ``materials_commons.cli`` requires Python 3.
+Installation and use of ``materials_commons.cli`` requires Python 3, for instance from https://www.python.org.
 
 
 Install using pip

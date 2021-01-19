@@ -19,7 +19,7 @@ Organizations may host their own instance of Materials Commons, for example at: 
 
     https://materialscommons.other_institution.org
 
-In order to access your projects and data on a particular instance of Materials Commons, you must login with your email and password to receive your apikey. The ``mc`` program will store the apikey in a configuration file located in your local user directory at: ::
+In order to access your projects and data on a particular instance of Materials Commons, you must log in with your email and password to receive your apikey. The ``mc`` program will store the apikey in a configuration file located in your local user directory at: ::
 
     $HOME/.materialscommons/config.json
 

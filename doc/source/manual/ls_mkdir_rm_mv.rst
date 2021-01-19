@@ -6,7 +6,7 @@ File operations
 Overview
 --------
 
-Typical filesystem operations can be performed with ``mc ls``, ``mc mkdir``, ``mc rm``, and ``mc mv``. By default, these act on both local and remote files and directories. If you want them to act on only remote files or directories use the ``--remote-only`` option.
+Inside a `local project directory <proj_init_clone.html#the-local-project-directory>`_ created by ``mc init`` or ``mc clone``, typical filesystem operations can be performed with ``mc ls``, ``mc mkdir``, ``mc rm``, and ``mc mv``. By default, these act on both local and remote files and directories. If you want them to act on only remote files or directories use the ``--remote-only`` option.
 
 The ``mc ls`` command displays a table showing information on both local (prepended with "l\_") and remote files and directories (prepended with "r\_"). Including the ``--checksum`` option will calculate the MD5 checksum of the local file for comparison with the remote file. The result of the comparison is shown in the "eq" column. For example, checking contents of both the current (".") and the "level_1" directory:
 
