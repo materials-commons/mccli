@@ -175,3 +175,4 @@ class Config(object):
                 os.mkdir(config_dir_path)
         with open(self.config_file, 'w') as f:
             f.write(json.dumps(config, indent=2))
+        os.chmod(self.config_file, 0o600)
