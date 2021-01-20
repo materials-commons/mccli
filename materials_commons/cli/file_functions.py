@@ -1,3 +1,4 @@
+import io
 import json
 import os.path
 import requests
@@ -99,3 +100,15 @@ def check_file_selection(path, file_selection):
     else:
         result = _check_file_selection_dirs(path, file_selection, orig_path=path)
     return result
+
+def download_file_as_string(client, project_id, file_id):
+    f = io.BytesIO()
+    client._throttle()
+    urlpart = "/projects/" + str(project_id) + "/files/" + str(file_id) + "/download"
+    url = client.base_url + urlpart
+    with requests.get(url, stream=True, verify=False, headers=client.headers) as r:
+        client._handle(r)
+        for chunk in r.iter_content(chunk_size=8192):
+            if chunk:
+                f.write(chunk)
+    return f.getvalue().decode('utf-8')

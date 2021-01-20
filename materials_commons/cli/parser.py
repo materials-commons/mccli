@@ -23,7 +23,7 @@ from materials_commons.cli.subcommands.rm import rm_subcommand
 # from materials_commons.cli.subcommands.samp import SampSubcommand
 from materials_commons.cli.subcommands.globus import globus_subcommand
 from materials_commons.cli.subcommands.up import up_subcommand
-# from materials_commons.cli.subcommands.versions import versions_subcommand
+from materials_commons.cli.subcommands.versions import versions_subcommand
 
 import materials_commons.cli.functions as clifuncs
 from materials_commons.cli.user_config import Config
@@ -46,7 +46,7 @@ standard_usage = [
     {'name': 'up', 'desc': 'Upload files', 'subcommand': up_subcommand},
     {'name': 'down', 'desc': 'Download files', 'subcommand': down_subcommand},
     {'name': 'globus', 'desc': 'Manage Globus uploads and downloads', 'subcommand': globus_subcommand},
-    # {'name': 'versions', 'desc': 'List file versions', 'subcommand': versions_subcommand},
+    {'name': 'versions', 'desc': 'List file versions', 'subcommand': versions_subcommand},
     # {'name': 'templates', 'desc': 'List process templates', 'subcommand': TemplatesSubcommand()},
     # {'name': 'proc', 'desc': 'List processes', 'subcommand': ProcSubcommand()},
     # {'name': 'samp', 'desc': 'List samples', 'subcommand': SampSubcommand()},
