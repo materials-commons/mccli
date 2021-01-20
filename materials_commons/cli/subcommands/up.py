@@ -25,7 +25,7 @@ def make_parser():
         description=mc_up_description,
         usage=mc_up_usage,
         prog='mc up')
-    parser.add_argument('pathspec', nargs='*', default=None, help='Files or directories')
+    parser.add_argument('paths', nargs='*', default=None, help='Files or directories')
     parser.add_argument('-r', '--recursive', action="store_true", default=False,
                         help='Upload directory contents recursively')
     parser.add_argument('--limit', nargs=1, type=float, default=[50],
