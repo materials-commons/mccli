@@ -46,7 +46,9 @@ def _print_dataset_data(dataset, project_id=None):
             {"activities_count": dataset.activities_count},
             {"entities_count": dataset.entities_count},
             {"workflows_count": dataset.workflows_count},
-            {"comments_count": dataset.comments_count}
+            {"comments_count": dataset.comments_count},
+            {"goto": "https://materialscommons.org/public/datasets/" + str(dataset.id) + "/overview"},
+            {"goto_globus": "https://materialscommons.org/public/datasets/" + str(dataset.id) + "/globus"}
         ]
     elif dataset.published_at is not None:
         # via project, is published
@@ -58,7 +60,9 @@ def _print_dataset_data(dataset, project_id=None):
             {"entities_count": dataset.entities_count},
             {"workflows_count": dataset.workflows_count},
             {"experiments_count": dataset.experiments_count},
-            {"comments_count": dataset.comments_count}
+            {"comments_count": dataset.comments_count},
+            {"goto": "https://materialscommons.org/public/datasets/" + str(dataset.id) + "/overview"},
+            {"goto_globus": "https://materialscommons.org/public/datasets/" + str(dataset.id) + "/globus"}
         ]
     elif dataset.published_at is None:
         # via project, is not published
@@ -68,19 +72,12 @@ def _print_dataset_data(dataset, project_id=None):
         ]
     return data
 
-def print_dataset_details(client, project_id, dataset, \
-    file_selection=False, files=False, out=sys.stdout):
+def print_dataset_details(client, project_id, dataset, file_selection=False, out=sys.stdout):
 
     data = _print_dataset_data(dataset, project_id=project_id)
     if file_selection:
         data.append({
             "file_selection": tmpfuncs.get_dataset_file_selection(client, project_id, dataset.id)
-        })
-    if files:
-        dataset_files = client.get_dataset_files(project_id, dataset.id)
-        tmpfuncs.set_file_paths(client, project_id, dataset_files)
-        data.append({
-            "files": [file.path for file in dataset_files]
         })
     for d in data:
         out.write(yaml.dump(d, width=70, indent=4))
@@ -89,13 +86,6 @@ def print_dataset_details(client, project_id, dataset, \
 def print_published_dataset_details(client, dataset, out=sys.stdout):
 
     data = _print_dataset_data(dataset)
-
-    # # TODO: currently no file paths or direct download option
-    # if files:
-    #     dataset_files = client.get_published_dataset_files(dataset.id)
-    #     data.append({
-    #         "files": dataset_files
-    #     })
 
     for d in data:
         out.write(yaml.dump(d, width=70, indent=4))
@@ -112,11 +102,13 @@ class DatasetSubcommand(ListObjects):
             list_columns=['name', 'owner', 'id', 'updated_at', 'zipfile_size', 'published_at'],
             deletable=True,
             creatable=True,
-            custom_selection_actions=['down', 'unpublish', 'publish', 'clone_as'],
+            custom_selection_actions=['down', 'unpublish', 'publish', 'clone_as', 'goto', 'goto_globus'],
             request_confirmation_actions={
                 'publish': 'Are you sure you want to publicly publish these datasets?',
                 'unpublish': 'Are you sure you want to unpublish these datasets?',
-                'clone_as': 'Are you sure you want to clone this dataset?'
+                'clone_as': 'Are you sure you want to clone this dataset?',
+                'goto': 'You want to goto these datasets in a web browser?',
+                'goto_globus': 'You want to goto the globus manager for these datasets in a web browser?'
             }
         )
 
@@ -159,23 +151,16 @@ class DatasetSubcommand(ListObjects):
 
     def print_details(self, obj, args, out=sys.stdout):
         # TODO: fix this
-        out.write("** WARNING: `mc dataset --details` is under development, some dataset attributes (for example: authors, license, tags, doi) may appear as 'null' even if they do exist. **\n")
+        out.write("** WARNING: `mc dataset --details` is under development, some dataset attributes (for example: tags) may appear as 'null' even if they do exist. **\n")
         if args.all:
             client = self.get_remote(args)
             if args.file_selection:
-                out.write("** WARNING: --file-selection: Not available for public datasets **\n")
-            if args.files:
-                # TODO: update this when file paths and download become available
-                out.write("** WARNING: --files: Not available for public datasets **\n")
+                out.write("** NOTE: --file-selection: Not available for public datasets **\n")
             print_published_dataset_details(client, obj, out=out)
         else:
             proj = clifuncs.make_local_project()
-            if args.files and obj.published_at is None:
-                # TODO: update this when file paths and download become available
-                out.write("** WARNING: --files: Not available for unpublished datasets **\n")
-                args.files = False
             print_dataset_details(proj.remote, proj.id, obj, \
-                file_selection=args.file_selection, files=args.files, out=out)
+                file_selection=args.file_selection, out=out)
 
     def add_custom_options(self, parser):
 
@@ -186,8 +171,8 @@ class DatasetSubcommand(ListObjects):
 
         # for --details, also print dataset file selection
         parser.add_argument('--file-selection',action="store_true", default=False, help='For use with -d,--details: also print dataset file selection.')
-        # for --details, also print dataset files list
-        parser.add_argument('--files', action="store_true", default=False, help='For use with -d,--details: also print dataset files list.')
+        # # for --details, also print dataset files list
+        # parser.add_argument('--files', action="store_true", default=False, help='For use with -d,--details: also print dataset files list.')
 
 
         # --clone-as
@@ -200,6 +185,11 @@ class DatasetSubcommand(ListObjects):
         parser.add_argument('--unpublish', action="store_true", default=False, help='Unpublish a dataset')
         parser.add_argument('--publish', action="store_true", default=False, help='Publish a public dataset. Makes it available for public download.')
 
+        # --goto: go to datasets in web browser
+        parser.add_argument('--goto', action="store_true", default=False, help='Open selected datasets in a web browser.')
+
+        # --goto-globus: go to datasets globus manager in web browser
+        parser.add_argument('--goto-globus', action="store_true", default=False, help='Open globus manager for selected datasets in a web browser.')
 
     def down(self, objects, args, out=sys.stdout):
         """Download dataset zipfile, --down
@@ -372,5 +362,51 @@ class DatasetSubcommand(ListObjects):
 
         # Complete
         out.write('Cloned dataset: (name={0}, id={1}) -> (name={2}, id={3})\n'.format(dataset.name, dataset.id, new_dataset.name, new_dataset.id))
+
+        return
+
+    def goto(self, objects, args, out=sys.stdout):
+        """Open selected datasets in a web browser"""
+
+        proj = None
+        if not args.all:
+            proj = clifuncs.make_local_project()
+
+
+        for obj in objects:
+
+            url = "https://materialscommons.org"
+            if args.all:
+                url = url + "/public/datasets/" + str(obj.id) + "/overview"
+            else:
+                url = url + "/app/projects/" + str(proj.id) + "/datasets/" + str(obj.id) + "/overview"
+
+            try:
+                import webbrowser
+                webbrowser.open(url)
+            except:
+                out.write("Could not open a web browser.")
+                out.write("URL:", url)
+
+        return
+
+    def goto_globus(self, objects, args, out=sys.stdout):
+        """Open globus manager for selected datasets in a web browser"""
+
+        if not args.all:
+            print('--goto-globus only works for published datasets (--all option is required).\n')
+            out.write('Exiting\n')
+            return
+
+        for obj in objects:
+
+            url = "https://materialscommons.org/public/datasets/" + str(obj.id) + "/globus"
+
+            try:
+                import webbrowser
+                webbrowser.open(url)
+            except:
+                out.write("Could not open a web browser.")
+                out.write("URL:", url)
 
         return
