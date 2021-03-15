@@ -12,7 +12,7 @@ setup(
     Commons web site, https://materialscommons.org/, or a similar site based on the
     Materials Commons code (https://github.com/materials-commons/materialscommons), and intend to use these
     tools in that context.""",
-    url='https://materials-commons.github.io/python-cli/',
+    url='https://materials-commons.github.io/materials-commons-cli/html/index.html',
     author='Materials Commons development team',
     author_email='materials-commons-authors@umich.edu',
     license='MIT',
