@@ -244,7 +244,7 @@ def optional_remote_config(args):
         remote_config = RemoteConfig(mcurl=url, email=email)
         if remote_config not in config.remotes:
             raise MissingRemoteException("Could not find remote: {0} {1}".format(remote_config.email, remote_config.mcurl))
-        return remote_config
+        return config.remotes[config.remotes.index(remote_config)]
     else:
         if not config.default_remote.mcurl or not config.default_remote.mcapikey:
             raise NoDefaultRemoteException("Default remote not set")
