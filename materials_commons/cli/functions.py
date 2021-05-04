@@ -236,7 +236,7 @@ def optional_remote_config(args):
         args (argparse.Namespace): The result of argparse's "parse_args()" method. Checks for "args.remote".
 
     Returns:
-        :class:`materials_commons.api.RemoteConfig`: The remote configuration parameters for the appropriate client: either the value specified using the "--remote <email> <url>" option, or else the user's configured default.
+        :class:`user_config.RemoteConfig`: The remote configuration parameters for the appropriate client: either the value specified using the "--remote <email> <url>" option, or else the user's configured default.
     """
     config = Config()
     if args.remote:
@@ -287,7 +287,8 @@ def print_remotes(config_remotes, show_apikey=False):
     """Print a table with remote Materials Commons instance configuration parameters (email, url, apikey)
 
     Args:
-        config_remotes: A dict of :class:`materials_commons.cli.user_config.RemoteConfig`, grouped like: "{<url>: {<email>: RemoteConfig, ...}, ...}"
+        config_remotes: A dict of :class:`user_config.RemoteConfig`, grouped
+            like: "{<url>: {<email>: RemoteConfig, ...}, ...}"
         show_apikey (bool): If True, print apikeys also.
     """
     if not len(config_remotes):
@@ -329,17 +330,17 @@ def print_remotes(config_remotes, show_apikey=False):
     for record in data:
         pformatter.print(record)
 
-def get_remote_config_and_login_if_necessary(mcurl=None, email=None):
+def get_remote_config_and_login_if_necessary(email=None, mcurl=None):
     """Prompt for login if remote is not stored in Config
 
     Args:
+        email (str): User account email.
         mcurl (str): URL for Materials Commons remote instance. Example:
             "https://materialscommons.org/api".
-        email (str): User account email.
 
     Returns:
-        :class:`materials_commons.api.RemoteConfig`: The remote configuration
-        parameters for the provided URL and user account.
+        :class:`user_config.RemoteConfig`: The remote configuration parameters
+        for the provided URL and user account.
     """
     config = Config()
     remote_config = RemoteConfig(mcurl=mcurl, email=email)
@@ -369,6 +370,22 @@ def get_remote_config_and_login_if_necessary(mcurl=None, email=None):
     print()
 
     return remote_config
+
+def make_client_and_login_if_necessary(email=None, mcurl=None):
+    """Make Client, prompting for login if remote is not stored in Config
+
+    Args:
+        email (str): User account email.
+        mcurl (str): URL for Materials Commons remote instance. Example:
+            "https://materialscommons.org/api".
+
+    Returns:
+        :class:`materials_commons.api.Client`: A client for the provided URL
+        and user account.
+    """
+    remote_config = get_remote_config_and_login_if_necessary(mcurl=mcurl,
+                                                             email=email)
+    return remote_config.make_client()
 
 def make_local_project_client(path=None):
     """Construct a client to access project data from the local project configuration
@@ -725,12 +742,16 @@ def clone_project(remote_config, project_id, parent_dest):
     - Will save local project configuration "<parent_dest>/.mc/config.json" with project info
 
     Args:
-        remote_config (:class:`user_config.RemoteConfig`): Holds configuration variables (email, url, apikey) for the remote instance of Materials Commons where the project to be cloned is stored.
+        remote_config (:class:`user_config.RemoteConfig`): Holds configuration
+            variables (email, url, apikey) for the remote instance of Materials
+            Commons where the project to be cloned is stored.
         project_id (int): ID of the project to clone
-        parent_dest (str): Absolute path to a local directory which will become the parent of the cloned project directory.
+        parent_dest (str): Absolute path to a local directory which will become
+            the parent of the cloned project directory.
 
     Returns:
-        :class:`materials_commons.api.models.Project`: Object representing the cloned project
+        :class:`materials_commons.api.models.Project`: Object representing the
+        cloned project
     """
     # get Project
     client = remote_config.make_client()

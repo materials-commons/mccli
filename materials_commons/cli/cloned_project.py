@@ -24,11 +24,13 @@ class ClonedProject(object):
     """A cloned Materials Commons project instance
 
     Attributes:
-        local_path (pathlib.Path): Location of the cloned Materials Commons project
-        proj (materials_commons.api.models.Project): Materials Commons project object
-        tmpdir (tempfile.TemporaryDirectory or None): Temporary directory instance. If
-            not None, the temporary directory is the parent of the cloned Materials
-            Commons project directory.
+        local_path (pathlib.Path): Location of the cloned Materials Commons
+            project
+        proj (materials_commons.api.models.Project): Materials Commons project
+            object
+        tmpdir (tempfile.TemporaryDirectory or None): Temporary directory
+            instance. If not None, the temporary directory is the parent of the
+            cloned Materials Commons project directory.
 
     """
 
@@ -48,7 +50,8 @@ class ClonedProject(object):
                 mcurl = "https://materialscommons.org/api"
                 proj_id = 25
                 parent_path = "/path/to/materials_commons_projects"
-                mc_proj = ClonedProject(email=email, mcurl=mcurl, proj_id=proj_id,
+                mc_proj = ClonedProject(email=email, mcurl=mcurl,
+                                        proj_id=proj_id,
                                         parent_path=parent_path)
 
             Clone project to a temporary directory:
@@ -60,8 +63,8 @@ class ClonedProject(object):
 
         Args:
             email (str): User account email
-            mcurl (str): URL for Materials Commons remote instance containing the
-                project. Example: "https://materialscommons.org/api".
+            mcurl (str): URL for Materials Commons remote instance containing
+                the project. Example: "https://materialscommons.org/api".
             proj_id (int): ID of project to clone.
             path (str): Path where the project exists, if already cloned.
             parent_path (str): Path to parent directory where the project should
@@ -113,12 +116,12 @@ class ClonedProject(object):
         """Helper to construct paths for upload or download
 
         Args:
-            pattern (str): Pattern, relative to local project directory root, passed as
-                argument to `self.local_path.glob(pattern)`.
+            pattern (str): Pattern, relative to local project directory root,
+                passed as argument to `self.local_path.glob(pattern)`.
 
         Returns:
-            List of str, File paths found from use of `glob`, made relative to self.local_path
-            and converted to str.
+            List of str, File paths found from use of `glob`, made relative to
+            self.local_path and converted to str.
 
         """
         return [str(file.relative_to(self.local_path)) for file in self.local_path.glob(pattern)]
@@ -134,10 +137,11 @@ class ClonedProject(object):
             output (str): Download file name. Only allowed if `len(paths) == 1`.
             globus (bool): Use globus to download files
             label (str): Globus transfer label to make finding tasks simpler
-            no_compare (bool): Download remote without checking if local is equivalent
+            no_compare (bool): Download remote without checking if local is
+                equivalent
             *paths (str): Files or directories to download, specified either
-                using absolute paths or paths relative to the project root directory
-                (`self.local_path`).
+                using absolute paths or paths relative to the project root
+                directory (`self.local_path`).
         """
         argv = []
         if recursive is True:
@@ -169,14 +173,15 @@ class ClonedProject(object):
 
         Args:
             recursive (bool): Download directory contents recursively
-            limit (str): File size upload limit (MB). Default="50" (50MB). Does not
-                apply to Globus uploads.
+            limit (str): File size upload limit (MB). Default="50" (50MB). Does
+                not apply to Globus uploads.
             globus (bool): Use globus to download files
             label (str): Globus transfer label to make finding tasks simpler
-            no_compare (bool): Download remote without checking if local is equivalent
+            no_compare (bool): Download remote without checking if local is
+                equivalent
             *paths (str): Files or directories to upload, specified either
-                using absolute paths or paths relative to the project root directory
-                (`self.local_path`).
+                using absolute paths or paths relative to the project root
+                directory (`self.local_path`).
         """
         argv = []
         if recursive is True:
