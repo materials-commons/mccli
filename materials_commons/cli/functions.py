@@ -1,5 +1,6 @@
 import datetime
 import dateutil
+import getpass
 import hashlib
 import json
 import os
@@ -7,6 +8,7 @@ import requests
 import sys
 import time
 
+import materials_commons.api as mcapi
 import materials_commons.api.models as models
 from tabulate import tabulate
 
@@ -234,7 +236,7 @@ def optional_remote_config(args):
         args (argparse.Namespace): The result of argparse's "parse_args()" method. Checks for "args.remote".
 
     Returns:
-        :class:`materials_commons.api.Client`: The remote configuration parameters for the appropriate client: either the value specified using the "--remote <email> <url>" option, or else the user's configured default.
+        :class:`materials_commons.api.RemoteConfig`: The remote configuration parameters for the appropriate client: either the value specified using the "--remote <email> <url>" option, or else the user's configured default.
     """
     config = Config()
     if args.remote:
@@ -326,6 +328,47 @@ def print_remotes(config_remotes, show_apikey=False):
     pformatter.print_header()
     for record in data:
         pformatter.print(record)
+
+def get_remote_config_and_login_if_necessary(mcurl=None, email=None):
+    """Prompt for login if remote is not stored in Config
+
+    Args:
+        mcurl (str): URL for Materials Commons remote instance. Example:
+            "https://materialscommons.org/api".
+        email (str): User account email.
+
+    Returns:
+        :class:`materials_commons.api.RemoteConfig`: The remote configuration
+        parameters for the provided URL and user account.
+    """
+    config = Config()
+    remote_config = RemoteConfig(mcurl=mcurl, email=email)
+    if remote_config in config.remotes:
+        return config.remotes[config.remotes.index(remote_config)]
+
+    while True:
+        try:
+            print("Login to:", email, mcurl)
+            password = getpass.getpass(prompt='password: ')
+            remote_config.mcapikey = mcapi.Client.get_apikey(email, password, mcurl)
+            break
+        except requests.exceptions.HTTPError as e:
+            print(str(e))
+            if not re.search('Bad Request for url', str(e)):
+                raise e
+            else:
+                print("Wrong password for " + email + " at " + mcurl)
+        except requests.exceptions.ConnectionError as e:
+            print("Could not connect to " + mcurl)
+            raise e
+    config.remotes.append(remote_config)
+    config.save()
+
+    print()
+    print("Added APIKey for", email, "at", mcurl, "to", config.config_file)
+    print()
+
+    return remote_config
 
 def make_local_project_client(path=None):
     """Construct a client to access project data from the local project configuration
