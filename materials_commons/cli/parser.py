@@ -115,8 +115,8 @@ def main(argv=None):
         args = parser.parse_args(argv[1:2])
 
         if args.command in standard_interfaces:
-            standard_interfaces[args.command]['subcommand'](argv[2:])
-            return
+            result = standard_interfaces[args.command]['subcommand'](argv[2:])
+            return result
 
         elif args.command in custom_interfaces:
             # load module and run command
@@ -125,42 +125,42 @@ def main(argv=None):
             f, filename, description = imp.find_module(modulename)
             try:
                 module = imp.load_module(modulename, f, filename, description)
-                getattr(module, subcommandname)(argv[2:])
+                result = getattr(module, subcommandname)(argv[2:])
             finally:
                 if f:
                     f.close()
-            return
+            return result
 
         elif args.command in developer_interfaces:
-            developer_interfaces[args.command]['subcommand'](argv[2:])
-            return
+            result = developer_interfaces[args.command]['subcommand'](argv[2:])
+            return result
 
         else:
             print('Unrecognized command')
             parser.print_help()
-            exit(1)
+            return 1
 
     except MissingRemoteException as e:
         print("Error:", e)
         clifuncs.print_remote_help()
-        exit(1)
+        return 1
 
     except MultipleRemoteException as e:
         print("Error:", e)
         print('** Please edit .mc/config.json to include `"remote":{"mcurl": "' + data['remote_url']
             + '", "email": "YOUR_EMAIL_HERE"}` **')
-        exit(1)
+        return 1
 
     except NoDefaultRemoteException as e:
         print("Error:", e)
         print("Set the default remote with:")
         print("    mc remote --set-default EMAIL URL")
         clifuncs.print_remote_help()
-        exit(1)
+        return 1
 
     except MCCLIException as e:
         print("CLI Error:", e)
-        exit(1)
+        return 1
 
     except mcapi.MCAPIError as e:
         import json
@@ -168,4 +168,4 @@ def main(argv=None):
         print("Writing error message to 'mcapi_error.json'")
         with open('mcapi_error.json', 'w') as f:
             json.dump(e.response.json(), f, indent=2)
-        exit(1)
+        return 1

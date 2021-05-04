@@ -209,7 +209,7 @@ class GlobusUploadTaskSubcommand(ListObjects):
         if len(in_names) != 1:
             print('create one Globus upload at a time')
             print('example: mc globus upload <name> --create')
-            exit(1)
+            raise cliexcept.MCCLIException("Invalid globus request")
 
         resulting_objects = []
         for name in in_names:
@@ -230,8 +230,7 @@ class GlobusUploadTaskSubcommand(ListObjects):
         """
         if dry_run:
             out.write('Dry-run is not yet possible when deleting Globus uploads.\n')
-            out.write('Exiting\n')
-            return
+            raise cliexcept.MCCLIException("Invalid globus request")
 
         proj = clifuncs.make_local_project()
         project_config = clifuncs.read_project_config(proj.local_path)
@@ -256,7 +255,7 @@ class GlobusUploadTaskSubcommand(ListObjects):
         if len(objects) != 1:
             out.write('set one current Globus upload at a time\n')
             out.write('example: mc globus upload --set <name>\n')
-            exit(1)
+            raise cliexcept.MCCLIException("Invalid globus request")
 
         for upload in objects:
             set_current_globus_upload(clifuncs.project_path(), upload)
@@ -391,7 +390,7 @@ class GlobusDownloadTaskSubcommand(ListObjects):
         if len(in_names) != 1:
             print('create one Globus download at a time')
             print('example: mc globus download <name> --create')
-            exit(1)
+            raise cliexcept.MCCLIException("Invalid globus request")
 
         resulting_objects = []
         for name in in_names:
@@ -412,8 +411,7 @@ class GlobusDownloadTaskSubcommand(ListObjects):
         """
         if dry_run:
             out.write('Dry-run is not yet possible when deleting Globus downloads.\n')
-            out.write('Exiting\n')
-            return
+            raise cliexcept.MCCLIException("Invalid globus request")
 
         proj = clifuncs.make_local_project()
         project_config = clifuncs.read_project_config(proj.local_path)
@@ -469,7 +467,7 @@ class GlobusDownloadTaskSubcommand(ListObjects):
         if len(objects) != 1:
             out.write('set one current Globus download at a time\n')
             out.write('example: mc globus download --set <name>\n')
-            exit(1)
+            raise cliexcept.MCCLIException("Invalid globus request")
 
         for download in objects:
             set_current_globus_download(clifuncs.project_path(), download)

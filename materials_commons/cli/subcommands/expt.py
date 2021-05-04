@@ -107,8 +107,7 @@ class ExptSubcommand(ListObjects):
     def delete(self, objects, args, dry_run, out=sys.stdout):
         if dry_run:
             out.write('Dry-run is not possible when deleting experiments.\n')
-            out.write('Exiting\n')
-            return
+            raise cliexcept.MCCLIException("Invalid expt request")
 
         proj = clifuncs.make_local_project()
         project_config = clifuncs.read_project_config(proj.local_path)
@@ -128,7 +127,7 @@ class ExptSubcommand(ListObjects):
         if len(objects) != 1:
             out.write('set one current experiment at a time\n')
             out.write('example: mc expt --set <name>\n')
-            exit(1)
+            raise cliexcept.MCCLIException("Invalid expt request")
 
         for expt in objects:
             set_current_experiment(expt.project.local_path, expt)

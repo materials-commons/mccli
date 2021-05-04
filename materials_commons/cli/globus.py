@@ -2,6 +2,7 @@ import globus_sdk
 import os
 
 import materials_commons.api as mcapi
+import materials_commons.cli.exceptions as cliexcept
 import materials_commons.cli.file_functions as filefuncs
 import materials_commons.cli.tree_functions as treefuncs
 from materials_commons.cli.user_config import Config
@@ -106,7 +107,7 @@ def get_local_endpoint_id_or_exit():
         print('Globus personal endpoint UUIDs can be detected automatically and if installed need not be set.')
         print('Globus public endpoint UUIDs can be found from: https://app.globus.org/endpoints')
         print("Please set your Globus endpoint UUID with `mc config --set-globus-endpoint-id <ID>`")
-        exit(1)
+        raise cliexcept.MCCLIException("Invalid globus request")
     return local_endpoint_id
 
 def check_transfer_types(source_type, target_type, recursive, verbose, printpath):

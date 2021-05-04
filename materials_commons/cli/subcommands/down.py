@@ -275,10 +275,10 @@ def down_subcommand(argv):
     # validate
     if args.print and len(args.paths) != 1:
         print("--print option acts on 1 file, received", len(args.paths))
-        exit(1)
+        raise cliexcept.MCCLIException("Invalid download request")
     if args.output and len(args.paths) != 1:
         print("--output option acts on 1 file or directory, received", len(args.paths))
-        exit(1)
+        raise cliexcept.MCCLIException("Invalid download request")
 
     if args.globus:
         download = _get_current_globus_download(pconfig, proj)
@@ -299,7 +299,7 @@ def down_subcommand(argv):
                 + " not ready for downloading. Materials Commons is still preparing the project"
                 + " files for download. For large projects this may take some time.")
             print("Use `mc globus download` to check when it is ready and try again.")
-            exit(1)
+            raise cliexcept.MCCLIException("Invalid download request")
 
         print("Download is ready.")
 

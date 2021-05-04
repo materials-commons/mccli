@@ -52,7 +52,7 @@ def remote_subcommand(argv):
         remote_config = RemoteConfig(mcurl=url, email=email)
         if remote_config in config.remotes:
             print(email + " at " + url + " already known")
-            exit(0)
+            return 0
 
         while True:
             try:
@@ -67,7 +67,7 @@ def remote_subcommand(argv):
                     print("Wrong password for " + email + " at " + url)
             except requests.exceptions.ConnectionError as e:
                 print("Could not connect to " + url)
-                exit(1)
+                return 1
 
         config.remotes.append(remote_config)
         config.save()
@@ -83,7 +83,7 @@ def remote_subcommand(argv):
         if remote_config not in config.remotes:
             print("Failed: " + email + " at " + url + " not found.")
             print_remotes(config.remotes)
-            exit(1)
+            return 1
         config.remotes.remove(remote_config)
         config.save()
         print("Removed " + email + " at " + url)
@@ -100,7 +100,7 @@ def remote_subcommand(argv):
         else:
             print("Failed: " + email + " at " + url + " not found.")
             print_remotes(config.remotes)
-            exit(1)
+            return 1
         config.save()
         print("Set default: " + email + " at " + url)
 
@@ -114,6 +114,6 @@ def remote_subcommand(argv):
             print("    mc remote -l")
             print("Add a remote with:")
             print("    mc remote --add EMAIL URL")
-            exit(1)
+            return 1
 
     return

@@ -306,8 +306,7 @@ class ListObjects(object):
 
         if self.requires_project and not clifuncs.project_exists():
             out.write("Not in a Materials Commons project directory.\n")
-            out.write("Exiting\n")
-            exit(1)
+            raise MCCLIException("Invalid Materials Commons request")
 
         if hasattr(args, 'expt') and args.expt:
             proj = clifuncs.make_local_project()

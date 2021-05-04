@@ -92,10 +92,10 @@ def version_as_str(proj, path, versions, vers_indicator):
         local_abspath = os.path.join(refpath, path)
         if not os.path.exists(local_abspath):
             print(path + ": does not exist locally")
-            exit(1)
+            raise cliexcept.MCCLIException("Invalid versions request")
         elif not os.path.isfile(local_abspath):
             print(path + ": is not a file locally")
-            exit(1)
+            raise cliexcept.MCCLIException("Invalid versions request")
         versname = path + "-local"
         return (open(local_abspath, 'r').read(), versname)
     else:
@@ -109,7 +109,7 @@ def version_as_str(proj, path, versions, vers_indicator):
         version = select_version(versions)
         if version is None:
             print(vers_indicator + ": version not found")
-            exit(1)
+            raise cliexcept.MCCLIException("Invalid versions request")
         versname = path + "-" + str(version['id'])
         return (filefuncs.download_file_as_string(proj.remote, proj.id, version['id']), versname)
 
@@ -226,19 +226,19 @@ def versions_subcommand(argv=sys.argv):
         if args.print:
             if len(args.version) != 1:
                 print("--print requires 1 version id provided to -v,--version")
-                exit(1)
+                raise cliexcept.MCCLIException("Invalid versions request")
             print_version(proj, path, args.version[0])
         elif args.down:
             if len(args.version) != 1:
                 print("--down requires 1 version id provided to -v,--version")
-                exit(1)
+                raise cliexcept.MCCLIException("Invalid versions request")
             download_version(proj, path, args.version[0])
         elif args.diff:
             if not args.version or len(args.version) == 0:
                 args.version = ['remote', 'local']
             elif len(args.version) != 2:
                 print("--diff requires 2 version ids (or strings 'local' or 'remote') if -v,--version is given")
-                exit(1)
+                raise cliexcept.MCCLIException("Invalid versions request")
             if args.context:
                 method = difflib.context_diff
             else:

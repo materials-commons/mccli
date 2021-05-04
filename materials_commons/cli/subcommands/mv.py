@@ -2,6 +2,7 @@ import argparse
 import os
 import sys
 
+import materials_commons.cli.exceptions as cliexcept
 import materials_commons.cli.functions as clifuncs
 import materials_commons.cli.tree_functions as treefuncs
 from materials_commons.cli.treedb import RemoteTree
@@ -31,7 +32,7 @@ def mv_subcommand(argv):
 
     if not args.paths or len(args.paths) < 2:
         print("Expects 2 or more paths: `mc mv <src> <target>` or `mc mv <src> ... <directory>`")
-        exit(1)
+        raise cliexcept.MCCLIException("Invalid mv request")
 
     proj = clifuncs.make_local_project()
     pconfig = clifuncs.read_project_config()
