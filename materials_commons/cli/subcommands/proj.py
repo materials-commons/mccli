@@ -46,7 +46,7 @@ class ProjSubcommand(ListObjects):
 
     def list_data(self, obj, args):
         _is_current = ' '
-        project_config = read_project_config()
+        project_config = read_project_config(self.working_dir)
         if project_config and getit(obj, 'id') == project_config.project_id:
             _is_current = '*'
 

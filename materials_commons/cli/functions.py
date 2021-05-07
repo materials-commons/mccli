@@ -387,7 +387,7 @@ def make_client_and_login_if_necessary(email=None, mcurl=None):
                                                              email=email)
     return remote_config.make_client()
 
-def make_local_project_client(path=None):
+def make_local_project_client(path):
     """Construct a client to access project data from the local project configuration
 
     Args:
@@ -458,7 +458,7 @@ class ProjectTable(SqlTable):
         self.curs.execute("SELECT * FROM " + self.tablename())
         return self.curs.fetchall()
 
-def make_local_project(path=None, data=None):
+def make_local_project(path, data=None):
     """Read local project config file and use to construct materials_commons.api.models.Project
 
     - Checks if "path" is a path located inside a local project directory (by looking for the ".mc" directory).
@@ -479,8 +479,6 @@ def make_local_project(path=None, data=None):
 
     proj_path = project_path(path)
     if not proj_path:
-        if path is None:
-            path = os.getcwd()
         raise MCCLIException("No Materials Commons project found at " + path)
 
     project_config = read_project_config(path)
@@ -585,10 +583,8 @@ def request_confirmation(msg, force=False):
     else:
         return True
 
-def _proj_path(path=None):
+def _proj_path(path):
     """Returns the path to a local project directory if it contains "path", else None"""
-    if path is None:
-        path = os.getcwd()
     # if not os.path.isdir(path):
     #   raise Exception("Error, no directory named: " + path)
     curr = path
@@ -603,17 +599,17 @@ def _proj_path(path=None):
             curr = os.path.dirname(curr)
     return None
 
-def project_path(path=None):
+def project_path(path):
     """Returns the path to a local project directory if it contains "path", else None"""
     return _proj_path(path)
 
-def project_exists(path=None):
+def project_exists(path):
     """Returns True if a local project directory exists containing "path" """
     if _proj_path(path):
         return True
     return False
 
-def _mcdir(path=None):
+def _mcdir(path):
     """Find project .mc directory path if it already exists, else return None"""
     dirpath = _proj_path(path)
     if dirpath is None:
@@ -621,7 +617,7 @@ def _mcdir(path=None):
     return os.path.join(dirpath, '.mc')
 
 
-def _proj_config(path=None):
+def _proj_config(path):
     """Find project config path if .mc directory already exists, else return None"""
     dirpath = _proj_path(path)
     if dirpath is None:
@@ -722,7 +718,7 @@ class ProjectConfig(object):
             json.dump(self.to_dict(), f)
         return
 
-def read_project_config(path=None):
+def read_project_config(path):
     """Read local project configuration
 
     Returns:
@@ -735,7 +731,7 @@ def read_project_config(path=None):
     else:
         return None
 
-def clone_project(remote_config, project_id, parent_dest):
+def clone_project(remote_config, project_id, parent_dest, name=None):
     """Clone a remote project to a local directory
 
     - Will create the local project directory "<parent_dest>/<project_name>"
@@ -748,6 +744,8 @@ def clone_project(remote_config, project_id, parent_dest):
         project_id (int): ID of the project to clone
         parent_dest (str): Absolute path to a local directory which will become
             the parent of the cloned project directory.
+        name (str): Name of created project directory. Default is remote
+            project name.
 
     Returns:
         :class:`materials_commons.api.models.Project`: Object representing the
@@ -757,8 +755,11 @@ def clone_project(remote_config, project_id, parent_dest):
     client = remote_config.make_client()
     proj = client.get_project(project_id)
 
+    if name is None:
+        name = proj.name
+
     # check if project already exists
-    dest = os.path.join(parent_dest, proj.name)
+    dest = os.path.join(parent_dest, name)
     if project_path(dest):
         raise MCCLIException("Project already exists at:", project_path(dest))
 

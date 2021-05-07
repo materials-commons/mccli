@@ -203,7 +203,7 @@ def make_parser():
     parser.add_argument('--context', action="store_true", default=False, help='Print diff using \'context diff\' method')
     return parser
 
-def versions_subcommand(argv=sys.argv):
+def versions_subcommand(argv, working_dir):
     """
     List, print, download, and compare file versions
 
@@ -213,8 +213,8 @@ def versions_subcommand(argv=sys.argv):
     parser = make_parser()
     args = parser.parse_args(argv)
 
-    proj = clifuncs.make_local_project()
-    pconfig = clifuncs.read_project_config()
+    proj = clifuncs.make_local_project(working_dir)
+    pconfig = clifuncs.read_project_config(proj.local_path)
 
     # convert cli input to materials commons path convention: <projectname>/path/to/file_or_dir
     refpath = os.path.dirname(proj.local_path)

@@ -9,6 +9,8 @@ from materials_commons.cli.user_config import Config
 from materials_commons.cli.subcommands.down import down_subcommand
 from materials_commons.cli.subcommands.up import up_subcommand
 
+# TODO: only call os.getcwd() from parser::main
+
 @contextmanager
 def working_dir(wd):
     orig_wd = os.getcwd()
@@ -77,7 +79,7 @@ class ClonedProject(object):
 
         if path is not None:
             if clifuncs.project_exists(path):
-                self.proj = clifuncs.make_local_project(path=path)
+                self.proj = clifuncs.make_local_project(path)
             else:
                 raise cliexcept.MCCLIException("No project found at " + path)
         else:
@@ -161,14 +163,15 @@ class ClonedProject(object):
         if no_compare is True:
             argv.append("--no-compare")
         if len(paths):
-            argv += paths
+            # using relpaths is more robust within the working_dir context
+            argv += [str(os.path.relpath(os.path.abspath(path), self.local_path)) for path in paths]
         try:
             with working_dir(self.local_path):
                 down_subcommand(argv)
         except SystemExit as e:
             print("Invalid download request")
 
-    def upload(self, *paths, recursive=False, limit=None, globus=False, label=None, no_compare=False):
+    def upload(self, *paths, recursive=False, limit=None, globus=False, label=None, no_compare=False, upload_as=None):
         """Upload requested files to Materials Commons
 
         Args:
@@ -179,6 +182,7 @@ class ClonedProject(object):
             label (str): Globus transfer label to make finding tasks simpler
             no_compare (bool): Download remote without checking if local is
                 equivalent
+            upload_as (str): Upload a file or directory to a particular location in the project. Raises if `len(paths) != 1`.
             *paths (str): Files or directories to upload, specified either
                 using absolute paths or paths relative to the project root
                 directory (`self.local_path`).
@@ -196,8 +200,12 @@ class ClonedProject(object):
             argv.append(str(label))
         if no_compare is True:
             argv.append("--no-compare")
+        if upload_as is not None:
+            argv.append("--upload-as")
+            argv.append(str(upload_as))
         if len(paths):
-            argv += paths
+            # using relpaths is more robust within the working_dir context
+            argv += [str(os.path.relpath(os.path.abspath(path), self.local_path)) for path in paths]
         try:
             with working_dir(self.local_path):
                 up_subcommand(argv)

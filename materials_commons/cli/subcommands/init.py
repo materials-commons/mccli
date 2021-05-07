@@ -89,7 +89,7 @@ def make_parser():
     parser.add_argument('--desc', type=str, default='', help='Project description')
     return parser
 
-def init_subcommand(argv):
+def init_subcommand(argv, working_dir):
     """
     Initialize a new project
 
@@ -102,7 +102,7 @@ def init_subcommand(argv):
     # get remote, from command line option or default
     remote_config = clifuncs.optional_remote_config(args)
 
-    proj_path = os.getcwd()
+    proj_path = working_dir
     name = os.path.basename(proj_path)
     prefix = os.path.dirname(proj_path)
 

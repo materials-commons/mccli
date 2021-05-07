@@ -274,7 +274,7 @@ def update_dataset_file_selection(proj, dataset_id, mcpaths, files_data, dirs_da
 
     return tmpfuncs.get_dataset_file_selection(proj.remote, proj.id, dataset_id)
 
-def ls_subcommand(argv):
+def ls_subcommand(argv, working_dir):
     """
     'ls' a project directory to see local and remote files and directories.
 
@@ -285,8 +285,8 @@ def ls_subcommand(argv):
     args = parser.parse_args(argv)
     updatetime = time.time()
 
-    proj = clifuncs.make_local_project()
-    pconfig = clifuncs.read_project_config()
+    proj = clifuncs.make_local_project(working_dir)
+    pconfig = clifuncs.read_project_config(proj.local_path)
 
     # convert cli input to materials commons path convention: /path/to/file_or_dir
     mcpaths = treefuncs.clipaths_to_mcpaths(proj.local_path, args.paths)

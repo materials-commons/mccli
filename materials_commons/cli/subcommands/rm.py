@@ -24,7 +24,7 @@ def make_parser():
     #                     help='Show what would be removed, without actually removing.')
     return parser
 
-def rm_subcommand(argv):
+def rm_subcommand(argv, working_dir):
     """
     Remove files and directories from Materials Commons and locally
 
@@ -34,8 +34,8 @@ def rm_subcommand(argv):
     parser = make_parser()
     args = parser.parse_args(argv)
 
-    proj = clifuncs.make_local_project()
-    pconfig = clifuncs.read_project_config()
+    proj = clifuncs.make_local_project(working_dir)
+    pconfig = clifuncs.read_project_config(proj.local_path)
 
     # convert cli input to materials commons path convention: <projectname>/path/to/file_or_dir
     paths = treefuncs.clipaths_to_mcpaths(proj.local_path, args.paths)

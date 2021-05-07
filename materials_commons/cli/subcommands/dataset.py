@@ -158,7 +158,7 @@ class DatasetSubcommand(ListObjects):
                 out.write("** NOTE: --file-selection: Not available for public datasets **\n")
             print_published_dataset_details(client, obj, out=out)
         else:
-            proj = clifuncs.make_local_project()
+            proj = clifuncs.make_local_project(self.working_dir)
             print_dataset_details(proj.remote, proj.id, obj, \
                 file_selection=args.file_selection, out=out)
 
@@ -196,7 +196,7 @@ class DatasetSubcommand(ListObjects):
 
         .. note:: The downloaded dataset is named dataset.<dataset_uuid>.zip
         """
-        proj = clifuncs.make_local_project()
+        proj = clifuncs.make_local_project(self.working_dir)
         for obj in objects:
             self.print_details(obj, args, out=out)
             out.write("Downloading...\n")
@@ -212,7 +212,7 @@ class DatasetSubcommand(ListObjects):
         Using:
             mc dataset --create [--desc <dataset description>] <dataset_name>
         """
-        proj = clifuncs.make_local_project()
+        proj = clifuncs.make_local_project(self.working_dir)
 
         in_names = []
         if args.expr:
@@ -249,7 +249,7 @@ class DatasetSubcommand(ListObjects):
             out.write('Exiting\n')
             return
 
-        proj = clifuncs.make_local_project()
+        proj = clifuncs.make_local_project(self.working_dir)
         for obj in objects:
             if obj.published_at is not None:
                 out.write('Published dataset (id={0}) may not be deleted. Skipping.\n'.format(obj.id))
@@ -269,7 +269,7 @@ class DatasetSubcommand(ListObjects):
             out.write('Exiting\n')
             return
 
-        proj = clifuncs.make_local_project()
+        proj = clifuncs.make_local_project(self.working_dir)
 
         resulting_objects = []
         for obj in objects:
@@ -293,7 +293,7 @@ class DatasetSubcommand(ListObjects):
             out.write('Exiting\n')
             return
 
-        proj = clifuncs.make_local_project()
+        proj = clifuncs.make_local_project(self.working_dir)
         resulting_objects = []
         for obj in objects:
             if obj.published_at is not None:
@@ -316,7 +316,7 @@ class DatasetSubcommand(ListObjects):
             out.write('Exiting\n')
             return
 
-        proj = clifuncs.make_local_project()
+        proj = clifuncs.make_local_project(self.working_dir)
 
         # get original dataset with as much data as possible
         dataset = tmpfuncs.get_dataset(proj.remote, proj.id, objects[0].id)
@@ -370,7 +370,7 @@ class DatasetSubcommand(ListObjects):
 
         proj = None
         if not args.all:
-            proj = clifuncs.make_local_project()
+            proj = clifuncs.make_local_project(self.working_dir)
 
 
         for obj in objects:

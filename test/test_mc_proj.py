@@ -20,6 +20,7 @@ class TestMCProj(unittest.TestCase):
     def setUpClass(cls):
         cls.setup_failure = None
         cls.proj_subcommand = ProjSubcommand()
+        cls.proj_subcommand.working_dir = os.getcwd()
 
         # ensure there are at least three projects
         client = user_config.Config().default_remote.make_client()
@@ -56,7 +57,7 @@ class TestMCProj(unittest.TestCase):
         self.assertEqual(1, 1)
 
         # TODO:
-        # proj = clifuncs.make_local_project()
+        # proj = clifuncs.make_local_project(working_dir)
         # expt = clifuncs.make_local_expt(proj)
         # with pytest.raises(MCCLIException):
         #     result = self.proj_subcommand.get_all_from_experiment(expt)
@@ -89,8 +90,9 @@ class TestMCProj(unittest.TestCase):
 
     def test_mc_proj_output(self):
         testargs = []
+        working_dir = os.getcwd()
         with captured_output() as (sout, serr):
-            self.proj_subcommand(testargs)
+            self.proj_subcommand(testargs, working_dir)
         print_string_io(sout)
         out = sout.getvalue().splitlines()
         err = serr.getvalue().splitlines()

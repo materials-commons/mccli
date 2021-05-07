@@ -86,7 +86,7 @@ class GlobusUploadTaskSubcommand(ListObjects):
 
     def list_data(self, obj, args):
         _is_current = ' '
-        pconfig = clifuncs.read_project_config()
+        pconfig = clifuncs.read_project_config(self.working_dir)
         if pconfig and obj.id == pconfig.globus_upload_id:
             _is_current = '*'
         return {
@@ -137,7 +137,7 @@ class GlobusUploadTaskSubcommand(ListObjects):
 
     def finish(self, objects, args, out=sys.stdout):
         """Finish Globus upload, --finish"""
-        proj = clifuncs.make_local_project()
+        proj = clifuncs.make_local_project(self.working_dir)
         project_config = clifuncs.read_project_config(proj.local_path)
         globus_upload_id = project_config.globus_upload_id
 
@@ -159,7 +159,7 @@ class GlobusUploadTaskSubcommand(ListObjects):
     def goto(self, objects, args, out=sys.stdout):
         """Open Globus File Manager in a web browser"""
 
-        proj = clifuncs.make_local_project()
+        proj = clifuncs.make_local_project(self.working_dir)
 
         origin_id = cliglobus.get_local_endpoint_id()
         origin_path = proj.local_path
@@ -196,7 +196,7 @@ class GlobusUploadTaskSubcommand(ListObjects):
             mc globus upload <upload_name> --create
             mc globus upload --name <upload_name> --create
         """
-        proj = clifuncs.make_local_project()
+        proj = clifuncs.make_local_project(self.working_dir)
 
         in_names = []
         if args.expr:
@@ -215,7 +215,7 @@ class GlobusUploadTaskSubcommand(ListObjects):
         for name in in_names:
             upload = proj.remote.create_globus_upload_request(proj.id, name)
             self.__update_upload_object(upload, proj)
-            set_current_globus_upload(clifuncs.project_path(), upload)
+            set_current_globus_upload(proj.local_path, upload)
             print('Created Globus upload:', upload.id)
             resulting_objects.append(upload)
         self.output(resulting_objects, args, out=out)
@@ -232,7 +232,7 @@ class GlobusUploadTaskSubcommand(ListObjects):
             out.write('Dry-run is not yet possible when deleting Globus uploads.\n')
             raise cliexcept.MCCLIException("Invalid globus request")
 
-        proj = clifuncs.make_local_project()
+        proj = clifuncs.make_local_project(self.working_dir)
         project_config = clifuncs.read_project_config(proj.local_path)
         globus_upload_id = project_config.globus_upload_id
 
@@ -258,12 +258,12 @@ class GlobusUploadTaskSubcommand(ListObjects):
             raise cliexcept.MCCLIException("Invalid globus request")
 
         for upload in objects:
-            set_current_globus_upload(clifuncs.project_path(), upload)
+            set_current_globus_upload(clifuncs.project_path(self.working_dir), upload)
             out.write("Set current Globus upload: '" + upload.name + "'\n")
         return
 
     def unset(self, args, out=sys.stdout):
-        set_current_globus_upload(clifuncs.project_path(), None)
+        set_current_globus_upload(clifuncs.project_path(self.working_dir), None)
         out.write("Unset Globus upload\n")
         return
 
@@ -324,7 +324,7 @@ class GlobusDownloadTaskSubcommand(ListObjects):
 
     def list_data(self, obj, args):
         _is_current = ' '
-        pconfig = clifuncs.read_project_config()
+        pconfig = clifuncs.read_project_config(self.working_dir)
         if pconfig and obj.id == pconfig.globus_download_id:
             _is_current = '*'
         return {
@@ -377,7 +377,7 @@ class GlobusDownloadTaskSubcommand(ListObjects):
             mc globus download <download_name> --create
             mc globus download --name <download_name> --create
         """
-        proj = clifuncs.make_local_project()
+        proj = clifuncs.make_local_project(self.working_dir)
 
         in_names = []
         if args.expr:
@@ -396,7 +396,7 @@ class GlobusDownloadTaskSubcommand(ListObjects):
         for name in in_names:
             download = proj.remote.create_globus_download_request(proj.id, name)
             self.__update_download_object(download, proj)
-            set_current_globus_download(clifuncs.project_path(), download)
+            set_current_globus_download(proj.local_path, download)
             print('Created Globus download:', download.id)
             resulting_objects.append(download)
         self.output(resulting_objects, args, out=out)
@@ -413,7 +413,7 @@ class GlobusDownloadTaskSubcommand(ListObjects):
             out.write('Dry-run is not yet possible when deleting Globus downloads.\n')
             raise cliexcept.MCCLIException("Invalid globus request")
 
-        proj = clifuncs.make_local_project()
+        proj = clifuncs.make_local_project(self.working_dir)
         project_config = clifuncs.read_project_config(proj.local_path)
         globus_download_id = project_config.globus_download_id
 
@@ -434,7 +434,7 @@ class GlobusDownloadTaskSubcommand(ListObjects):
     def goto(self, objects, args, out=sys.stdout):
         """Open Globus File Manager in a web browser"""
 
-        proj = clifuncs.make_local_project()
+        proj = clifuncs.make_local_project(self.working_dir)
         destination_id = cliglobus.get_local_endpoint_id()
         destination_path = proj.local_path
 
@@ -470,12 +470,14 @@ class GlobusDownloadTaskSubcommand(ListObjects):
             raise cliexcept.MCCLIException("Invalid globus request")
 
         for download in objects:
-            set_current_globus_download(clifuncs.project_path(), download)
+            proj_path = clifuncs.project_path(self.working_dir)
+            set_current_globus_download(proj_path, download)
             out.write("Set current Globus download: '" + download.name + "'\n")
         return
 
     def unset(self, args, out=sys.stdout):
-        set_current_globus_download(clifuncs.project_path(), None)
+        proj_path = clifuncs.project_path(self.working_dir)
+        set_current_globus_download(proj_path, None)
         out.write("Unset Globus download\n")
         return
 

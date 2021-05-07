@@ -18,7 +18,7 @@ def make_parser():
                         help='Make remote directories only. Does not compare to local tree.')
     return parser
 
-def mkdir_subcommand(argv):
+def mkdir_subcommand(argv, working_dir):
     """
     Make remote directories.
 
@@ -28,8 +28,8 @@ def mkdir_subcommand(argv):
     parser = make_parser()
     args = parser.parse_args(argv)
 
-    proj = clifuncs.make_local_project()
-    pconfig = clifuncs.read_project_config()
+    proj = clifuncs.make_local_project(working_dir)
+    pconfig = clifuncs.read_project_config(proj.local_path)
 
     # convert cli input to materials commons path convention: /path/to/file_or_dir
     mcpaths = treefuncs.clipaths_to_mcpaths(proj.local_path, args.paths)

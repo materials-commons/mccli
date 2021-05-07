@@ -15,7 +15,7 @@ def make_parser():
     parser.add_argument('--clear-globus-endpoint-id', action="store_true", default=False, help='Clear local globus endpoint ID')
     return parser
 
-def config_subcommand(argv):
+def config_subcommand(argv, working_dir):
     """
     Configure `mc`
 

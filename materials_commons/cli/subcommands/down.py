@@ -250,7 +250,7 @@ def make_parser():
                         help='Download remote without checking if local is equivalent.')
     return parser
 
-def down_subcommand(argv):
+def down_subcommand(argv, working_dir):
     """
     download files from Materials Commons
 
@@ -260,8 +260,8 @@ def down_subcommand(argv):
     parser = make_parser()
     args = parser.parse_args(argv)
 
-    pconfig = clifuncs.read_project_config()
-    proj = clifuncs.make_local_project()
+    pconfig = clifuncs.read_project_config(working_dir)
+    proj = clifuncs.make_local_project(working_dir)
     paths = treefuncs.clipaths_to_mcpaths(proj.local_path, args.paths)
 
     localtree = None

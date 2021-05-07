@@ -54,7 +54,7 @@ class ExptSubcommand(ListObjects):
     def list_data(self, obj, args):
 
         _is_current = ' '
-        pconfig = clifuncs.read_project_config()
+        pconfig = clifuncs.read_project_config(self.working_dir)
         if pconfig and obj.id == pconfig.experiment_id:
             _is_current = '*'
 
@@ -84,7 +84,7 @@ class ExptSubcommand(ListObjects):
         out.write("\n")
 
     def create(self, args, out=sys.stdout):
-        proj = clifuncs.make_local_project()
+        proj = clifuncs.make_local_project(self.working_dir)
         expt_list = proj.remote.get_all_experiments(proj.id)
         expt_names = {e.name: e for e in expt_list}
 
@@ -109,7 +109,7 @@ class ExptSubcommand(ListObjects):
             out.write('Dry-run is not possible when deleting experiments.\n')
             raise cliexcept.MCCLIException("Invalid expt request")
 
-        proj = clifuncs.make_local_project()
+        proj = clifuncs.make_local_project(self.working_dir)
         project_config = clifuncs.read_project_config(proj.local_path)
         current_experiment_id = project_config.experiment_id
 
@@ -135,7 +135,7 @@ class ExptSubcommand(ListObjects):
         return
 
     def unset(self, args, out=sys.stdout):
-        set_current_experiment(clifuncs.project_path(), None)
+        set_current_experiment(clifuncs.project_path(self.working_dir), None)
         out.write("Unset current experiment\n")
         return
 

@@ -26,7 +26,7 @@ def make_parser():
     parser.add_argument('--set-default', nargs=2, metavar=('EMAIL', 'URL'), help='Set default remote to be used when not in a project.')
     return parser
 
-def remote_subcommand(argv):
+def remote_subcommand(argv, working_dir):
     """
     Show / modify list of known Materials Commons accounts.
 

@@ -59,7 +59,7 @@ def make_paths_for_upload(proj_local_path, paths):
             _paths.append(path)
     return _paths
 
-def standard_upload(proj, paths, recursive=False, limit=50, no_compare=False, localtree=None, remotetree=None):
+def standard_upload(proj, paths, recursive=False, limit=50, no_compare=False, upload_as=None, localtree=None, remotetree=None):
     """Upload files to Materials Commons
 
     Args:
@@ -67,13 +67,14 @@ def standard_upload(proj, paths, recursive=False, limit=50, no_compare=False, lo
             indicating local project location
         paths (List of str):
             List of Materials Commons style paths (absolute path, not including project name
-            directory) to remove.
+            directory) to upload.
         recursive (bool): If True, remove directories recursively. Otherwise, will not remove
             directories.
         limit (int): The limit in MB on the size of the file allowed to be uploaded.
         no_compare (bool): By default, this function checks local and remote file checksum to avoid
             downloading files that already exist. If no_compare is True, this check is skipped and
             all specified files are downloaded, even if an equivalent file already exists locally.
+        upload_as (str): Materials Commons style path specifying where to upload. Requires `len(paths) == 1`.
         localtree (LocalTree): A LocalTree object stores local file checksums to avoid unnecessary
             hashing. Optional, will be used and updated if provided and checksum == True.
         remotetree (RemoteTree): A RemoteTree object stores remote file and directory information
@@ -97,26 +98,46 @@ def standard_upload(proj, paths, recursive=False, limit=50, no_compare=False, lo
     if no_compare:
         checksum = False
 
+    if upload_as is not None and len(paths) != 1:
+        msg = "Upload error: to 'upload as', expected len(paths) == 1"
+        raise cliexcept.MCCLIException(msg)
+
+    paths_to_query = copy.deepcopy(paths)
+    if upload_as is not None:
+        paths_to_query.append(upload_as)
+
     files_data, dirs_data, child_data, non_existing = treecompare(
-        proj, paths, checksum=checksum, localtree=localtree, remotetree=remotetree)
+        proj, paths_to_query, checksum=checksum, localtree=localtree, remotetree=remotetree)
 
     for path in paths:
         local_abspath = filefuncs.make_local_abspath(proj.local_path, path)
         printpath = os.path.relpath(local_abspath)
 
-        if os.path.isfile(local_abspath) and 'eq' in files_data[path] and files_data[path]['eq']:
-            print(printpath + ": local is equivalent to remote (skipping)")
-            file_results[path] = files_data[path]['r_obj']
-            continue
+        dest_path = path
+        if upload_as is not None:
+            dest_path = upload_as
+
+        printdestpath = os.path.relpath(
+            filefuncs.make_local_abspath(proj.local_path, dest_path))
+
+        if os.path.isfile(local_abspath):
+            l_checksum = files_data[path]['l_checksum']
+            r_checksum = None
+            if dest_path in files_data:
+                r_checksum = files_data[dest_path]['r_checksum']
+            if l_checksum and l_checksum == r_checksum:
+                print(printpath + ": local is equivalent to remote (skipping)")
+                file_results[path] = files_data[dest_path]['r_obj']
+                continue
 
         # note: remote files are versioned, so we skip overwrite checking / force option
 
         # create missing remote parent directories
-        parent_path = os.path.dirname(path)
+        parent_path = os.path.dirname(dest_path)
         parent = mkdir(proj, parent_path, remote_only=True, create_intermediates=True, remotetree=remotetree)
         if parent.path != parent_path:
             msg = "Upload error: "
-            msg += " expected parent_path=" + os.path.dirname(path)
+            msg += " expected parent_path=" + os.path.dirname(parent_path)
             msg += " got parent_path=" + parent.path
             raise cliexcept.MCCLIException(msg)
 
@@ -140,24 +161,41 @@ def standard_upload(proj, paths, recursive=False, limit=50, no_compare=False, lo
                     print(error_msg)
                     continue
                 else:
-                    print("uploaded:", printpath)
+                    if path == dest_path:
+                        print("uploaded:", printpath)
+                    else:
+                        print("uploaded:", printpath, "as", printdestpath)
                 file_results[path] = result
 
             elif os.path.isdir(local_abspath):
                 if recursive:
                     proj.remote.create_directory(proj.id, os.path.basename(path), parent.id)
                     child_paths = [os.path.join(path, name) for name in os.listdir(local_abspath)]
-                    file_results_tmp, error_results_tmp = standard_upload(
-                        proj, child_paths, recursive=recursive, limit=limit, remotetree=remotetree)
-                    for path in file_results_tmp:
-                        file_results[path] = file_results_tmp[path]
-                    for path in error_results_tmp:
-                        error_results[path] = error_results_tmp[path]
+                    if upload_as is None:
+                        file_results_tmp, error_results_tmp = standard_upload(
+                            proj, child_paths, recursive=recursive, limit=limit, remotetree=remotetree)
+                        for tpath in file_results_tmp:
+                            file_results[tpath] = file_results_tmp[tpath]
+                        for tpath in error_results_tmp:
+                            error_results[tpath] = error_results_tmp[tpath]
+                    else:
+                        for name in os.listdir(local_abspath):
+                            child_path = os.path.join(path, name)
+                            child_upload_as = os.path.join(upload_as, name)
+                            file_results_tmp, error_results_tmp = standard_upload(
+                                proj, [child_path], recursive=recursive, limit=limit, upload_as=child_upload_as, remotetree=remotetree)
+                            for tpath in file_results_tmp:
+                                file_results[tpath] = file_results_tmp[tpath]
+                            for tpath in error_results_tmp:
+                                error_results[tpath] = error_results_tmp[tpath]
                 else:
                     error_msg = printpath + ": is a directory (not uploaded)"
                     error_results[path] = error_msg
                     print(error_msg)
                     continue
+            else:
+                print(printpath + ": does not exist")
+                continue
 
             if remotetree:
                 remotetree.connect()

@@ -6,6 +6,7 @@ import time
 import materials_commons.cli.exceptions as cliexcept
 import materials_commons.cli.functions as clifuncs
 import materials_commons.cli.globus as cliglobus
+import materials_commons.cli.file_functions as filefuncs
 import materials_commons.cli.tree_functions as treefuncs
 from materials_commons.cli.treedb import LocalTree, RemoteTree
 
@@ -36,9 +37,10 @@ def make_parser():
                         help='Globus transfer label to make finding tasks simpler. Default is `<project name>-<upload name>.')
     parser.add_argument('--no-compare', action="store_true", default=False,
                         help='Upload without checking if remote is equivalent.')
+    parser.add_argument('--upload-as', nargs=1, default=None, help='Upload to a different location than standard upload. Specified as if it were a local path.')
     return parser
 
-def up_subcommand(argv):
+def up_subcommand(argv, working_dir):
     """
     upload files to Materials Commons
 
@@ -49,7 +51,7 @@ def up_subcommand(argv):
     parser = make_parser()
     args = parser.parse_args(argv)
 
-    proj = clifuncs.make_local_project()
+    proj = clifuncs.make_local_project(working_dir)
 
     pconfig = clifuncs.read_project_config(proj.local_path)
     remotetree = None
@@ -57,6 +59,11 @@ def up_subcommand(argv):
         remotetree = RemoteTree(proj, pconfig.remote_updatetime)
 
     paths = treefuncs.clipaths_to_mcpaths(proj.local_path, args.paths)
+
+    # validate
+    if args.upload_as and len(args.paths) != 1:
+        print("--upload-as option acts on 1 file or directory, received", len(args.paths))
+        raise cliexcept.MCCLIException("Invalid upload request")
 
     if args.globus:
 
@@ -101,7 +108,15 @@ def up_subcommand(argv):
         if not args.no_compare:
             localtree = LocalTree(proj.local_path)
 
-        treefuncs.standard_upload(proj, paths, recursive=args.recursive, limit=args.limit[0],
-            no_compare=args.no_compare, localtree=localtree, remotetree=remotetree)
+        upload_as = None
+        if args.upload_as:
+            upload_as = treefuncs.clipaths_to_mcpaths(proj.local_path,
+                                                      args.upload_as)[0]
+
+        treefuncs.standard_upload(proj, paths, recursive=args.recursive,
+                                  limit=args.limit[0],
+                                  no_compare=args.no_compare,
+                                  upload_as=upload_as,
+                                  localtree=localtree, remotetree=remotetree)
 
     return

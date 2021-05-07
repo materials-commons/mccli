@@ -1,5 +1,6 @@
 import argparse
 import imp
+import os
 import sys
 from io import StringIO
 
@@ -87,10 +88,11 @@ def make_parser(custom_interfaces={}, developer_interfaces={}):
     return parser
 
 
-def main(argv=None):
+def main(argv=None, working_dir=None):
     if argv is None:
         argv = sys.argv
-
+    if working_dir is None:
+        working_dir = os.getcwd()
     try:
 
         config = Config()
@@ -115,7 +117,7 @@ def main(argv=None):
         args = parser.parse_args(argv[1:2])
 
         if args.command in standard_interfaces:
-            result = standard_interfaces[args.command]['subcommand'](argv[2:])
+            result = standard_interfaces[args.command]['subcommand'](argv[2:], working_dir)
             return result
 
         elif args.command in custom_interfaces:
@@ -125,14 +127,14 @@ def main(argv=None):
             f, filename, description = imp.find_module(modulename)
             try:
                 module = imp.load_module(modulename, f, filename, description)
-                result = getattr(module, subcommandname)(argv[2:])
+                result = getattr(module, subcommandname)(argv[2:], working_dir)
             finally:
                 if f:
                     f.close()
             return result
 
         elif args.command in developer_interfaces:
-            result = developer_interfaces[args.command]['subcommand'](argv[2:])
+            result = developer_interfaces[args.command]['subcommand'](argv[2:], working_dir)
             return result
 
         else:

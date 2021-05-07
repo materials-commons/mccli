@@ -15,7 +15,7 @@ def make_parser():
     clifuncs.add_remote_option(parser, 'Remote to clone project from')
     return parser
 
-def clone_subcommand(argv):
+def clone_subcommand(argv, working_dir):
     """
     'Clone' a project, i.e. set the local directory tree where files should
     be uploaded/downloaded. Creates a '.mc/config.json'.
@@ -30,7 +30,7 @@ def clone_subcommand(argv):
     remote_config = clifuncs.optional_remote_config(args)
 
     project_id = args.id
-    parent_dest = os.getcwd()
+    parent_dest = working_dir
     proj = clifuncs.clone_project(remote_config, project_id, parent_dest)
 
     # done

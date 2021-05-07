@@ -223,7 +223,7 @@ class ListObjects(object):
             args.dry_run = False
         return args
 
-    def __call__(self, argv):
+    def __call__(self, argv, working_dir):
         """
         Execute Materials Commons CLI command.
 
@@ -231,6 +231,7 @@ class ListObjects(object):
 
         """
         args = self.parse_args(argv)
+        self.working_dir = working_dir
 
         output = None
         if args.output:
@@ -298,18 +299,18 @@ class ListObjects(object):
 
     def get_remote(self, args):
         default_client = None
-        if clifuncs.project_exists():
-            default_client = clifuncs.make_local_project_client()
+        if clifuncs.project_exists(self.working_dir):
+            default_client = clifuncs.make_local_project_client(self.working_dir)
         return clifuncs.optional_remote(args, default_client=default_client)
 
     def get_all_objects(self, args, out=sys.stdout):
 
-        if self.requires_project and not clifuncs.project_exists():
+        if self.requires_project and not clifuncs.project_exists(self.working_dir):
             out.write("Not in a Materials Commons project directory.\n")
             raise MCCLIException("Invalid Materials Commons request")
 
         if hasattr(args, 'expt') and args.expt:
-            proj = clifuncs.make_local_project()
+            proj = clifuncs.make_local_project(self.working_dir)
             expt = clifuncs.make_local_expt(proj)
             data = self.get_all_from_experiment(expt)
             if not len(data):
@@ -317,14 +318,14 @@ class ListObjects(object):
                 return []
         elif (self.non_proj_member and not self.proj_member) \
             or (self.non_proj_member and self.proj_member and hasattr(args, 'all') and args.all) \
-            or (self.non_proj_member and self.proj_member and not clifuncs.project_exists()):
+            or (self.non_proj_member and self.proj_member and not clifuncs.project_exists(self.working_dir)):
             remote = self.get_remote(args)
             data = self.get_all_from_remote(remote=remote)
             if not len(data):
                 out.write("No " + self.typename_plural + " found at " + remote.base_url + "\n")
                 return []
         else:
-            proj = clifuncs.make_local_project()
+            proj = clifuncs.make_local_project(self.working_dir)
             data = self.get_all_from_project(proj)
             if not len(data):
                 out.write("No " + self.typename_plural + " found in project\n")

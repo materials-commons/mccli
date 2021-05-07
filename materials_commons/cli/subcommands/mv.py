@@ -19,7 +19,7 @@ def make_parser():
                         help='Move remote files only. Does not compare to local files.')
     return parser
 
-def mv_subcommand(argv):
+def mv_subcommand(argv, working_dir):
     """
     Move files
 
@@ -34,8 +34,8 @@ def mv_subcommand(argv):
         print("Expects 2 or more paths: `mc mv <src> <target>` or `mc mv <src> ... <directory>`")
         raise cliexcept.MCCLIException("Invalid mv request")
 
-    proj = clifuncs.make_local_project()
-    pconfig = clifuncs.read_project_config()
+    proj = clifuncs.make_local_project(working_dir)
+    pconfig = clifuncs.read_project_config(proj.local_path)
 
     localtree = None
 
