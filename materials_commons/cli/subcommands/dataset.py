@@ -202,7 +202,7 @@ class DatasetSubcommand(ListObjects):
             out.write("Downloading...\n")
             dataset_id = obj.id
             to = "dataset." + obj.uuid + ".zip"
-            proj.remote.download_dataset_zipfile(dataset_id, to)
+            proj.remote.download_published_dataset_zipfile(dataset_id, to)
             out.write("DONE\n\n")
         return
 
