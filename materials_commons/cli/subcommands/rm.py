@@ -38,7 +38,8 @@ def rm_subcommand(argv, working_dir):
     pconfig = clifuncs.read_project_config(proj.local_path)
 
     # convert cli input to materials commons path convention: <projectname>/path/to/file_or_dir
-    paths = treefuncs.clipaths_to_mcpaths(proj.local_path, args.paths)
+    paths = treefuncs.clipaths_to_mcpaths(proj.local_path, args.paths,
+                                          working_dir)
 
     localtree = None
     if args.no_compare == False:

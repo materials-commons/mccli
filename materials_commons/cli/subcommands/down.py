@@ -262,7 +262,8 @@ def down_subcommand(argv, working_dir):
 
     pconfig = clifuncs.read_project_config(working_dir)
     proj = clifuncs.make_local_project(working_dir)
-    paths = treefuncs.clipaths_to_mcpaths(proj.local_path, args.paths)
+    paths = treefuncs.clipaths_to_mcpaths(proj.local_path, args.paths,
+                                          working_dir)
 
     localtree = None
     if not args.no_compare:
@@ -279,6 +280,9 @@ def down_subcommand(argv, working_dir):
     if args.output and len(args.paths) != 1:
         print("--output option acts on 1 file or directory, received", len(args.paths))
         raise cliexcept.MCCLIException("Invalid download request")
+    if args.output and args.globus:
+        print("--output option is not supported with --globus")
+        raise cliexcept.MCCLIException("Invalid upload request")
 
     if args.globus:
         download = _get_current_globus_download(pconfig, proj)

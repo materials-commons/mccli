@@ -5,22 +5,12 @@ from contextlib import contextmanager
 
 import materials_commons.cli.exceptions as cliexcept
 import materials_commons.cli.functions as clifuncs
-from materials_commons.cli.user_config import Config
+from materials_commons.cli.user_config import Config, \
+    get_remote_config_and_login_if_necessary
 from materials_commons.cli.subcommands.down import down_subcommand
 from materials_commons.cli.subcommands.up import up_subcommand
 
 # TODO: only call os.getcwd() from parser::main
-
-@contextmanager
-def working_dir(wd):
-    orig_wd = os.getcwd()
-    if wd is None:
-        wd = orig_wd
-    os.chdir(wd)
-    try:
-        yield
-    finally:
-        os.chdir(orig_wd)
 
 class ClonedProject(object):
     """A cloned Materials Commons project instance
@@ -36,7 +26,8 @@ class ClonedProject(object):
 
     """
 
-    def __init__(self, email=None, mcurl=None, proj_id=None, path=None, parent_path=None):
+    def __init__(self, email=None, mcurl=None, proj_id=None, path=None,
+                 parent_path=None, name=None):
         """Construct a cloned Materials Commons project instance
 
         Examples:
@@ -52,9 +43,12 @@ class ClonedProject(object):
                 mcurl = "https://materialscommons.org/api"
                 proj_id = 25
                 parent_path = "/path/to/materials_commons_projects"
-                mc_proj = ClonedProject(email=email, mcurl=mcurl,
+                name = None  # default uses remote project name
+                mc_proj = ClonedProject(email=email,
+                                        mcurl=mcurl,
                                         proj_id=proj_id,
-                                        parent_path=parent_path)
+                                        parent_path=parent_path,
+                                        name=name)
 
             Clone project to a temporary directory:
 
@@ -72,6 +66,8 @@ class ClonedProject(object):
             parent_path (str): Path to parent directory where the project should
                 be cloned if path is None. If neither path nor parent_path are
                 given, uses a tempfile.TemporaryDirectory for parent_path.
+            name (str): Name of created project directory. Default is remote
+                project name.
         """
         self.local_path = None
         self.proj = None
@@ -92,7 +88,7 @@ class ClonedProject(object):
                     raise cliexcept.NoDefaultRemoteException("Default remote not set")
                 remote_config = config.default_remote
             else:
-                remote_config = clifuncs.get_remote_config_and_login_if_necessary(
+                remote_config = get_remote_config_and_login_if_necessary(
                     mcurl=mcurl, email=email)
 
             if parent_path is None:
@@ -128,8 +124,8 @@ class ClonedProject(object):
         """
         return [str(file.relative_to(self.local_path)) for file in self.local_path.glob(pattern)]
 
-    def download(self, *paths, recursive=False, only_print=False, force=False, output=None,
-                 globus=False, label=None, no_compare=False):
+    def download(self, *paths, recursive=False, only_print=False, force=False,
+                 output=None, globus=False, label=None, no_compare=False):
         """Download requested files from the Materials Commons project
 
         Args:
@@ -145,6 +141,10 @@ class ClonedProject(object):
                 using absolute paths or paths relative to the project root
                 directory (`self.local_path`).
         """
+        # TODO: convert to direct function calls rather than arg parsing
+
+        working_dir = self.local_path
+
         argv = []
         if recursive is True:
             argv.append("-r")
@@ -164,14 +164,15 @@ class ClonedProject(object):
             argv.append("--no-compare")
         if len(paths):
             # using relpaths is more robust within the working_dir context
-            argv += [str(os.path.relpath(os.path.abspath(path), self.local_path)) for path in paths]
+            # argv += [str(os.path.relpath(os.path.abspath(path), self.local_path)) for path in paths]
+            argv += [os.path.normpath(os.path.join(working_dir, path)) for path in paths]
         try:
-            with working_dir(self.local_path):
-                down_subcommand(argv)
+            down_subcommand(argv, working_dir)
         except SystemExit as e:
             print("Invalid download request")
 
-    def upload(self, *paths, recursive=False, limit=None, globus=False, label=None, no_compare=False, upload_as=None):
+    def upload(self, *paths, recursive=False, limit=None, globus=False,
+               label=None, no_compare=False, upload_as=None):
         """Upload requested files to Materials Commons
 
         Args:
@@ -187,6 +188,10 @@ class ClonedProject(object):
                 using absolute paths or paths relative to the project root
                 directory (`self.local_path`).
         """
+        # TODO: convert to direct function calls rather than arg parsing
+
+        working_dir = self.local_path
+
         argv = []
         if recursive is True:
             argv.append("-r")
@@ -205,9 +210,9 @@ class ClonedProject(object):
             argv.append(str(upload_as))
         if len(paths):
             # using relpaths is more robust within the working_dir context
-            argv += [str(os.path.relpath(os.path.abspath(path), self.local_path)) for path in paths]
+            # argv += [str(os.path.relpath(os.path.abspath(path), self.local_path)) for path in paths]
+            argv += [os.path.normpath(os.path.join(working_dir, path)) for path in paths]
         try:
-            with working_dir(self.local_path):
-                up_subcommand(argv)
+            up_subcommand(argv, working_dir)
         except SystemExit as e:
             print("Invalid upload request")

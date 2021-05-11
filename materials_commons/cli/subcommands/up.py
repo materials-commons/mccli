@@ -58,12 +58,19 @@ def up_subcommand(argv, working_dir):
     if pconfig.remote_updatetime:
         remotetree = RemoteTree(proj, pconfig.remote_updatetime)
 
-    paths = treefuncs.clipaths_to_mcpaths(proj.local_path, args.paths)
-
     # validate
     if args.upload_as and len(args.paths) != 1:
         print("--upload-as option acts on 1 file or directory, received", len(args.paths))
         raise cliexcept.MCCLIException("Invalid upload request")
+    if args.upload_as and args.globus:
+        print("--upload-as option is not supported with --globus")
+        raise cliexcept.MCCLIException("Invalid upload request")
+
+    upload_as = None
+    if args.upload_as:
+        upload_as = treefuncs.clipaths_to_mcpaths(proj.local_path,
+                                                  args.upload_as,
+                                                  working_dir)[0]
 
     if args.globus:
 
@@ -108,15 +115,10 @@ def up_subcommand(argv, working_dir):
         if not args.no_compare:
             localtree = LocalTree(proj.local_path)
 
-        upload_as = None
-        if args.upload_as:
-            upload_as = treefuncs.clipaths_to_mcpaths(proj.local_path,
-                                                      args.upload_as)[0]
-
-        treefuncs.standard_upload(proj, paths, recursive=args.recursive,
-                                  limit=args.limit[0],
+        treefuncs.standard_upload(proj, args.paths, working_dir,
+                                  recursive=args.recursive, limit=args.limit[0],
                                   no_compare=args.no_compare,
-                                  upload_as=upload_as,
-                                  localtree=localtree, remotetree=remotetree)
+                                  upload_as=upload_as, localtree=localtree,
+                                  remotetree=remotetree)
 
     return

@@ -32,7 +32,8 @@ def mkdir_subcommand(argv, working_dir):
     pconfig = clifuncs.read_project_config(proj.local_path)
 
     # convert cli input to materials commons path convention: /path/to/file_or_dir
-    mcpaths = treefuncs.clipaths_to_mcpaths(proj.local_path, args.paths)
+    mcpaths = treefuncs.clipaths_to_mcpaths(proj.local_path, args.paths,
+                                            working_dir)
 
     remotetree = None
     if pconfig.remote_updatetime:

@@ -44,7 +44,8 @@ def mv_subcommand(argv, working_dir):
         remotetree = RemoteTree(proj, pconfig.remote_updatetime)
 
     # convert cli input to materials commons path convention: /path/to/file_or_dir
-    mcpaths = treefuncs.clipaths_to_mcpaths(proj.local_path, args.paths)
+    mcpaths = treefuncs.clipaths_to_mcpaths(proj.local_path, args.paths,
+                                            working_dir)
 
     treefuncs.move(proj, mcpaths, remote_only=args.remote_only, localtree=localtree, remotetree=remotetree)
 
