@@ -11,35 +11,86 @@ import materials_commons.cli.exceptions as cliexcept
 import materials_commons.cli.functions as clifuncs
 import materials_commons.cli.file_functions as filefuncs
 
-def clipaths_to_mcpaths(proj_local_path, clipaths, workdir=None):
+def clipaths_to_local_abspaths(proj_local_path, clipaths, working_dir):
+    """Convert CLI paths input to local absolute paths
+
+    Args:
+        proj_local_path (str): Path to Materials Commons project
+        clipaths (List of str): Indicates files and directories, either
+            absolute paths or relative to current working directory
+        working_dir (str): Directory cli_paths are relative to.
+
+    Returns:
+        List local absolute paths to upload, excluding the `.mc` directory.
+
+    Raises:
+        MCCLIException, if any path in clipaths is not within the local project
+        directory.
+    """
+    if not os.path.isabs(working_dir):
+        raise cliexcept.MCCLIException("Error in clipaths_to_mcpaths: working_dir is not absolute")
+    local_abspaths = []
+    for p in clipaths:
+        if not os.path.isabs(p):
+            p = os.path.join(working_dir, p)
+        local_abspaths.append(p)
+    return local_abspaths
+
+def clipaths_to_mcpaths(proj_local_path, clipaths, working_dir):
     """Convert CLI paths input to Materials Commons standardized paths
 
     Args:
         proj_local_path (str): Path to Materials Commons project
         clipaths (List of str): Indicates files and directories, either absolute paths or relative to current working directory
-        workdir (None or str): Directory cli_paths are relative to. If None, uses os.getcwd().
+        working_dir (str): Directory cli_paths are relative to.
 
     Returns:
         List Materials Commons paths (does not include project top directory, starts with "/") to
         upload, excluding the `.mc` directory.
+
+    Raises:
+        MCCLIException, if any path in clipaths is not within the local project
+        directory.
     """
-    if workdir is None:
-        workdir = os.getcwd()
-    if not os.path.isabs(workdir):
-        raise cliexcept.MCCLIException("Error in clipaths_to_mcpaths: workdir is not absolute")
+    if not os.path.isabs(working_dir):
+        raise cliexcept.MCCLIException("Error in clipaths_to_mcpaths: working_dir is not absolute")
     mcpaths = []
     for p in clipaths:
         if not os.path.isabs(p):
-            p = os.path.join(workdir, p)
+            p = os.path.join(working_dir, p)
         mcpath = filefuncs.make_mcpath(proj_local_path, p)
         mcpaths.append(mcpath)
     return mcpaths
 
-def make_paths_for_upload(proj_local_path, paths):
+def make_local_abspaths_for_upload(proj_local_path, paths):
     """Clean paths for uploads
 
-    This is written for identifying uploads. If the top directory is included it replaces it with
-    all children except `.mc`.
+    This is written for identifying uploads. If the top directory is included
+    it replaces it with all children except `.mc`.
+
+    Args:
+        proj_local_path (str): Path to project
+        paths (iterable of str): Local absolute paths to filter
+
+    Returns:
+        List of str: Materials Commons paths, filtered as described above.
+    """
+    _paths = []
+    for path in paths:
+        if os.path.normpath(path) == os.path.normpath(proj_local_path):
+            for child in os.listdir(proj_local_path):
+                if child == ".mc":
+                    continue
+                _paths.append(os.path.join(os.path.normpath(proj_local_path), child))
+        else:
+            _paths.append(path)
+    return _paths
+
+def make_mcpaths_for_upload(proj_local_path, paths):
+    """Clean paths for uploads
+
+    This is written for identifying uploads. If the top directory is included
+    it replaces it with all children except `.mc`.
 
     Args:
         proj_local_path (str): Path to project
@@ -59,26 +110,32 @@ def make_paths_for_upload(proj_local_path, paths):
             _paths.append(path)
     return _paths
 
-def standard_upload(proj, paths, recursive=False, limit=50, no_compare=False, upload_as=None, localtree=None, remotetree=None):
+def standard_upload(proj, paths, working_dir, recursive=False, limit=50, no_compare=False, upload_as=None, localtree=None, remotetree=None):
     """Upload files to Materials Commons
 
     Args:
-        proj (:class:`materials_commons.api.Project`): Project instance with proj.local_path
-            indicating local project location
+        proj (:class:`materials_commons.api.Project`): Project instance with
+            proj.local_path indicating local project location
         paths (List of str):
-            List of Materials Commons style paths (absolute path, not including project name
-            directory) to upload.
-        recursive (bool): If True, remove directories recursively. Otherwise, will not remove
-            directories.
+            List of paths to upload. Expects local absolute paths, or paths
+            relative to working_dir.
+        working_dir (str): Current working directory, used for finding relative
+            paths and printing messages.
+        recursive (bool): If True, remove directories recursively. Otherwise,
+            will not remove directories.
         limit (int): The limit in MB on the size of the file allowed to be uploaded.
-        no_compare (bool): By default, this function checks local and remote file checksum to avoid
-            downloading files that already exist. If no_compare is True, this check is skipped and
-            all specified files are downloaded, even if an equivalent file already exists locally.
-        upload_as (str): Materials Commons style path specifying where to upload. Requires `len(paths) == 1`.
-        localtree (LocalTree): A LocalTree object stores local file checksums to avoid unnecessary
-            hashing. Optional, will be used and updated if provided and checksum == True.
-        remotetree (RemoteTree): A RemoteTree object stores remote file and directory information
-            to minimize API calls and data transfer. Optional, will be used and updated if provided.
+        no_compare (bool): By default, this function checks local and remote
+            file checksum to avoid downloading files that already exist. If
+            no_compare is True, this check is skipped and all specified files
+            are downloaded, even if an equivalent file already exists locally.
+        upload_as (str): Materials Commons style path specifying where to
+            upload. Requires `len(paths) == 1`.
+        localtree (LocalTree): A LocalTree object stores local file checksums
+            to avoid unnecessary hashing. Optional, will be used and updated if
+            provided and checksum == True.
+        remotetree (RemoteTree): A RemoteTree object stores remote file and
+            directory information to minimize API calls and data transfer.
+            Optional, will be used and updated if provided.
 
     Returns:
         (file_results, error_results):
@@ -90,45 +147,75 @@ def standard_upload(proj, paths, recursive=False, limit=50, no_compare=False, up
             Error messages for unsuccessful file uploads
 
     """
-    paths = make_paths_for_upload(proj.local_path, paths)
     file_results = {}
     error_results = {}
 
-    checksum = True
-    if no_compare:
-        checksum = False
-
-    if upload_as is not None and len(paths) != 1:
-        msg = "Upload error: to 'upload as', expected len(paths) == 1"
-        raise cliexcept.MCCLIException(msg)
-
-    paths_to_query = copy.deepcopy(paths)
+    # check for non-existing paths, paths already uploaded, etc.
+    paths_to_upload = []
     if upload_as is not None:
-        paths_to_query.append(upload_as)
 
-    files_data, dirs_data, child_data, non_existing = treecompare(
-        proj, paths_to_query, checksum=checksum, localtree=localtree, remotetree=remotetree)
+        # upload_as only if 1 input path
+        if len(paths) != 1:
+            msg = "Upload error: to 'upload as', expected len(paths) == 1"
+            raise cliexcept.MCCLIException(msg)
 
-    for path in paths:
-        local_abspath = filefuncs.make_local_abspath(proj.local_path, path)
-        printpath = os.path.relpath(local_abspath)
+        local_abspaths = clipaths_to_local_abspaths(proj.local_path, paths,
+                                                    working_dir)
+        local_abspaths = make_local_abspaths_for_upload(proj.local_path,
+                                                       local_abspaths)
 
-        dest_path = path
-        if upload_as is not None:
+        local_abspath = local_abspaths[0]
+        if not os.path.exists(local_abspath):
+            printpath = os.path.relpath(local_abspath, start=working_dir)
+            print(printpath + ": does not exist")
+        else:
+            paths_to_upload.append(local_abspath)
+
+    else:
+        # get info to compare local and remote files
+        checksum = True
+        if no_compare:
+            checksum = False
+
+        mcpaths = clipaths_to_mcpaths(proj.local_path, paths, working_dir)
+        mcpaths = make_mcpaths_for_upload(proj.local_path, mcpaths)
+
+        files_data, dirs_data, child_data, non_existing = treecompare(
+            proj, mcpaths, checksum=checksum, localtree=localtree, remotetree=remotetree)
+
+        # check for files that are already uploaded or do not exist
+        for mcpath in mcpaths:
+            local_abspath = filefuncs.make_local_abspath(proj.local_path, mcpath)
+            printpath = os.path.relpath(local_abspath, start=working_dir)
+
+            if os.path.isfile(local_abspath):
+                l_checksum = files_data[mcpath]['l_checksum']
+                r_checksum = files_data[mcpath]['r_checksum']
+                if l_checksum and l_checksum == r_checksum:
+                    print(printpath + ": local is equivalent to remote (skipping)")
+                    file_results[local_abspath] = files_data[mcpath]['r_obj']
+                    continue
+            elif not os.path.exists(local_abspath):
+                print(printpath + ": does not exist")
+                continue
+
+            paths_to_upload.append(local_abspath)
+
+    # do uploads
+    for local_abspath in paths_to_upload:
+
+        printpath = os.path.relpath(local_abspath, start=working_dir)
+
+        # Materials Commons style path, where to upload
+        dest_path = None
+        if upload_as is None:
+            dest_path = filefuncs.make_mcpath(proj.local_path, local_abspath)
+        else:
             dest_path = upload_as
 
         printdestpath = os.path.relpath(
-            filefuncs.make_local_abspath(proj.local_path, dest_path))
-
-        if os.path.isfile(local_abspath):
-            l_checksum = files_data[path]['l_checksum']
-            r_checksum = None
-            if dest_path in files_data:
-                r_checksum = files_data[dest_path]['r_checksum']
-            if l_checksum and l_checksum == r_checksum:
-                print(printpath + ": local is equivalent to remote (skipping)")
-                file_results[path] = files_data[dest_path]['r_obj']
-                continue
+            filefuncs.make_local_abspath(proj.local_path, dest_path),
+            start=working_dir)
 
         # note: remote files are versioned, so we skip overwrite checking / force option
 
@@ -145,57 +232,64 @@ def standard_upload(proj, paths, recursive=False, limit=50, no_compare=False, up
             if os.path.isfile(local_abspath):
                 if not parent:
                     error_msg = printpath + ": parent=" + parent_path + " is not a directory on remote (not uploaded)"
-                    error_results[path] = error_msg
+                    error_results[local_abspath] = error_msg
                     print(error_msg)
                     continue
                 file_size_mb = os.path.getsize(local_abspath) >> 20
                 if file_size_mb > limit:
                     error_msg = printpath + ": file too large (size={1}MB, limit={0}MB) (not uploaded)".format(limit, file_size_mb)
-                    error_results[path] = error_msg
+                    error_results[local_abspath] = error_msg
                     print(error_msg)
                     continue
                 result = proj.remote.upload_file(proj.id, parent.id, local_abspath)
                 if not filefuncs.isfile(result):
                     error_msg = printpath + ": unknown error (not uploaded)"
-                    error_results[path] = error_msg
+                    error_results[local_abspath] = error_msg
                     print(error_msg)
                     continue
                 else:
-                    if path == dest_path:
+                    if upload_as is None:
                         print("uploaded:", printpath)
                     else:
                         print("uploaded:", printpath, "as", printdestpath)
-                file_results[path] = result
+                file_results[local_abspath] = result
 
             elif os.path.isdir(local_abspath):
                 if recursive:
-                    proj.remote.create_directory(proj.id, os.path.basename(path), parent.id)
-                    child_paths = [os.path.join(path, name) for name in os.listdir(local_abspath)]
+                    proj.remote.create_directory(proj.id, os.path.basename(dest_path), parent.id)
                     if upload_as is None:
-                        file_results_tmp, error_results_tmp = standard_upload(
-                            proj, child_paths, recursive=recursive, limit=limit, remotetree=remotetree)
+                        child_paths = [os.path.join(local_abspath, name) for name in os.listdir(local_abspath)]
+                        file_results_tmp, error_results_tmp = \
+                            standard_upload(proj, child_paths, working_dir,
+                                recursive=recursive, limit=limit,
+                                remotetree=remotetree)
                         for tpath in file_results_tmp:
                             file_results[tpath] = file_results_tmp[tpath]
                         for tpath in error_results_tmp:
                             error_results[tpath] = error_results_tmp[tpath]
                     else:
                         for name in os.listdir(local_abspath):
-                            child_path = os.path.join(path, name)
+                            child_path = os.path.join(local_abspath, name)
                             child_upload_as = os.path.join(upload_as, name)
-                            file_results_tmp, error_results_tmp = standard_upload(
-                                proj, [child_path], recursive=recursive, limit=limit, upload_as=child_upload_as, remotetree=remotetree)
+                            file_results_tmp, error_results_tmp = \
+                                standard_upload(proj, [child_path], working_dir,
+                                    recursive=recursive, limit=limit,
+                                    upload_as=child_upload_as,
+                                    remotetree=remotetree)
                             for tpath in file_results_tmp:
                                 file_results[tpath] = file_results_tmp[tpath]
                             for tpath in error_results_tmp:
                                 error_results[tpath] = error_results_tmp[tpath]
                 else:
                     error_msg = printpath + ": is a directory (not uploaded)"
-                    error_results[path] = error_msg
+                    error_results[local_abspath] = error_msg
                     print(error_msg)
                     continue
             else:
-                print(printpath + ": does not exist")
-                continue
+                # should not happen
+                msg = "Upload error: path does not exist"
+                msg += " path=" + local_abspath
+                raise cliexcept.MCCLIException(msg)
 
             if remotetree:
                 remotetree.connect()
@@ -204,7 +298,7 @@ def standard_upload(proj, paths, recursive=False, limit=50, no_compare=False, up
 
         except Exception as e:
             error_msg = printpath + ": " + str(e) + " (not uploaded)"
-            error_results[path] = error_msg
+            error_results[local_abspath] = error_msg
             print(error_msg)
             continue
 
