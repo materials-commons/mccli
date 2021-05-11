@@ -23,12 +23,36 @@ def get_parent_id(file_or_dir):
 def make_local_abspath(proj_local_path, mcpath):
     return os.path.normpath(os.path.join(proj_local_path, os.path.relpath(mcpath, "/")))
 
+def path_in_project(proj_local_path, local_abspath):
+    """Check if local path is within the local project directory
+
+    Args:
+        proj_local_path (str): Path to project, i.e. "/path/to/project"
+        local_abspath (str): Path to file in project, i.e. "/path/to/project/
+            path/to/file"
+
+    Returns: True, if local_abspath is within the local project directory.
+    """
+    return os.path.commonpath([proj_local_path, local_abspath]) == os.path.normpath(proj_local_path)
+
 def make_mcpath(proj_local_path, local_abspath):
     """
-        :param str proj_local_path: Path to project, i.e. "/path/to/project"
-        :param str local_abspath: Path to file in project, i.e. "/path/to/project/path/to/file"
-        :return str mcpath: Returns a Materials Commons style path, i.e. "/path/to/file"
+
+    Args:
+        proj_local_path (str): Path to project, i.e. "/path/to/project"
+        local_abspath (str): Path to file in project, i.e. "/path/to/project/
+            path/to/file"
+
+    Returns:
+        mcpath (str): Returns a Materials Commons style path, i.e. "/path/to/
+            file"
+
+    Raises:
+        MCCLIException, if any path in clipaths is not within the local project
+        directory.
     """
+    if not path_in_project(proj_local_path, local_abspath):
+        raise MCCLIException("make_mcpath error: path not in project")
     relpath = os.path.relpath(local_abspath, proj_local_path)
     if relpath == ".":
         mcpath = "/"
