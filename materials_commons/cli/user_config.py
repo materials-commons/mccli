@@ -1,5 +1,6 @@
 import getpass
 import os
+import requests
 import warnings
 from os.path import join
 import json
@@ -176,3 +177,60 @@ class Config(object):
         with open(self.config_file, 'w') as f:
             f.write(json.dumps(config, indent=2))
         os.chmod(self.config_file, 0o600)
+
+def get_remote_config_and_login_if_necessary(email=None, mcurl=None):
+    """Prompt for login if remote is not stored in Config
+
+    Args:
+        email (str): User account email.
+        mcurl (str): URL for Materials Commons remote instance. Example:
+            "https://materialscommons.org/api".
+
+    Returns:
+        :class:`user_config.RemoteConfig`: The remote configuration parameters
+        for the provided URL and user account.
+    """
+    config = Config()
+    remote_config = RemoteConfig(mcurl=mcurl, email=email)
+    if remote_config in config.remotes:
+        return config.remotes[config.remotes.index(remote_config)]
+
+    while True:
+        try:
+            print("Login to:", email, mcurl)
+            password = getpass.getpass(prompt='password: ')
+            remote_config.mcapikey = Client.get_apikey(email, password, mcurl)
+            break
+        except requests.exceptions.HTTPError as e:
+            print(str(e))
+            if not re.search('Bad Request for url', str(e)):
+                raise e
+            else:
+                print("Wrong password for " + email + " at " + mcurl)
+        except requests.exceptions.ConnectionError as e:
+            print("Could not connect to " + mcurl)
+            raise e
+    config.remotes.append(remote_config)
+    config.save()
+
+    print()
+    print("Added APIKey for", email, "at", mcurl, "to", config.config_file)
+    print()
+
+    return remote_config
+
+def make_client_and_login_if_necessary(email=None, mcurl=None):
+    """Make Client, prompting for login if remote is not stored in Config
+
+    Args:
+        email (str): User account email.
+        mcurl (str): URL for Materials Commons remote instance. Example:
+            "https://materialscommons.org/api".
+
+    Returns:
+        :class:`materials_commons.api.Client`: A client for the provided URL
+        and user account.
+    """
+    remote_config = get_remote_config_and_login_if_necessary(mcurl=mcurl,
+                                                             email=email)
+    return remote_config.make_client()
