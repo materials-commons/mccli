@@ -22,6 +22,7 @@ class TestStandardDownload(unittest.TestCase):
         project_name = "__clitest__standard_download"
         project_path = os.path.join(test_project_directory(), project_name)
         self.basic_project_1 = make_basic_project_1(project_path)
+        self.working_dir = os.getcwd()
 
         # initialize a Materials Commons Client
         mcurl = os.environ.get("MC_API_URL")
@@ -57,8 +58,9 @@ class TestStandardDownload(unittest.TestCase):
         path = "/file_A.txt"
         local_abspath = filefuncs.make_local_abspath(self.proj.local_path, path)
         self.assertEqual(os.path.exists(local_abspath), False)
-        success = standard_download(self.proj, path, force=False, output=None, recursive=False,
-            no_compare=False, localtree=None, remotetree=None)
+        success = standard_download(self.proj, path, self.working_dir,
+            force=False, output=None, recursive=False, no_compare=False,
+            localtree=None, remotetree=None)
         self.assertEqual(os.path.exists(local_abspath), True)
 
     def test_download_file_in_directory(self):
@@ -66,8 +68,9 @@ class TestStandardDownload(unittest.TestCase):
         path = "/level_1/file_A.txt"
         local_abspath = filefuncs.make_local_abspath(self.proj.local_path, path)
         self.assertEqual(os.path.exists(local_abspath), False)
-        success = standard_download(self.proj, path, force=False, output=None, recursive=False,
-            no_compare=False, localtree=None, remotetree=None)
+        success = standard_download(self.proj, path, self.working_dir,
+            force=False, output=None, recursive=False, no_compare=False,
+            localtree=None, remotetree=None)
         self.assertEqual(os.path.exists(local_abspath), True)
 
     def test_download_directory(self):
@@ -81,8 +84,9 @@ class TestStandardDownload(unittest.TestCase):
         for expected in expected_paths:
             local_abspath = filefuncs.make_local_abspath(self.proj.local_path, expected)
             self.assertEqual(os.path.exists(local_abspath), False)
-        success = standard_download(self.proj, path, force=False, output=None, recursive=True,
-            no_compare=False, localtree=None, remotetree=None)
+        success = standard_download(self.proj, path, self.working_dir,
+            force=False, output=None, recursive=True, no_compare=False,
+            localtree=None, remotetree=None)
         for expected in expected_paths:
             local_abspath = filefuncs.make_local_abspath(self.proj.local_path, expected)
             self.assertEqual(os.path.exists(local_abspath), True)
@@ -100,8 +104,9 @@ class TestStandardDownload(unittest.TestCase):
         for expected in expected_paths:
             local_abspath = filefuncs.make_local_abspath(self.proj.local_path, expected)
             self.assertEqual(os.path.exists(local_abspath), False)
-        success = standard_download(self.proj, path, force=False, output=None, recursive=True,
-            no_compare=False, localtree=None, remotetree=None)
+        success = standard_download(self.proj, path, self.working_dir,
+            force=False, output=None, recursive=True, no_compare=False,
+            localtree=None, remotetree=None)
         for expected in expected_paths:
             local_abspath = filefuncs.make_local_abspath(self.proj.local_path, expected)
             self.assertEqual(os.path.exists(local_abspath), True)
@@ -119,15 +124,17 @@ class TestStandardDownload(unittest.TestCase):
         for expected in expected_paths:
             local_abspath = filefuncs.make_local_abspath(self.proj.local_path, expected)
             self.assertEqual(os.path.exists(local_abspath), False)
-        success = standard_download(self.proj, path, force=False, output=None, recursive=True,
-            no_compare=False, localtree=None, remotetree=None)
+        success = standard_download(self.proj, path, self.working_dir,
+            force=False, output=None, recursive=True, no_compare=False,
+            localtree=None, remotetree=None)
         for expected in expected_paths:
             local_abspath = filefuncs.make_local_abspath(self.proj.local_path, expected)
             self.assertEqual(os.path.exists(local_abspath), True)
 
         # second time, should not need to re-download
-        success = standard_download(self.proj, path, force=False, output=None, recursive=True,
-            no_compare=False, localtree=None, remotetree=None)
+        success = standard_download(self.proj, path, self.working_dir,
+            force=False, output=None, recursive=True, no_compare=False,
+            localtree=None, remotetree=None)
 
     def test_download_output(self):
         # download file to alternative location
@@ -135,7 +142,8 @@ class TestStandardDownload(unittest.TestCase):
         output = "/file_A_new_name.txt"
         local_abspath = filefuncs.make_local_abspath(self.proj.local_path, output)
         self.assertEqual(os.path.exists(local_abspath), False)
-        success = standard_download(self.proj, path, force=False, output=local_abspath, recursive=True,
+        success = standard_download(self.proj, path, self.working_dir,
+            force=False, output=local_abspath, recursive=True,
             no_compare=False, localtree=None, remotetree=None)
         local_abspath = filefuncs.make_local_abspath(self.proj.local_path, output)
         self.assertEqual(os.path.exists(local_abspath), True)
