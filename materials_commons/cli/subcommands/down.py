@@ -37,7 +37,8 @@ def _get_current_globus_download(pconfig, proj, verbose=True):
 
     return download
 
-def _check_download_file(proj_id, file_id, local_path, remote, force=False):
+def _check_download_file(proj_id, file_id, local_path, remote, working_dir,
+                         force=False):
     """Prompt user for confirmation before overwriting an existing local file
 
     Arguments
@@ -46,6 +47,8 @@ def _check_download_file(proj_id, file_id, local_path, remote, force=False):
     file_id: int, ID of file to download
     local_path: str, Location to download file. Intermediate directories are created if necessary.
     remote: mcapi.Client, Materials Commons Client
+    working_dir (str): Current working directory, used for finding relative
+        paths and printing messages.
     force: bool (optional, default=False) If True, force overwrite existing file without confirmation.
 
     Returns
@@ -59,7 +62,7 @@ def _check_download_file(proj_id, file_id, local_path, remote, force=False):
         remote.download_file(proj_id, file_id, local_path)
         return local_path
     else:
-        print("Overwrite '" + os.path.relpath(local_path, os.getcwd()) + "'?")
+        print("Overwrite '" + os.path.relpath(local_path, working_dir) + "'?")
         while True:
             ans = input('y/n: ')
             if ans == 'y':
@@ -72,28 +75,7 @@ def _check_download_file(proj_id, file_id, local_path, remote, force=False):
                 break
     return None
 
-
-# def _check_download_directory(proj, dir, dirpath=None, recursive=False, force=False):
-#
-#     if dirpath is None:
-#         dirpath = dir.path
-#     results = []
-#     children = dir.get_children()
-#     for child in children:
-#
-#         if isinstance(child, mcapi.File):
-#             p = os.path.join(dirpath, child.name)
-#             result_path = _check_download_file(proj.id, child.id, p, proj.remote, force=force)
-#             if result_path is not None:
-#                 print("downloaded:", os.path.relpath(result_path, os.getcwd()))
-#             results.append(result_path)
-#
-#         elif isinstance(child, mcapi.Directory) and recursive:
-#             _check_download_directory(proj, child, dirpath=os.path.join(dirpath, child.name), recursive=recursive, force=force)
-#
-#     return results
-
-def standard_download(proj, path, force=False, output=None, recursive=False, no_compare=False, localtree=None, remotetree=None):
+def standard_download(proj, path, working_dir, force=False, output=None, recursive=False, no_compare=False, localtree=None, remotetree=None):
     """Download files and directories
 
     Arguments
@@ -101,6 +83,9 @@ def standard_download(proj, path, force=False, output=None, recursive=False, no_
     proj: mcapi.Project, Project to download from
 
     path: str, Materials Commons style path of file or directory to download
+
+    working_dir (str): Current working directory, used for finding relative
+        paths and printing messages.
 
     force: bool (optional, default=False) If True, force overwrite existing files without confirmation.
 
@@ -129,7 +114,7 @@ def standard_download(proj, path, force=False, output=None, recursive=False, no_
     success: bool, True if download succeeds, False otherwise
     """
     local_abspath = filefuncs.make_local_abspath(proj.local_path, path)
-    printpath = os.path.relpath(local_abspath)
+    printpath = os.path.relpath(local_abspath, start=working_dir)
 
     if output is None:
         output = local_abspath
@@ -152,13 +137,17 @@ def standard_download(proj, path, force=False, output=None, recursive=False, no_
             return True
         else:
             try:
-                result_path =  _check_download_file(proj.id, files_data[path]['id'], output, remote=proj.remote, force=force)
+                result_path =  _check_download_file(proj.id,
+                                                    files_data[path]['id'],
+                                                    output, proj.remote,
+                                                    working_dir, force=force)
             except Exception as e:
                 print(printpath + ": " + str(e) + " (skipping)")
                 return False
             if result_path:
                 if output != local_abspath:
-                    print("downloaded:", os.path.relpath(output))
+                    print("downloaded:", printpath, "as",
+                          os.path.relpath(output, start=working_dir))
                 else:
                     print("downloaded:", printpath)
                 return True
@@ -179,7 +168,12 @@ def standard_download(proj, path, force=False, output=None, recursive=False, no_
         success = True
         for childpath, record in child_data[path].items():
             childoutput = os.path.join(output, os.path.basename(childpath))
-            success &= standard_download(proj, childpath, force=force, output=childoutput, recursive=recursive, no_compare=no_compare, localtree=localtree, remotetree=remotetree)
+            success &= standard_download(proj, childpath, working_dir,
+                                         force=force, output=childoutput,
+                                         recursive=recursive,
+                                         no_compare=no_compare,
+                                         localtree=localtree,
+                                         remotetree=remotetree)
         return success
 
     else:
@@ -196,7 +190,7 @@ def download_file_as_string(client, project_id, file_id):
             f.write(block)
         return f.getvalue().decode('utf-8')
 
-def print_file(proj, path):
+def print_file(proj, path, working_dir):
     """Print a remote file, without writing it locally
 
     Arguments
@@ -205,9 +199,12 @@ def print_file(proj, path):
 
     path: str, Materials Commons style path of file to print
 
+    working_dir (str): Current working directory, used for finding relative
+        paths and printing messages.
+
     """
     local_abspath = filefuncs.make_local_abspath(proj.local_path, path)
-    printpath = os.path.relpath(local_abspath)
+    printpath = os.path.relpath(local_abspath, start=working_dir)
     file = filefuncs.get_by_path_if_exists(proj.remote, proj.id, path)
     if not file:
         print(printpath + ": No such file or directory on remote")
@@ -312,7 +309,11 @@ def down_subcommand(argv, working_dir):
             label = args.label[0]
 
         globus_ops = cliglobus.GlobusOperations()
-        task_id = globus_ops.download_v0(proj, paths, download, recursive=args.recursive, label=label, localtree=localtree, remotetree=remotetree, force=args.force)
+        task_id = globus_ops.download_v0(proj, paths, download, working_dir,
+                                         recursive=args.recursive, label=label,
+                                         localtree=localtree,
+                                         remotetree=remotetree,
+                                         force=args.force)
 
         if task_id:
             print("Globus transfer task initiated.")
@@ -323,7 +324,7 @@ def down_subcommand(argv, working_dir):
                 " --delete` " + "to close the download.")
 
     elif args.print:
-        print_file(proj, paths[0])
+        print_file(proj, paths[0], working_dir)
 
     else:
 
@@ -332,6 +333,9 @@ def down_subcommand(argv, working_dir):
             output = os.path.abspath(args.output[0])
 
         for path in paths:
-            standard_download(proj, path, force=args.force, output=output, recursive=args.recursive, no_compare=args.no_compare, localtree=localtree, remotetree=remotetree)
+            standard_download(proj, path, working_dir, force=args.force,
+                              output=output, recursive=args.recursive,
+                              no_compare=args.no_compare, localtree=localtree,
+                              remotetree=remotetree)
 
     return

@@ -506,7 +506,7 @@ def make_globus_parser():
 
     return parser
 
-def globus_subcommand(argv):
+def globus_subcommand(argv, working_dir):
     """
     Manage Globus uploads, downloads, and configuration.
 
@@ -530,7 +530,8 @@ def globus_subcommand(argv):
 
         globus_interfaces = {d['name']: d for d in globus_interface_usage}
         if args.transfertype in globus_interfaces:
-            globus_interfaces[args.transfertype]['subcommand'](argv[1:])
+            globus_interfaces[args.transfertype]['subcommand'](
+                argv[1:], working_dir)
         else:
             print('Unrecognized transfertype')
             parser.print_help()

@@ -100,7 +100,8 @@ def up_subcommand(argv, working_dir):
             label = args.label[0]
 
         globus_ops = cliglobus.GlobusOperations()
-        task_id = globus_ops.upload_v0(proj, paths, upload, recursive=args.recursive, label=label)
+        task_id = globus_ops.upload_v0(proj, paths, upload, working_dir,
+                                       recursive=args.recursive, label=label)
 
         if task_id:
             print("Globus transfer task initiated.")

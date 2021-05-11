@@ -202,13 +202,16 @@ class GlobusOperations(object):
         return
 
 
-    def upload_v0(self, proj, paths, upload, recursive=False, label=None, localtree=None, remotetree=None):
+    def upload_v0(self, proj, paths, upload, working_dir, recursive=False,
+                  label=None, localtree=None, remotetree=None):
         """Upload files and directories to project
 
         Arguments:
             proj: Project
             paths: list of str, Materials Commons paths (include project directory)
             upload: mcapi.GlobusUpload, Globus upload request
+            working_dir (str): Current working directory, used for finding
+                relative paths and printing messages.
             recursive: bool, If True, upload directories recursively
             label: str, Globus transfer label to make finding tasks simpler
 
@@ -231,7 +234,7 @@ class GlobusOperations(object):
 
             local_abspath = filefuncs.make_local_abspath(proj.local_path, p)
             relpath = os.path.relpath(local_abspath, proj.local_path)
-            printpath = os.path.relpath(local_abspath)
+            printpath = os.path.relpath(local_abspath, working_dir)
 
             if p in non_existing:
                 if self.verbose:
@@ -267,7 +270,8 @@ class GlobusOperations(object):
 
         return task_id
 
-    def download_v0(self, proj, paths, download, recursive=False, label=None, localtree=None, remotetree=None, force=False):
+    def download_v0(self, proj, paths, download, working_dir, recursive=False,
+                    label=None, localtree=None, remotetree=None, force=False):
         """Download files and directories from project
 
         Arguments:
@@ -275,6 +279,8 @@ class GlobusOperations(object):
             paths: list of str, Materials Commons paths (absolute path, not including project name
                 directory)
             download: mcapi.GlobusDownload, Globus download request
+            working_dir (str): Current working directory, used for finding
+                relative paths and printing messages.
             recursive: bool, If True, download directories recursively
             label: str, Globus transfer label to make finding tasks simpler
             force: bool, If True force download even if local file exists
@@ -297,7 +303,7 @@ class GlobusOperations(object):
 
             local_abspath = filefuncs.make_local_abspath(proj.local_path, p)
             relpath = os.path.relpath(local_abspath, proj.local_path)
-            printpath = os.path.relpath(local_abspath)
+            printpath = os.path.relpath(local_abspath, working_dir)
 
             if p in non_existing:
                 if self.verbose:
@@ -317,7 +323,7 @@ class GlobusOperations(object):
                 if remote_type == 'directory':
                     print("Downloading a directory which exists locally may cause remote files to overwrite existing local files")
 
-                print("Overwrite " + what + " '" + os.path.relpath(local_abspath, os.getcwd()) + "'?")
+                print("Overwrite " + what + " '" + os.path.relpath(local_abspath, working_dir) + "'?")
                 overwrite = False
                 while True:
                     ans = input('y/n: ')
@@ -329,7 +335,7 @@ class GlobusOperations(object):
                         break
                 if not overwrite:
                     if self.verbose:
-                        print(os.path.relpath(local_abspath, os.getcwd()) + \
+                        print(os.path.relpath(local_abspath, working_dir) + \
                             ": Already exists (will not overwrite)")
                     continue
 
