@@ -10,3 +10,4 @@ User Manual
     proj_init_clone
     ls_mkdir_rm_mv
     up_down_globus
+    jupyter

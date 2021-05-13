@@ -21,6 +21,7 @@ Submodules
    materials_commons.cli.subcommands.remote
    materials_commons.cli.subcommands.rm
    materials_commons.cli.subcommands.up
+   materials_commons.cli.subcommands.versions
 
 Module contents
 ---------------

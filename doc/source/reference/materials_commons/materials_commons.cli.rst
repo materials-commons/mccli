@@ -15,6 +15,7 @@ Submodules
 .. toctree::
    :maxdepth: 4
 
+   materials_commons.cli.cloned_project
    materials_commons.cli.exceptions
    materials_commons.cli.file_functions
    materials_commons.cli.functions
@@ -23,6 +24,7 @@ Submodules
    materials_commons.cli.parser
    materials_commons.cli.print_formatter
    materials_commons.cli.sqltable
+   materials_commons.cli.tmp_functions
    materials_commons.cli.tree_functions
    materials_commons.cli.treedb
    materials_commons.cli.user_config

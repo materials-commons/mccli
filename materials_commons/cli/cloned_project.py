@@ -34,10 +34,14 @@ class ClonedProject(object):
 
             Open a project that has already been cloned:
 
+            .. code-block:: python
+
                 path = "/path/to/materials_commons_projects/ProjectName"
                 mc_proj = ClonedProject(path=path)
 
             Clone project to a particular directory or open if already cloned:
+
+            .. code-block:: python
 
                 email = "username@domain.com"
                 mcurl = "https://materialscommons.org/api"
@@ -51,6 +55,8 @@ class ClonedProject(object):
                                         name=name)
 
             Clone project to a temporary directory:
+
+            .. code-block:: python
 
                 email = "username@domain.com"
                 mcurl = "https://materialscommons.org/api"
