@@ -108,6 +108,6 @@ def init_subcommand(argv, working_dir):
 
     proj = init_project(name, args.desc, prefix=prefix, remote_config=remote_config)
 
-    print("Created new project at:", remote_config.mcurl)
+    print("Created new project on:", remote_config.mcurl)
     clifuncs.print_projects([proj], proj)
     print("")
