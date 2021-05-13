@@ -218,7 +218,7 @@ class GlobusOperations(object):
         Returns:
             None or task_id: str, transfer task id. Returns nothing to transfer.
         """
-        paths = treefuncs.make_paths_for_upload(proj.local_path, paths)
+        paths = treefuncs.make_mcpaths_for_upload(proj.local_path, paths)
 
         if not len(paths):
             return None

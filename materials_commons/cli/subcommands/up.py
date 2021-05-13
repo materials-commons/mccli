@@ -74,6 +74,9 @@ def up_subcommand(argv, working_dir):
 
     if args.globus:
 
+        mcpaths = treefuncs.clipaths_to_mcpaths(proj.local_path, args.paths,
+                                                working_dir)
+
         all_uploads = {upload.id:upload for upload in proj.remote.get_all_globus_upload_requests(proj.id)}
 
         globus_upload_id = None
@@ -100,7 +103,7 @@ def up_subcommand(argv, working_dir):
             label = args.label[0]
 
         globus_ops = cliglobus.GlobusOperations()
-        task_id = globus_ops.upload_v0(proj, paths, upload, working_dir,
+        task_id = globus_ops.upload_v0(proj, mcpaths, upload, working_dir,
                                        recursive=args.recursive, label=label)
 
         if task_id:
