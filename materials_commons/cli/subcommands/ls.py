@@ -8,7 +8,6 @@ import materials_commons.api as mcapi
 import materials_commons.cli.functions as clifuncs
 import materials_commons.cli.tree_functions as treefuncs
 import materials_commons.cli.file_functions as filefuncs
-import materials_commons.cli.tmp_functions as tmpfuncs
 from materials_commons.cli.treedb import LocalTree, RemoteTree
 
 #  Want to print() something like:
@@ -153,13 +152,14 @@ def make_parser():
     parser.add_argument('--clear', action="store_true", default=False, help='Clear files and directories from the include/exclude selection lists of the specified dataset. A file or directory may still be included in or excluded from the dataset afterwards if a higher level directory is included or excluded')
     return parser
 
-def update_file_selection(proj, file_selection, mcpaths, files_data, dirs_data, \
-    include=False, exclude=False, clear=False, out=sys.stdout):
+def change_dataset_file_selection(proj, dataset_id, mcpaths, files_data,
+                                  dirs_data, include=False, exclude=False,
+                                  clear=False, out=sys.stdout):
     """Update the file selection dict
 
     Args:
         proj (mcapi.Project): Current project
-        file_selection (dict): File selection before update
+        dataset_id (str): ID of dataset to be updated
         mcpaths (list of str): Materials Commons format file and directory paths
         files_data: File comparisons from the `treecompare` function
         dirs_data: Directory comparisons from the `treecompare` function
@@ -172,8 +172,10 @@ def update_file_selection(proj, file_selection, mcpaths, files_data, dirs_data, 
         The file selection dict, updated.
 
     """
+    file_selection = proj.remote.get_dataset(proj.id, dataset_id).file_selection
+
     for p in mcpaths:
-        local_abspath = filefuncs.make_local_abspath(proj.local_path, path)
+        local_abspath = filefuncs.make_local_abspath(proj.local_path, p)
         printpath = os.path.relpath(local_abspath)
 
         if treefuncs.is_type_mismatch(p, files_data, dirs_data) and not clear:
@@ -207,72 +209,7 @@ def update_file_selection(proj, file_selection, mcpaths, files_data, dirs_data, 
     for name in ['include_files', 'exclude_files', 'include_dirs', 'exclude_dirs']:
         file_selection[name] = list(set(file_selection[name]))
 
-    return file_selection
-
-def update_dataset_file_selection(proj, dataset_id, mcpaths, files_data, dirs_data, \
-    include=False, exclude=False, clear=False, out=sys.stdout):
-    """Update a dataset file selection
-
-    Args:
-        proj (mcapi.Project): Current project, expected to have "remote" and "local_path" attributes
-        dataset_id (str): ID of dataset to be updated
-        mcpaths (list of str): Materials Commons format file and directory paths
-        files_data: File comparisons from the `treecompare` function
-        dirs_data: Directory comparisons from the `treecompare` function
-        include (bool): If True, include files and directories in "mcpaths" to the file selection
-        exclude (bool): If True, exclude files and directories in "mcpaths" to the file selection
-        clear (bool): If True, remove files and directories in "mcpaths" from the file selection so they are not included or excluded
-        out: Output stream
-
-    Returns:
-        The file selection dict, updated.
-
-    """
-
-    file_selection = tmpfuncs.get_dataset_file_selection(proj.remote, proj.id, dataset_id)
-
-    # local function
-    def _do(action, path):
-        update = {action: path}
-        out.write("Update: " + str(update) + '\n')
-        proj.remote.update_dataset_file_selection(proj.id, dataset_id, update)
-
-    for p in mcpaths:
-        local_abspath = filefuncs.make_local_abspath(proj.local_path, p)
-        printpath = os.path.relpath(local_abspath)
-
-        if treefuncs.is_type_mismatch(p, files_data, dirs_data) and not clear:
-            out.write(printpath + ": Local and remote types do not match, skipping\n")
-            continue
-
-        if include:
-            if p in files_data:
-                if p not in file_selection['include_files']:
-                    _do("include_file", p)
-                if p in file_selection['exclude_files']:
-                    _do("remove_exclude_file", p)
-            if p in dirs_data:
-                if p not in file_selection['include_dirs']:
-                    _do("include_dir", p)
-                if p in file_selection['exclude_dirs']:
-                    _do("remove_exclude_dir", p)
-        elif exclude:
-            if p in files_data:
-                if p not in file_selection['exclude_files']:
-                    _do("exclude_file", p)
-                if p in file_selection['include_files']:
-                    _do("remove_include_file", p)
-            elif p in dirs_data:
-                if p not in file_selection['exclude_dirs']:
-                    _do("exclude_dir", p)
-                if p in file_selection['include_dirs']:
-                    _do("remove_include_dir", p)
-        elif clear:
-            for name in ['include_files', 'exclude_files', 'include_dirs', 'exclude_dirs']:
-                if p in file_selection[name]:
-                    _do("remove_" + name[:-1], p)
-
-    return tmpfuncs.get_dataset_file_selection(proj.remote, proj.id, dataset_id)
+    return proj.remote.change_dataset_file_selection(proj.id, dataset_id, file_selection).file_selection
 
 def ls_subcommand(argv, working_dir):
     """
@@ -326,9 +263,9 @@ def ls_subcommand(argv, working_dir):
 
     if args.dataset:
         if args.include or args.exclude or args.clear:
-            file_selection = update_dataset_file_selection(proj, args.dataset, mcpaths, files_data, dirs_data, include=args.include, exclude=args.exclude, clear=args.clear, out=sys.stdout)
+            file_selection = change_dataset_file_selection(proj, args.dataset, mcpaths, files_data, dirs_data, include=args.include, exclude=args.exclude, clear=args.clear, out=sys.stdout)
         else:
-            file_selection = tmpfuncs.get_dataset_file_selection(proj.remote, proj.id, args.dataset)
+            file_selection = proj.remote.get_dataset(proj.id, args.dataset).file_selection
 
         for f in files_data:
             selected, selected_by = filefuncs.check_file_selection(f, file_selection)

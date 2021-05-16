@@ -77,7 +77,7 @@ def print_dataset_details(client, project_id, dataset, file_selection=False, out
     data = _print_dataset_data(dataset, project_id=project_id)
     if file_selection:
         data.append({
-            "file_selection": tmpfuncs.get_dataset_file_selection(client, project_id, dataset.id)
+            "file_selection": dataset.file_selection
         })
     for d in data:
         out.write(yaml.dump(d, width=70, indent=4))
@@ -111,11 +111,6 @@ class DatasetSubcommand(ListObjects):
                 'goto_globus': 'You want to goto the globus manager for these datasets in a web browser?'
             }
         )
-
-    # TODO: double check this is no longer valid
-    # def get_all_from_experiment(self, expt):
-    #     # return mcapi.get_all_datasets_from_experiment(expt.project.id, expt.id, expt.project.remote)
-    #     return []
 
     def get_all_from_project(self, proj):
         # # basic call, # TODO: return owner email in dataset data
@@ -166,8 +161,8 @@ class DatasetSubcommand(ListObjects):
 
         # note: add samples via `mc samp`, processes via `mc proc`, files via `mc ls`
 
-        # for --create and --clone, set new dataset description
-        parser.add_argument('--desc', type=str, default="", help='Dataset description, for use with --create or --clone.')
+        # for --create and --clone-as, set new dataset description
+        parser.add_argument('--desc', type=str, default="", help='Dataset description, for use with --create or --clone-as.')
 
         # for --details, also print dataset file selection
         parser.add_argument('--file-selection',action="store_true", default=False, help='For use with -d,--details: also print dataset file selection.')
@@ -319,7 +314,7 @@ class DatasetSubcommand(ListObjects):
         proj = clifuncs.make_local_project(self.working_dir)
 
         # get original dataset with as much data as possible
-        dataset = tmpfuncs.get_dataset(proj.remote, proj.id, objects[0].id)
+        dataset = proj.remote.get_dataset(proj.id, objects[0].id)
 
         # copy original metadata    # TODO update this
         dataset_request = mcapi.CreateDatasetRequest()
@@ -327,7 +322,9 @@ class DatasetSubcommand(ListObjects):
         dataset_request.summary = getattr(dataset, 'summary', None)
         dataset_request.license = getattr(dataset, 'license', None)
         dataset_request.authors = getattr(dataset, 'authors', None)
-        dataset_request.tags = getattr(dataset, 'tags', None)
+        # self.experiments = experiments # TODO
+        # self.communities = communities # TODO
+        # dataset_request.tags = getattr(dataset, 'tags', None) # TODO
 
         # update metadata
         dataset_name = args.clone_as
@@ -337,25 +334,8 @@ class DatasetSubcommand(ListObjects):
         out.write('Created dataset: {0}\n'.format(new_dataset.id))
 
         # clone file selection
-        file_selection = tmpfuncs.get_dataset_file_selection(proj.remote, proj.id, dataset.id)
-
-        out.write('Cloning file selection:\n')
-        for file in file_selection['include_files']:
-            update = {"include_file": file}
-            out.write('Update: {0}\n'.format(update))
-            proj.remote.update_dataset_file_selection(proj.id, new_dataset.id, update)
-        for file in file_selection['exclude_files']:
-            update = {"exclude_file": file}
-            out.write('Update: {0}\n'.format(update))
-            proj.remote.update_dataset_file_selection(proj.id, new_dataset.id, update)
-        for file in file_selection['include_dirs']:
-            update = {"include_dir": file}
-            out.write('Update: {0}\n'.format(update))
-            proj.remote.update_dataset_file_selection(proj.id, new_dataset.id, update)
-        for file in file_selection['exclude_dirs']:
-            update = {"exclude_dir": file}
-            out.write('Update: {0}\n'.format(update))
-            proj.remote.update_dataset_file_selection(proj.id, new_dataset.id, update)
+        out.write('Cloning file selection...\n')
+        proj.remote.change_dataset_file_selection(proj.id, new_dataset.id, dataset.file_selection)
 
         # clone samples, processes, workflow
         out.write('** WARNING: Cloning samples, processes, workflows not yet implemented **\n')

@@ -4,7 +4,6 @@ import yaml
 from collections import OrderedDict
 
 import materials_commons.api.models as models
-import materials_commons.cli.tmp_functions as tmpfuncs
 from materials_commons.cli.exceptions import MCCLIException
 from materials_commons.cli.list_objects import ListObjects
 from materials_commons.cli.functions import read_project_config, getit, trunc, format_time, \
@@ -41,7 +40,6 @@ class ProjSubcommand(ListObjects):
 
         # add owner to project
         projects = remote.get_all_projects()
-        tmpfuncs.add_owner(remote, projects)
         return projects
 
     def list_data(self, obj, args):

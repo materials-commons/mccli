@@ -6,37 +6,10 @@ from materials_commons.cli.exceptions import MCCLIException
 
 def get_dataset(client, project_id, dataset_id):
     """Temporary workaround because Client.get_dataset is returning the wrong dataset"""
-    # TODO: update
-    dataset = client.update_dataset_file_selection(project_id, dataset_id, {})
-    dataset.project_id = project_id
-    add_owner(client, dataset)
+    dataset = client.get_dataset(project_id, dataset_id)
+    dataset.project_id = project_id # TODO: update when project_id returned
+    add_owner(client, dataset) # TODO: update when owner returned as object
     return dataset
-
-def set_file_paths(client, project_id, files):
-    """Temporary workaround because Client.get_dataset is returning the wrong dataset"""
-    # TODO: update
-    directories_by_id = dict()
-    for file in files:
-        if file.path is not None:
-            continue
-        if file.directory_id not in directories_by_id:
-            directory = client.get_directory(project_id, file.directory_id)
-            directories_by_id[directory.id] = directory
-        file.path = os.path.join(directories_by_id[file.directory_id].path, file.name)
-
-def get_dataset_file_selection(client, project_id, dataset_id):
-    """Return dataset file selection dict"""
-    dataset = get_dataset(client, project_id, dataset_id)
-    if 'file_selection' not in dataset._data:
-        raise MCCLIException("dataset does not include 'file_selection'")
-    return dataset._data['file_selection']
-
-def get_published_dataset_file_selection(client, dataset_id):
-    """Return dataset file selection dict"""
-    dataset = get_published_dataset(client, dataset_id)
-    if 'file_selection' not in dataset._data:
-        raise MCCLIException("dataset does not include 'file_selection'")
-    return dataset._data['file_selection']
 
 def _add_owner(client, obj):
     if hasattr(obj, 'owner'):
