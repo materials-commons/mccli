@@ -451,6 +451,8 @@ class RemoteTree(TreeTable):
                 file_or_dir_obj = filefuncs.get_by_path_if_exists(self.proj.remote, self.proj.id, path)
                 if file_or_dir_obj is None:
                     return (file_or_dir, children)
+                if file_or_dir_obj._data.get('deleted_at', False) is not None:
+                    return (None, children)
                 if file_or_dir_obj.path is None:
                     file_or_dir_obj.path = path
                 file_or_dir = self._make_record(file_or_dir_obj, checktime)
@@ -463,14 +465,9 @@ class RemoteTree(TreeTable):
             children = []
             if file_or_dir_obj is not None and filefuncs.isdir(file_or_dir_obj):
                 for child in self.proj.remote.list_directory(self.proj.id, file_or_dir_obj.id):
-                    # TODO: child does not have 'size' or 'checksum'
+                    if child._data.get('deleted_at', False) is not None:
+                        continue
                     _checktime = checktime
-                    if filefuncs.isdir(child):
-                        child = self.proj.remote.get_directory(self.proj.id, child.id) # TODO: remove this
-                        _checktime = None
-                    if filefuncs.isfile(child):
-                        child = self.proj.remote.get_file(self.proj.id, child.id) # TODO: remove this
-                        child.path = os.path.join(path, child.name)
                     children.append(self._make_record(child, _checktime))
 
         return (file_or_dir, children)
