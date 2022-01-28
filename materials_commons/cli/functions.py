@@ -60,21 +60,21 @@ def epoch_time(time_value):
     """Attempts to convert various time representations into s since the epoch
 
     Args:
-        time_value: A representation of time.
+        time_value: A representation of time, expects UTC time.
 
     Returns:
-        An integer s since the epoch. Uses the following:
+        An float s since the epoch. Uses the following:
 
             +-------------------+------------------------------------------------------------+
             | If this type      | Then do this conversion                                    |
             +-------------------+------------------------------------------------------------+
-            | str               | time.mktime(dateutil.parser.parse(time_value).timetuple()) |
+            | str               | dateutil.parser.parse(time_value).timestamp()              |
             +-------------------+------------------------------------------------------------+
             | float, int        | time_value                                                 |
             +-------------------+------------------------------------------------------------+
-            | datetime.datetime | time.mktime(time_value.timetuple())                        |
+            | datetime.datetime | time_value.replace(tzinfo=datetime.timezone.utc).timestamp() |
             +-------------------+------------------------------------------------------------+
-            | dict              | time_value['epoch_time']                                   |
+            | dict              | float(time_value['epoch_time'])                            |
             +-------------------+------------------------------------------------------------+
             | None              | None                                                       |
             +-------------------+------------------------------------------------------------+
@@ -82,13 +82,13 @@ def epoch_time(time_value):
             +-------------------+------------------------------------------------------------+
     """
     if isinstance(time_value, str): # expect ISO 8601 str
-        return time.mktime(dateutil.parser.parse(time_value).timetuple())
+        return dateutil.parser.parse(time_value).timestamp()
     elif isinstance(time_value, (float, int)):
-        return time_value
+        return float(time_value)
     elif isinstance(time_value, datetime.datetime):
-        return time.mktime(time_value.timetuple())
+        return time_value.replace(tzinfo=datetime.timezone.utc).timestamp()
     elif isinstance(time_value, dict) and ('epoch_time' in time_value):
-        return time_value['epoch_time']
+        return float(time_value['epoch_time'])
     elif time_value is None:
         return None
     else:
@@ -98,12 +98,12 @@ def format_time(time_value, fmt="%Y %b %d %H:%M:%S"):
     """Attempts to put various time representations into specified format for printing
 
     Args:
-        time_value: A representation of time.
+        time_value: A representation of time, expects UTC time.
 
         fmt (str): Format to use for the return value.
 
     Returns:
-        A string representation using the specified format. Uses the following:
+        A string representation, in local time, using the specified format. Uses the following:
 
             +-------------------+-------------------------------------------------+
             | If this type      | Then do this conversion                         |
@@ -112,7 +112,7 @@ def format_time(time_value, fmt="%Y %b %d %H:%M:%S"):
             +-------------------+-------------------------------------------------+
             | float, int        | time.strftime(fmt, time.localtime(time_value))  |
             +-------------------+-------------------------------------------------+
-            | datetime.datetime | time.strftime(fmt, time.localtime(time_value))  |
+            | datetime.datetime | time_value.strftime(fmt)                        |
             +-------------------+-------------------------------------------------+
             | dict              | format_time(time_value['epoch_time'])           |
             +-------------------+-------------------------------------------------+
@@ -122,11 +122,11 @@ def format_time(time_value, fmt="%Y %b %d %H:%M:%S"):
             +-------------------+-------------------------------------------------+
     """
     if isinstance(time_value, str): # expect ISO 8601 str
-        return dateutil.parser.parse(time_value).strftime(fmt)
+        return dateutil.parser.parse(time_value).astimezone().strftime(fmt)
     elif isinstance(time_value, (float, int)):
         return time.strftime(fmt, time.localtime(time_value))
     elif isinstance(time_value, datetime.datetime):
-        return time_value.strftime(fmt)
+        return time_value.astimezone().strftime(fmt)
     elif isinstance(time_value, dict) and ('epoch_time' in time_value):
         return format_time(time_value['epoch_time'])
     elif time_value is None:
