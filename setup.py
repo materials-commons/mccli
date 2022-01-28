@@ -51,6 +51,7 @@ setup(
     install_requires=[
         "globus-cli",
         "globus-sdk",
+        "igittigitt==2.1.0",
         "materials-commons-api",
         "python-dateutil",
         "pyyaml",

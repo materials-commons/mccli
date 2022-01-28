@@ -1,6 +1,8 @@
 import copy
+import igittigitt
 import json
 import os
+import pathlib
 import requests
 import shutil
 from sortedcontainers import SortedSet
@@ -110,6 +112,472 @@ def make_mcpaths_for_upload(proj_local_path, paths):
             _paths.append(path)
     return _paths
 
+def upload_file(proj, local_abspath, mcpath, working_dir, parent_id=None, limit=50, remotetree=None):
+    """Upload one file
+
+    Notes:
+        - Creates parent and intermediate directories as necessary
+        - Does not allow filename change, with message:
+            `--upload-as file name changed (skipping)`
+        - Will not upload files over the size `limit`, with message:
+            `file too large (size={1}MB, limit={0}MB) (not uploaded)`
+
+    Args:
+        proj (:class:`materials_commons.api.Project`): Project instance with
+            proj.local_path indicating local project location
+        local_abspath (str): Local absolute path to file to be uploaded
+        mcpath (dict): Path where the file will be uploaded. Currently, the basename must be
+            the same as local_abspath.
+        parent_id (str): ID of parent directory where the file will be uploaded. May be None, in
+            which case the directory os.path.dirname(mcpath) will be created.
+        working_dir (str): Current working directory, used for making relative
+            paths and printing messages.
+        limit (int): The limit in MB on the size of the file allowed to be uploaded.
+        remotetree (RemoteTree): A RemoteTree object stores remote file and
+            directory information to minimize API calls and data transfer.
+            Optional, will be used and updated if provided.
+
+    Returns:
+        (file_result, error_result):
+
+        file_result: file
+            Successfully uploaded files
+
+        error_results: str
+            Error messages for unsuccessful file uploads
+    """
+    file_result = None
+    error_result = None
+
+    printpath = os.path.relpath(local_abspath, start=working_dir)
+
+    # for upload_as, if destination basename differs from source, we do a rename
+    if os.path.basename(local_abspath) != os.path.basename(mcpath):
+        msg = printpath + ": --upload-as file name changed (skipping)"
+        print(msg)
+        extended_msg = "The --upload-as option may be used to upload a directory with a different "\
+            "name, or upload a file to a different directory. To change a file name, first "\
+            "upload, then mv."
+        print(extended_msg)
+        return (file_result, msg)
+
+    # if remote parent does not exist / not known -> mkdir
+    #   -> raises exception for failing to mkdir
+    if parent_id is None:
+        parent_mcpath = os.path.dirname(mcpath)
+        parent = mkdir(proj, parent_mcpath, remote_only=True, create_intermediates=True,
+                       remotetree=remotetree)
+        if parent.path != parent_mcpath:
+            msg = "Upload error: "
+            msg += " expected parent.path=" + os.path.dirname(parent_mcpath)
+            msg += " got parent.path=" + parent.path
+            print(msg)
+            return (file_result, msg)
+        parent_id = parent.id
+
+    # if file size > limit -> error
+    file_size_mb = os.path.getsize(local_abspath) >> 20
+    if file_size_mb > limit:
+        msg = printpath + ": file too large (size={1}MB, limit={0}MB) (not uploaded)".\
+            format(limit, file_size_mb)
+        print(msg)
+        return (file_result, msg)
+
+    # else: -> upload, return results
+    file_result = proj.remote.upload_file(proj.id, parent_id, local_abspath)
+    if not filefuncs.isfile(file_result):
+        msg = printpath + ": unknown error (not uploaded)"
+        print(msg)
+        return (file_result, msg)
+
+    printdestpath = os.path.relpath(
+        filefuncs.make_local_abspath(proj.local_path, mcpath),
+        start=working_dir)
+
+    if printpath == printdestpath:
+        print("uploaded:", printpath)
+    else:
+        print("uploaded:", printpath, "as", printdestpath)
+    return (file_result, error_result)
+
+def check_and_upload_file(proj, local_abspath, working_dir, limit=50, no_compare=False,
+    upload_as=None, localtree=None, remotetree=None, parent_id=None, child_data=None):
+    """Checks validity and upload one file
+
+    Notes:
+        - Checks that target is not a directory, with message:
+            `remote is directory (skipping)`
+        - Depending on options given, checks if existing remote file is equivalent, with message:
+            `local is equivalent to remote (skipping)"
+        - Options allow providing the remote parent directory ID, or parent directory `child_data`
+          `treecompare` output to reduce the number of API calls
+
+    Args:
+        proj (:class:`materials_commons.api.Project`): Project instance with
+            proj.local_path indicating local project location
+        local_abspath (str): Local absolute path to file to be uploaded
+        working_dir (str): Current working directory, used for making relative
+            paths and printing messages.
+        limit (int): The limit in MB on the size of the file allowed to be uploaded.
+        no_compare (bool): By default, this function checks local and remote
+            file checksum to avoid downloading files that already exist. If
+            no_compare is True, this check is skipped and all specified files
+            are downloaded, even if an equivalent file already exists locally.
+        upload_as (str): Materials Commons style path specifying where to
+            upload. Requires `len(paths) == 1`.
+        localtree (LocalTree): A LocalTree object stores local file checksums
+            to avoid unnecessary hashing. Optional, will be used and updated if
+            provided and checksum == True.
+        remotetree (RemoteTree): A RemoteTree object stores remote file and
+            directory information to minimize API calls and data transfer.
+            Optional, will be used and updated if provided.
+        parent_id (str): ID of parent directory where the file will be uploaded. May be None, in
+            which case the directory will be created if necessary.
+        child_data (dict or None): If available, the `child_data` output from `treecompare`. If
+            this file is being uploaded as part of a directory upload, the `child_data` comparing
+            the local and remote files might already be available.
+
+    Returns:
+        (file_result, error_result):
+
+        file_result: file
+            Successfully uploaded files
+
+        error_results: str
+            Error messages for unsuccessful file uploads
+    """
+    file_result = None
+    error_result = None
+
+    printpath = os.path.relpath(local_abspath, start=working_dir)
+
+    # get checksum info to compare local and remote files?
+    checksum = True
+    if no_compare:
+        checksum = False
+
+    # Materials Commons style path, where to upload
+    mcpath = None
+    if upload_as is None:
+        mcpath = filefuncs.make_mcpath(proj.local_path, local_abspath)
+    else:
+        mcpath = upload_as
+        checksum = False
+
+    if child_data is not None and mcpath in child_data:
+
+        # if remote exists and is a directory -> error, continue
+        if child_data[mcpath]['r_type'] == 'directory':
+            msg = printpath + ": remote is directory (skipping)"
+            print(msg)
+            error_resuts[local_abspath] = msg
+            return (file_results, error_results)
+
+        # if local and remote files exists, and checksums known and match -> skip, continue
+        if 'eq' in child_data[mcpath] and child_data[mcpath]['eq'] is True:
+            msg = printpath + ": local is equivalent to remote (skipping)"
+            print(msg)
+            error_resuts[child_local_abspath] = msg
+            return (file_results, error_results)
+
+        # else, get parent_id if not already known (might be None)
+        if parent_id is None:
+            parent_id = child_data[mcpath]['parent_id']
+
+    else:
+
+        files_data, dirs_data, child_data, non_existing = treecompare(
+            proj, [mcpath], checksum=checksum, localtree=localtree,
+            remotetree=remotetree, get_children=False)
+
+        # if remote exists and is a directory -> error, continue
+        if mcpath in dirs_data and dirs_data[mcpath]['r_type'] == 'directory':
+            msg = printpath + ": remote is directory (skipping)"
+            print(msg)
+            return (file_result, msg)
+
+        # if remote file exists
+        if mcpath in files_data:
+            file_data = files_data[mcpath]
+
+            # if checksums known and match -> skip, continue
+            if 'eq' in file_data and file_data['eq'] is True:
+                msg = printpath + ": local is equivalent to remote (skipping)"
+                print(msg)
+                return (file_result, msg)
+
+            # else, get parent_id if not already known (still might be None)
+            if parent_id is None:
+                parent_id = file_data['parent_id']
+
+    return upload_file(proj, local_abspath, mcpath, working_dir, parent_id=parent_id, limit=limit,
+        remotetree=remotetree)
+
+
+def filter_local_abspaths(proj_local_path, local_abspaths, working_dir):
+    """Filter local_abspaths, skipping .mc and those specified by .mcignore
+
+    Args:
+        proj_local_path (str): Path to project
+        local_abspaths (List of str): Local absolute paths to file or directories to be uploaded
+        working_dir (str): Current working directory, used for making relative
+            paths and printing messages.
+
+    Returns:
+        _local_abspaths: List of str
+            Filtered local absolute paths
+
+    """
+    ignore_parser = igittigitt.IgnoreParser()
+    ignore_parser.parse_rule_files(base_dir=proj_local_path, filename=".mcignore",
+        add_default_patterns=False)
+    _local_abspaths = []
+    for local_abspath in local_abspaths:
+        name = os.path.basename(local_abspath)
+        if name == ".mc":
+            continue
+        if ignore_parser.match(pathlib.Path(local_abspath)):
+            continue
+        _local_abspaths.append(local_abspath)
+    return _local_abspaths
+
+
+def check_and_upload_directory(proj, local_abspath, working_dir, limit=50,
+    no_compare=False, upload_as=None, localtree=None, remotetree=None, parent_id=None):
+    """Checks validity and uploads a directory and contents recursively
+
+    Notes:
+        - Checks that target is not a file, with message:
+            `remote is file (skipping)`
+        - Options allow providing the remote parent directory ID to reduce the number of API calls
+
+    Args:
+        proj (:class:`materials_commons.api.Project`): Project instance with
+            proj.local_path indicating local project location
+        local_abspath (str): Local absolute path to directory to be uploaded recursively
+        working_dir (str): Current working directory, used for making relative
+            paths and printing messages.
+        limit (int): The limit in MB on the size of the files allowed to be uploaded.
+        no_compare (bool): By default, this function checks local and remote
+            file checksum to avoid downloading files that already exist. If
+            no_compare is True, this check is skipped and all specified files
+            are downloaded, even if an equivalent file already exists locally.
+        upload_as (str or None): Materials Commons style path specifying where to
+            upload. If None, use the equivalent location within the project.
+        localtree (LocalTree): A LocalTree object stores local file checksums
+            to avoid unnecessary hashing. Optional, will be used and updated if
+            provided and checksum == True.
+        remotetree (RemoteTree): A RemoteTree object stores remote file and
+            directory information to minimize API calls and data transfer.
+            Optional, will be used and updated if provided.
+        parent_id (str): ID of parent directory where the file will be uploaded. May be None, in
+            which case the directory will be created if necessary.
+
+
+    Returns:
+        (file_results, error_results):
+
+        file_results: dict of path: file
+            Successfully uploaded files
+
+        error_results: dict of path: str
+            Error messages for unsuccessful or skipped uploads
+
+    """
+    file_results = {}
+    error_results = {}
+
+    printpath = os.path.relpath(local_abspath, start=working_dir)
+
+    if not os.path.isdir(local_abspath):
+        msg = printpath + ": not a directory (skipping)"
+        print(msg)
+        error_results[local_abspath] = msg
+        return (file_results, error_results)
+
+    # get checksum info to compare local and remote files?
+    checksum = True
+    if no_compare:
+        checksum = False
+
+    # Materials Commons style path, where to upload
+    mcpath = None
+    if upload_as is None:
+        mcpath = filefuncs.make_mcpath(proj.local_path, local_abspath)
+    else:
+        mcpath = upload_as
+        checksum = False
+
+    # check remote & children
+    files_data, dirs_data, child_data, non_existing = treecompare(
+        proj, [mcpath], checksum=checksum, localtree=localtree,
+        remotetree=remotetree, get_children=True)
+
+    # if remote exists and is a file -> error, continue
+    if mcpath in files_data and files_data[mcpath]['r_type'] == 'file':
+        msg = printpath + ": remote is file (skipping)"
+        print(msg)
+        error_results[local_abspath] = msg
+        return (file_results, error_results)
+
+    id = None
+    # if remote directory exists, get id
+    if mcpath in dirs_data and dirs_data[mcpath]['r_type'] == 'directory':
+        id = dirs_data[mcpath]['id']
+
+    # if remote directory does not exist -> create directory
+    if id is None:
+        dir = mkdir(proj, mcpath, remote_only=True, create_intermediates=True,
+                    remotetree=remotetree, parent_id=parent_id)
+        if dir is None:
+            msg = printpath + ": error creating directory (skipping)"
+            print(msg)
+            error_results[local_abspath] = msg
+            return (file_results, error_results)
+        id = dir.id
+
+    # collect children
+    child_local_abspaths = []
+    for name in os.listdir(local_abspath):
+        child_local_abspaths.append(os.path.join(local_abspath, name))
+
+    # filter out .mc and those specified by .mcignore
+    child_local_abspaths = filter_local_abspaths(proj.local_path, child_local_abspaths, working_dir)
+
+    # upload children
+    for child_local_abspath in child_local_abspaths:
+        child_upload_as = None
+        if upload_as is not None:
+            child_upload_as = os.path.join(mcpath, os.path.basename(child_local_abspath))
+
+        # for each child file: do check_and_upload_file
+        if os.path.isfile(child_local_abspath):
+
+            file_result, error_msg = check_and_upload_file(proj, child_local_abspath, working_dir,
+                limit=50, no_compare=no_compare, upload_as=child_upload_as, localtree=localtree,
+                remotetree=remotetree, parent_id=id, child_data=child_data)
+
+            if file_result is not None:
+                file_results[child_local_abspath] = file_result
+            if error_msg is not None:
+                error_results[child_local_abspath] = error_msg
+
+        # for each child directory: do recursive check_and_upload_directory
+        elif os.path.isdir(child_local_abspath):
+
+            file_results_tmp, error_results_tmp = \
+                check_and_upload_directory(proj, child_local_abspath, working_dir, limit=limit,
+                    no_compare=no_compare, upload_as=child_upload_as, localtree=localtree,
+                    remotetree=remotetree, parent_id=id)
+
+            for tpath in file_results_tmp:
+                file_results[tpath] = file_results_tmp[tpath]
+            for tpath in error_results_tmp:
+                error_results[tpath] = error_results_tmp[tpath]
+
+        # local child does not actually exist, could happen in race conditions
+        else:
+            pass
+
+    return (file_results, error_results)
+
+
+def standard_upload_v2(proj, paths, working_dir, recursive=False, limit=50, no_compare=False, upload_as=None, localtree=None, remotetree=None):
+    """Upload files and directories to Materials Commons
+
+    Args:
+        proj (:class:`materials_commons.api.Project`): Project instance with
+            proj.local_path indicating local project location
+        paths (List of str):
+            List of paths to upload. Expects local absolute paths, or paths
+            relative to working_dir.
+        working_dir (str): Current working directory, used for finding relative
+            paths and printing messages.
+        recursive (bool): If True, remove directories recursively. Otherwise,
+            will not remove directories.
+        limit (int): The limit in MB on the size of the file allowed to be uploaded.
+        no_compare (bool): By default, this function checks local and remote
+            file checksum to avoid downloading files that already exist. If
+            no_compare is True, this check is skipped and all specified files
+            are downloaded, even if an equivalent file already exists locally.
+        upload_as (str): Materials Commons style path specifying where to
+            upload. Requires `len(paths) == 1`.
+        localtree (LocalTree): A LocalTree object stores local file checksums
+            to avoid unnecessary hashing. Optional, will be used and updated if
+            provided and checksum == True.
+        remotetree (RemoteTree): A RemoteTree object stores remote file and
+            directory information to minimize API calls and data transfer.
+            Optional, will be used and updated if provided.
+
+    Returns:
+        (file_results, error_results):
+
+        file_results: dict of path: file
+            Successfully uploaded files
+
+        error_results: dict of path: str
+            Error messages for unsuccessful file uploads
+
+    """
+    file_results = {}
+    error_results = {}
+
+    # upload_as only allowed with 1 input path
+    if upload_as is not None:
+        if len(paths) != 1:
+            msg = "Upload error: to 'upload as' only 1 input path is allowed"
+            raise cliexcept.MCCLIException(msg)
+
+    # check for non-existing paths, paths already uploaded, etc.
+    local_abspaths_to_upload = []
+
+    # convert input paths (absolute or relative to working_dir) to local_abspath
+    local_abspaths = clipaths_to_local_abspaths(proj.local_path, paths, working_dir)
+
+    # filter, skipping .mc, those specified by .mcignore
+    local_abspaths = filter_local_abspaths(proj.local_path, local_abspaths, working_dir)
+
+    for local_abspath in local_abspaths:
+        if os.path.isfile(local_abspath):
+
+            file_result, error_msg = check_and_upload_file(proj, local_abspath, working_dir,
+                limit=limit, no_compare=no_compare, upload_as=upload_as, localtree=localtree,
+                remotetree=remotetree)
+
+            if file_result is not None:
+                file_results[local_abspath] = file_result
+            if error_msg is not None:
+                error_results[local_abspath] = error_msg
+
+        elif os.path.isdir(local_abspath):
+
+            printpath = os.path.relpath(local_abspath, start=working_dir)
+            if not recursive:
+                msg = printpath + ": is a directory (not uploaded)"
+                print(msg)
+                error_results[local_abspath] = msg
+                continue
+
+            file_results_tmp, error_results_tmp = \
+                check_and_upload_directory(proj, local_abspath, working_dir, limit=limit,
+                    no_compare=no_compare, upload_as=upload_as, localtree=localtree,
+                    remotetree=remotetree)
+
+            for tpath in file_results_tmp:
+                file_results[tpath] = file_results_tmp[tpath]
+            for tpath in error_results_tmp:
+                error_results[tpath] = error_results_tmp[tpath]
+
+        else:
+            # should not happen, except maybe in race conditions
+            msg = "Upload error: path does not exist"
+            msg += " path=" + local_abspath
+            raise cliexcept.MCCLIException(msg)
+
+    return (file_results, error_results)
+
+
+
 def standard_upload(proj, paths, working_dir, recursive=False, limit=50, no_compare=False, upload_as=None, localtree=None, remotetree=None):
     """Upload files to Materials Commons
 
@@ -181,7 +649,8 @@ def standard_upload(proj, paths, working_dir, recursive=False, limit=50, no_comp
         mcpaths = make_mcpaths_for_upload(proj.local_path, mcpaths)
 
         files_data, dirs_data, child_data, non_existing = treecompare(
-            proj, mcpaths, checksum=checksum, localtree=localtree, remotetree=remotetree)
+            proj, mcpaths, checksum=checksum, localtree=localtree,
+            remotetree=remotetree, get_children=False)
 
         # check for files that are already uploaded or do not exist
         for mcpath in mcpaths:
@@ -334,7 +803,7 @@ class _TreeCompare(object):
     def _update_local_via_tree(self, path):
         # update self.localtree for path (and if it is a directory, update the children)
         self.localtree.connect()
-        self.localtree.update(path, get_children=True)
+        self.localtree.update(path, get_children=self.get_children)
         self._update_data_from_tree(path, self.localtree, 'l')
         self.localtree.close()
 
@@ -366,6 +835,8 @@ class _TreeCompare(object):
             self._update_local_record(self.dirs_data[path], local_abspath, checksum=checksum)
 
             # children
+            if not self.get_children:
+                return
             if path not in self.child_data:
                 self.child_data[path] = {}
             for child in os.listdir(local_abspath):
@@ -383,7 +854,7 @@ class _TreeCompare(object):
     def _update_remote_via_tree(self, path):
         # update self.remotetree for path (and if it is a directory, update the children)
         self.remotetree.connect()
-        self.remotetree.update(path, get_children=True)
+        self.remotetree.update(path, get_children=self.get_children)
         self._update_data_from_tree(path, self.remotetree, 'r')
         self.remotetree.close()
 
@@ -404,6 +875,8 @@ class _TreeCompare(object):
         """Get remote file or directory (and children) information"""
         obj = filefuncs.get_by_path_if_exists(self.proj.remote, self.proj.id, path)
         if obj is not None:
+            if obj._data.get('deleted_at', False) is not None:
+                return
             if filefuncs.isfile(obj):
                 if path not in self.files_data:
                     self.files_data[path] = copy.deepcopy(self.record_init)
@@ -415,6 +888,8 @@ class _TreeCompare(object):
                 self._update_remote_record(self.dirs_data[path], obj)
 
                 # children
+                if not self.get_children:
+                    return
                 if path not in self.child_data:
                     self.child_data[path] = {}
                 for child in self.proj.remote.list_directory(self.proj.id, obj.id):
@@ -458,6 +933,8 @@ class _TreeCompare(object):
             self._update_record_from_tree(self.dirs_data[path], file_or_dir, prefix)
 
             # children
+            if not self.get_children:
+                return
             if path not in self.child_data:
                 self.child_data[path] = {}
             results = tree.select_by_parent_path(path)
@@ -476,7 +953,7 @@ class _TreeCompare(object):
 
         return
 
-    def __call__(self, paths, checksum=False):
+    def __call__(self, paths, checksum=False, get_children=True):
         """Compare local and remote tree differences for paths
 
         paths: List of str
@@ -486,6 +963,9 @@ class _TreeCompare(object):
         checksum: bool (optional, default=False)
             If True, calculate MD5 checksum of local files and compare to remote. If localtree was
             provided to the constructor, the checksums will be saved in the localtree database.
+
+        get_children: bool (optional, default=True)
+            If True, compare children of directories.
 
         Returns
         -------
@@ -498,7 +978,8 @@ class _TreeCompare(object):
                 Contains directory comparisons
 
             child_data: dict of dirpath: childpath: file or directory comparison
-                Contains directory children comparisons
+                Contains directory children comparisons, if
+                `get_children==True`, else empty dict.
 
             not_existing: list of str
                 Paths that do not exist locally or remotely
@@ -535,6 +1016,7 @@ class _TreeCompare(object):
         self.files_data = {}
         self.dirs_data = {}
         self.child_data = {}
+        self.get_children = get_children
 
         for path in paths:
             if self.localtree and checksum:
@@ -564,7 +1046,8 @@ class _TreeCompare(object):
         return (self.files_data, self.dirs_data, self.child_data, not_existing)
 
 
-def treecompare(proj, paths, checksum=False, localtree=None, remotetree=None):
+def treecompare(proj, paths, checksum=False, localtree=None, remotetree=None,
+                get_children=True):
     """
     Compare files and directories on the local and remote trees.
 
@@ -588,6 +1071,10 @@ def treecompare(proj, paths, checksum=False, localtree=None, remotetree=None):
         A RemoteTree object stores remote file and directory information to minimize API calls and
         data transfer. Will be used and updated if provided.
 
+    get_children: bool (optional, default=True)
+        If True, compare children of directories.
+
+
     Returns
     -------
         (files_data, dirs_data, child_data, not_existing):
@@ -599,7 +1086,8 @@ def treecompare(proj, paths, checksum=False, localtree=None, remotetree=None):
             Contains directory comparisons
 
         child_data: dict of dirpath: childpath: file or directory comparison
-            Contains directory children comparisons
+            Contains directory children comparisons, if
+            `get_children==True`, else empty dict.
 
         not_existing: list of str
             Paths that do not exist locally or remotely
@@ -634,7 +1122,7 @@ def treecompare(proj, paths, checksum=False, localtree=None, remotetree=None):
 
     """
     _treecomparer = _TreeCompare(proj, localtree=localtree, remotetree=remotetree)
-    return _treecomparer(paths, checksum=checksum)
+    return _treecomparer(paths, checksum=checksum, get_children=get_children)
 
 def get_types(path, files_data, dirs_data):
     """Use treecompare output to get local and remote types
@@ -663,7 +1151,15 @@ def get_types(path, files_data, dirs_data):
     return (l_type, r_type)
 
 def is_type_mismatch(path, files_data, dirs_data):
-    """Check treecompare filds_data and dirs_data output to check for type mismatch"""
+    """Check treecompare filds_data and dirs_data output to check for type mismatch
+
+    Notes:
+        - Not existing is not a type mismatch
+
+    Returns:
+        _is_type_mismatch (bool):
+            This is True if l_type and r_type are different and not None, otherwise it is False.
+    """
     l_type, r_type = get_types(path, files_data, dirs_data)
 
     if l_type and r_type and l_type != r_type:
@@ -671,7 +1167,15 @@ def is_type_mismatch(path, files_data, dirs_data):
     return False
 
 def is_child_data_mismatch(child_data):
-    """Check treecompare child_data file comparison for type mismatch"""
+    """Check treecompare child_data file comparison for type mismatch
+
+    Notes:
+        - Not existing is not a type mismatch
+
+    Returns:
+        _is_type_mismatch (bool):
+            This is True if l_type and r_type are different and not None, otherwise it is False.
+    """
     if child_data['l_type'] and child_data['r_type'] and child_data['l_type'] != child_data['r_type']:
         return True
     return False
@@ -716,6 +1220,10 @@ class _Mover(object):
         if name is None:
             name = os.path.basename(path)
         src = filefuncs.make_local_abspath(self.proj.local_path, path)
+        if not os.path.exists(src):
+            # printpath = os.path.relpath(src)
+            # print(printpath + ": does not exist (skipping)")
+            return
         dest = filefuncs.make_local_abspath(self.proj.local_path, os.path.join(to_directory_path, name))
         shutil.move(src, dest)
 
@@ -796,6 +1304,7 @@ class _Mover(object):
             return False
 
         # if not remote_only, check that local and remote types match
+        # - Note, not existing is not a type mismatch
         if not self.remote_only:
             if is_type_mismatch(path, self.files_data, self.dirs_data):
                 print(printpath + ": local and remote types do not match")
@@ -1143,7 +1652,8 @@ def remove(proj, paths, recursive=False, no_compare=False, remote_only=False, lo
         _remover(p)
 
 
-def mkdir(proj, path, remote_only=False, create_intermediates=False, remotetree=None):
+def mkdir(proj, path, remote_only=False, create_intermediates=False, remotetree=None,
+          parent_id=None):
     """Make directories
 
     Arguments
@@ -1164,6 +1674,9 @@ def mkdir(proj, path, remote_only=False, create_intermediates=False, remotetree=
     remotetree: RemoteTree object (optional, default=None)
         A RemoteTree object stores remote file and directory information to minimize API calls and
         data transfer. Will be used and updated if provided.
+
+    parent_id (str): ID of parent directory where the directory should be created, if already
+        known. May be None, in which case the parent directory will be found using `path`.
 
     Returns
     -------
@@ -1189,6 +1702,13 @@ def mkdir(proj, path, remote_only=False, create_intermediates=False, remotetree=
     if not remote_only:
         if os.path.isfile(local_abspath):
             raise cliexcept.MCCLIException(path + ": is a local file")
+
+    if parent_id is not None:
+        result = proj.remote.create_directory(proj.id, os.path.basename(path), parent_id)
+        if not remote_only:
+            clifuncs.mkdir_if(local_abspath)
+        return result
+
     result = filefuncs.get_by_path_if_exists(proj.remote, proj.id, path)
     if filefuncs.isdir(result):
         if not remote_only:

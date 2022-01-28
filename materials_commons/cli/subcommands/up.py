@@ -74,8 +74,15 @@ def up_subcommand(argv, working_dir):
 
     if args.globus:
 
-        mcpaths = treefuncs.clipaths_to_mcpaths(proj.local_path, args.paths,
-                                                working_dir)
+        # convert input paths (absolute or relative to working_dir) to local_abspath
+        local_abspaths = treefuncs.clipaths_to_local_abspaths(
+            proj.local_path, args.paths, working_dir)
+
+        # filter, skipping .mc, those specified by .mcignore
+        local_abspaths = treefuncs.filter_local_abspaths(
+            proj.local_path, local_abspaths, working_dir)
+
+        mcpaths = treefuncs.clipaths_to_mcpaths(proj.local_path, local_abspaths, working_dir)
 
         all_uploads = {upload.id:upload for upload in proj.remote.get_all_globus_upload_requests(proj.id)}
 
@@ -104,7 +111,8 @@ def up_subcommand(argv, working_dir):
 
         globus_ops = cliglobus.GlobusOperations()
         task_id = globus_ops.upload_v0(proj, mcpaths, upload, working_dir,
-                                       recursive=args.recursive, label=label)
+                                       recursive=args.recursive, no_compare=args.no_compare,
+                                       label=label)
 
         if task_id:
             print("Globus transfer task initiated.")
@@ -119,7 +127,7 @@ def up_subcommand(argv, working_dir):
         if not args.no_compare:
             localtree = LocalTree(proj.local_path)
 
-        treefuncs.standard_upload(proj, args.paths, working_dir,
+        treefuncs.standard_upload_v2(proj, args.paths, working_dir,
                                   recursive=args.recursive, limit=args.limit[0],
                                   no_compare=args.no_compare,
                                   upload_as=upload_as, localtree=localtree,

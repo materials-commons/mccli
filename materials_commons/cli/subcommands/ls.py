@@ -1,5 +1,6 @@
 import argparse
 import copy
+import json
 import os
 import sys
 import time
@@ -119,9 +120,11 @@ def _ls_print(proj, data, refpath=None, printjson=False, checksum=False, checkds
         headers += ['selected', 'selected_by']
 
     if printjson:
+        output = []
         for path, record in data.items():
             if record['r_obj']:
-                print(record['r_obj'].input_data)
+                output.append(record['r_obj']._data)
+        print(json.dumps(output))
     else:
         path_data = _format_path_data(proj, data, columns, refpath=refpath, checksum=checksum)
         if len(path_data):

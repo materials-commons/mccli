@@ -300,7 +300,7 @@ def down_subcommand(argv, working_dir):
                 + " not ready for downloading. Materials Commons is still preparing the project"
                 + " files for download. For large projects this may take some time.")
             print("Use `mc globus download` to check when it is ready and try again.")
-            raise cliexcept.MCCLIException("Invalid download request")
+            return
 
         print("Download is ready.")
 
@@ -310,9 +310,8 @@ def down_subcommand(argv, working_dir):
 
         globus_ops = cliglobus.GlobusOperations()
         task_id = globus_ops.download_v0(proj, paths, download, working_dir,
-                                         recursive=args.recursive, label=label,
-                                         localtree=localtree,
-                                         remotetree=remotetree,
+                                         recursive=args.recursive, label=label, localtree=localtree,
+                                         remotetree=remotetree, no_compare=args.no_compare,
                                          force=args.force)
 
         if task_id:

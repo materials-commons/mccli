@@ -202,31 +202,34 @@ class GlobusOperations(object):
         return
 
 
-    def upload_v0(self, proj, paths, upload, working_dir, recursive=False,
+    def upload_v0(self, proj, paths, upload, working_dir, recursive=False, no_compare=False,
                   label=None, localtree=None, remotetree=None):
         """Upload files and directories to project
 
         Arguments:
             proj: Project
-            paths: list of str, Materials Commons paths (include project directory)
+            paths (List of str): Materials Commons paths (include project directory) to upload
             upload: mcapi.GlobusUpload, Globus upload request
             working_dir (str): Current working directory, used for finding
                 relative paths and printing messages.
             recursive: bool, If True, upload directories recursively
+            no_compare (bool): If False (default), compare checksum to skip overwriting equivalent
+                files. If True, transfer without checking.
             label: str, Globus transfer label to make finding tasks simpler
 
         Returns:
             None or task_id: str, transfer task id. Returns nothing to transfer.
         """
-        paths = treefuncs.make_mcpaths_for_upload(proj.local_path, paths)
-
         if not len(paths):
             return None
 
         files_data, dirs_data, child_data, non_existing = treefuncs.treecompare(proj, paths, checksum=True, localtree=localtree, remotetree=remotetree)
 
         # https://globus-sdk-python.readthedocs.io/en/stable/clients/transfer/#globus_sdk.TransferData
-        tdata = globus_sdk.TransferData(self.tc, self.local_endpoint_id, upload.globus_endpoint_id, label=label)
+        sync_level = "checksum"
+        if no_compare is True:
+            sync_level = None
+        tdata = globus_sdk.TransferData(self.tc, self.local_endpoint_id, upload.globus_endpoint_id, label=label, sync_level=sync_level)
 
         # add items
         n_items = 0
@@ -270,7 +273,7 @@ class GlobusOperations(object):
 
         return task_id
 
-    def download_v0(self, proj, paths, download, working_dir, recursive=False,
+    def download_v0(self, proj, paths, download, working_dir, recursive=False, no_compare=False,
                     label=None, localtree=None, remotetree=None, force=False):
         """Download files and directories from project
 
@@ -282,6 +285,8 @@ class GlobusOperations(object):
             working_dir (str): Current working directory, used for finding
                 relative paths and printing messages.
             recursive: bool, If True, download directories recursively
+            no_compare (bool): If False (default), compare checksum to skip overwriting equivalent
+                files. If True, transfer without checking.
             label: str, Globus transfer label to make finding tasks simpler
             force: bool, If True force download even if local file exists
 
@@ -295,7 +300,10 @@ class GlobusOperations(object):
         files_data, dirs_data, child_data, non_existing = treefuncs.treecompare(proj, paths, checksum=True, localtree=localtree, remotetree=remotetree)
 
         # https://globus-sdk-python.readthedocs.io/en/stable/clients/transfer/#globus_sdk.TransferData
-        tdata = globus_sdk.TransferData(self.tc, download.globus_endpoint_id, self.local_endpoint_id, label=label)
+        sync_level = "checksum"
+        if no_compare is True:
+            sync_level = None
+        tdata = globus_sdk.TransferData(self.tc, download.globus_endpoint_id, self.local_endpoint_id, label=label, sync_level=sync_level)
 
         # add items
         n_items = 0
