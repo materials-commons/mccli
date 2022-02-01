@@ -112,7 +112,7 @@ def make_mcpaths_for_upload(proj_local_path, paths):
             _paths.append(path)
     return _paths
 
-def upload_file(proj, local_abspath, mcpath, working_dir, parent_id=None, limit=50, remotetree=None):
+def upload_file(proj, local_abspath, mcpath, working_dir, parent_id=None, limit=50, remotetree=None, update_remotetree=True):
     """Upload one file
 
     Notes:
@@ -128,14 +128,16 @@ def upload_file(proj, local_abspath, mcpath, working_dir, parent_id=None, limit=
         local_abspath (str): Local absolute path to file to be uploaded
         mcpath (dict): Path where the file will be uploaded. Currently, the basename must be
             the same as local_abspath.
-        parent_id (str): ID of parent directory where the file will be uploaded. May be None, in
-            which case the directory os.path.dirname(mcpath) will be created.
+        parent_id (str): ID of parent directory where the file will be uploaded. May be
+            None, in which case the directory os.path.dirname(mcpath) will be created.
         working_dir (str): Current working directory, used for making relative
             paths and printing messages.
         limit (int): The limit in MB on the size of the file allowed to be uploaded.
         remotetree (RemoteTree): A RemoteTree object stores remote file and
             directory information to minimize API calls and data transfer.
             Optional, will be used and updated if provided.
+        update_remotetree (bool): Set to False to skip updating remotetree for the uploaded
+            file. Used when updating via parent directory is preferrable.
 
     Returns:
         (file_result, error_result):
@@ -190,6 +192,12 @@ def upload_file(proj, local_abspath, mcpath, working_dir, parent_id=None, limit=
         print(msg)
         return (file_result, msg)
 
+    if remotetree and update_remotetree and file_result:
+        print("upload_file remotetree.update")
+        remotetree.connect()
+        remotetree.update(mcpath, force=True, get_children=False)
+        remotetree.close()
+
     printdestpath = os.path.relpath(
         filefuncs.make_local_abspath(proj.local_path, mcpath),
         start=working_dir)
@@ -201,7 +209,8 @@ def upload_file(proj, local_abspath, mcpath, working_dir, parent_id=None, limit=
     return (file_result, error_result)
 
 def check_and_upload_file(proj, local_abspath, working_dir, limit=50, no_compare=False,
-    upload_as=None, localtree=None, remotetree=None, parent_id=None, child_data=None):
+    upload_as=None, localtree=None, remotetree=None, parent_id=None, child_data=None,
+    update_remotetree=True):
     """Checks validity and upload one file
 
     Notes:
@@ -231,11 +240,13 @@ def check_and_upload_file(proj, local_abspath, working_dir, limit=50, no_compare
         remotetree (RemoteTree): A RemoteTree object stores remote file and
             directory information to minimize API calls and data transfer.
             Optional, will be used and updated if provided.
-        parent_id (str): ID of parent directory where the file will be uploaded. May be None, in
-            which case the directory will be created if necessary.
-        child_data (dict or None): If available, the `child_data` output from `treecompare`. If
-            this file is being uploaded as part of a directory upload, the `child_data` comparing
-            the local and remote files might already be available.
+        parent_id (str): ID of parent directory where the file will be uploaded. May be
+            None, in which case the directory will be created if necessary.
+        child_data (dict or None): If available, the `child_data` output from `treecompare`.
+            If this file is being uploaded as part of a directory upload, the `child_data`
+            comparing the local and remote files might already be available.
+        update_remotetree (bool): Set to False to skip updating remotetree for the uploaded
+            file. Used when updating via parent directory is preferrable.
 
     Returns:
         (file_result, error_result):
@@ -310,8 +321,9 @@ def check_and_upload_file(proj, local_abspath, working_dir, limit=50, no_compare
             if parent_id is None:
                 parent_id = file_data['parent_id']
 
-    return upload_file(proj, local_abspath, mcpath, working_dir, parent_id=parent_id, limit=limit,
-        remotetree=remotetree)
+    return upload_file(proj, local_abspath, mcpath, working_dir, parent_id=parent_id,
+                       limit=limit, remotetree=remotetree,
+                       update_remotetree=update_remotetree)
 
 
 def filter_local_abspaths(proj_local_path, local_abspaths, working_dir):
@@ -370,8 +382,8 @@ def check_and_upload_directory(proj, local_abspath, working_dir, limit=50,
         remotetree (RemoteTree): A RemoteTree object stores remote file and
             directory information to minimize API calls and data transfer.
             Optional, will be used and updated if provided.
-        parent_id (str): ID of parent directory where the file will be uploaded. May be None, in
-            which case the directory will be created if necessary.
+        parent_id (str): ID of parent directory where the file will be uploaded. May be
+            None, in which case the directory will be created if necessary.
 
 
     Returns:
@@ -455,7 +467,7 @@ def check_and_upload_directory(proj, local_abspath, working_dir, limit=50,
 
             file_result, error_msg = check_and_upload_file(proj, child_local_abspath, working_dir,
                 limit=50, no_compare=no_compare, upload_as=child_upload_as, localtree=localtree,
-                remotetree=remotetree, parent_id=id, child_data=child_data)
+                remotetree=remotetree, parent_id=id, child_data=child_data, update_remotetree=True)
 
             if file_result is not None:
                 file_results[child_local_abspath] = file_result
@@ -1502,9 +1514,8 @@ class _Remover(object):
             print("(dry run) rm remote:", path)
             return True
         else:
-            print("rm remote:", path)
             try:
-                print("rm remote directory:", path)
+                print("rm remote:", path)
                 self.proj.remote.delete_directory(self.proj.id, record['id'])
                 return True
             except requests.exceptions.HTTPError as e:
@@ -1524,12 +1535,11 @@ class _Remover(object):
             print("(dry run) rm local:", local_abspath)
         else:
             print("rm local:", local_abspath)
-            os.rmdir(local_abspath)
+            shutil.rmtree(local_abspath)
 
     def _remove_directory(self, path, record, updatetree=False):
         """Remove a directory
 
-        - Before calling, all children ought to be deleted, but this will double check
         - Will remove local and remote as specified by constructor options.
         - Will always update local and remote tree once before deletion to check for children, and if updatetree==True will update again after deletion
         """
@@ -1537,20 +1547,6 @@ class _Remover(object):
             self._remove_remote_directory(path, record)
             if updatetree:
                 self._update_remote(path)
-            return
-
-        local_abspath = filefuncs.make_local_abspath(self.proj.local_path, path)
-        if self.localtree:
-            self._update_local(path)
-            self.localtree.connect()
-            local_children = self.localtree.select_by_parent_path(path)
-            self.localtree.close()
-
-        else:
-            local_children = os.listdir(local_abspath)
-
-        if len(local_children):
-            print(local_abspath + ": could not remove all local children (skipping)")
             return
 
         res = self._remove_remote_directory(path, record)
@@ -1601,14 +1597,6 @@ class _Remover(object):
             if not dirs_data[path]['r_type']:
                 print(path + ": does not exist on remote")
                 return
-
-            for childpath, record in child_data[path].items():
-                if record['r_type'] == 'file':
-                    self._remove_file(childpath, record)
-                elif record['r_type'] == 'directory':
-                    self.__call__(childpath)
-                else: # local child without matching remote
-                    print(childpath + ": does not exist on remote")
 
             self._remove_directory(path, dirs_data[path])
             self._update_remote(path)
@@ -1705,6 +1693,10 @@ def mkdir(proj, path, remote_only=False, create_intermediates=False, remotetree=
 
     if parent_id is not None:
         result = proj.remote.create_directory(proj.id, os.path.basename(path), parent_id)
+        if remotetree:
+            remotetree.connect()
+            remotetree.update(os.path.dirname(path), force=True)
+            remotetree.close()
         if not remote_only:
             clifuncs.mkdir_if(local_abspath)
         return result
@@ -1736,6 +1728,10 @@ def mkdir(proj, path, remote_only=False, create_intermediates=False, remotetree=
             if parent is None:
                 raise cliexcept.MCCLIException(parent_path + ": parent directory does not exist")
             result = proj.remote.create_directory(proj.id, os.path.basename(path), parent.id)
+            if remotetree:
+                remotetree.connect()
+                remotetree.update(os.path.dirname(path), force=True)
+                remotetree.close()
             if not remote_only:
                 clifuncs.mkdir_if(local_abspath)
             return result

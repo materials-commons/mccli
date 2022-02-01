@@ -9,10 +9,9 @@ import materials_commons.api as mcapi
 from materials_commons.cli.subcommands.clone import clone_subcommand
 from materials_commons.cli.subcommands.config import config_subcommand
 from materials_commons.cli.subcommands.dataset import DatasetSubcommand
-# from materials_commons.cli.subcommands.diff import diff_subcommand
 from materials_commons.cli.subcommands.down import down_subcommand
 from materials_commons.cli.subcommands.expt import ExptSubcommand
-# from materials_commons.cli.subcommands.fetch import fetch_subcommand
+from materials_commons.cli.subcommands.fetch import fetch_subcommand
 from materials_commons.cli.subcommands.init import init_subcommand
 from materials_commons.cli.subcommands.ls import ls_subcommand
 from materials_commons.cli.subcommands.mkdir import mkdir_subcommand
@@ -42,13 +41,11 @@ standard_usage = [
     {'name': 'mkdir', 'desc': 'Make directories', 'subcommand': mkdir_subcommand},
     {'name': 'rm', 'desc': 'Remove files and directories', 'subcommand': rm_subcommand},
     {'name': 'mv', 'desc': 'Move files', 'subcommand': mv_subcommand},
-    # {'name': 'diff', 'desc': 'Compare local and remote files', 'subcommand': diff_subcommand},
-    # {'name': 'fetch', 'desc': 'Remote data fetching and configuration', 'subcommand': fetch_subcommand},
+    {'name': 'fetch', 'desc': 'Remote data fetching and configuration', 'subcommand': fetch_subcommand},
     {'name': 'up', 'desc': 'Upload files', 'subcommand': up_subcommand},
     {'name': 'down', 'desc': 'Download files', 'subcommand': down_subcommand},
     {'name': 'globus', 'desc': 'Manage Globus uploads and downloads', 'subcommand': globus_subcommand},
     {'name': 'versions', 'desc': 'List file versions', 'subcommand': versions_subcommand},
-    # {'name': 'templates', 'desc': 'List process templates', 'subcommand': TemplatesSubcommand()},
     # {'name': 'proc', 'desc': 'List processes', 'subcommand': ProcSubcommand()},
     # {'name': 'samp', 'desc': 'List samples', 'subcommand': SampSubcommand()},
     {'name': 'config', 'desc': 'Configure `mc`', 'subcommand': config_subcommand}

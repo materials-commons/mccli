@@ -49,7 +49,7 @@ class TreeTable(SqlTable):
         - @staticmethod default_print_fmt(): list of tuple, see an example
         - @staticmethod treename(): str, tree label for printing ('remote', 'local')
         - @staticmethod tablename(): str, tree table name in sqlite database ('remotetree', 'localtree')
-        - needs_update(self, existing): bool, check if record needs updating
+        - needs_update(self, existing, get_children): bool, check if record needs updating
         - _check(self, path, get_children=True, parent_path=None): (dir, children), see an example
 
     Values:
@@ -81,7 +81,9 @@ class TreeTable(SqlTable):
             "size": ["integer"],
             "checksum": ["text"],
             "otype": ["text"],         # "file" or "directory"
-            "checktime": ["real"]     # last time the remote data was queried (s since epoch)
+            "checktime": ["real"],     # last time the remote data was queried (s since epoch)
+            "children_checktime": ["real"]    # last time the remote directory children data
+                                              # was queried (s since epoch)
         }
 
     def __init__(self, proj_local_path):
@@ -150,7 +152,7 @@ class TreeTable(SqlTable):
             pass
         elif len(res) == 1:
             existing = res[0]
-            if not force and not self.needs_update(existing):
+            if not force and not self.needs_update(existing, get_children):
                 return
         elif len(res) > 1:
             raise cliexcept.MCCLIException("Error in TableTree.update: >1 record for path")
@@ -324,6 +326,7 @@ class RemoteTree(TreeTable):
             ("otype", "otype", "<", 16, as_is),
             ("mtime", "mtime", "<", 24, format_time),
             ("checktime", "checktime", "<", 24, format_time),
+            ("children_checktime", "children_checktime", "<", 24, format_time),
             ("size", "size", "<", 8, humanize),
             ("checksum", "checksum", "<", 36, as_is),
             ("id", "id", "<", 36, as_is),
@@ -344,11 +347,23 @@ class RemoteTree(TreeTable):
         self.updatetime = updatetime
         self.proj = proj
 
-    def needs_update(self, existing):
+    def needs_update(self, existing, get_children):
         if not existing['checktime']:
             return True
-        if self.updatetime and existing['checktime'] > self.updatetime:
-            return False
+
+        if self.updatetime:
+            if existing['otype'] == 'directory':
+                if get_children is True:
+                    if existing['children_checktime'] is None:
+                        return True
+                    if existing['children_checktime'] > self.updatetime:
+                        return False
+                elif existing['checktime'] > self.updatetime:
+                    return False
+            elif existing['otype'] == 'file':
+                if existing['checktime'] > self.updatetime:
+                    return False
+
         return True
 
     def insert_non_existent(self, path, checktime=None, verbose=False):
@@ -372,7 +387,7 @@ class RemoteTree(TreeTable):
         self.insert_or_replace(record, verbose=verbose)
         return
 
-    def _make_record(self, file_or_dir, checktime):
+    def _make_record(self, file_or_dir, checktime, children_checktime=None):
         """Make a record dict from a mcapi.File instance
 
         Arguments:
@@ -380,6 +395,9 @@ class RemoteTree(TreeTable):
                 The object to be inserted.
             checktime: float
                 Time the API call to check the object was made (s since the epoch).
+            children_checktime: float or None
+                Time the API call to check the directory children was made (s since the
+                epoch).
 
         Returns:
             record: dict, suitable for database insertion
@@ -394,6 +412,8 @@ class RemoteTree(TreeTable):
                     record["parent_id"] = str(file_or_dir.directory_id)
             elif key == "checktime":
                 record["checktime"] = checktime
+            elif key == "children_checktime":
+                record["children_checktime"] = children_checktime
             elif key == "mtime":
                 record["mtime"] = clifuncs.epoch_time(file_or_dir.updated_at)
             elif key == "path":
@@ -444,6 +464,7 @@ class RemoteTree(TreeTable):
         if checktime is None:
             checktime = time.time()
         checktime = checktime
+        children_checktime = None
 
         if isinstance(path, str):
             try:
@@ -455,7 +476,10 @@ class RemoteTree(TreeTable):
                     return (None, children)
                 if file_or_dir_obj.path is None:
                     file_or_dir_obj.path = path
-                file_or_dir = self._make_record(file_or_dir_obj, checktime)
+                if get_children:
+                    children_checktime = checktime
+                file_or_dir = self._make_record(file_or_dir_obj, checktime,
+                                                children_checktime=children_checktime)
             except cliexcept.MCCLIException:
                 pass
         else:
@@ -499,6 +523,7 @@ class LocalTree(TreeTable):
             ("otype", "otype", "<", 16, as_is),
             ("mtime", "mtime", "<", 24, format_time),
             ("checktime", "checktime", "<", 24, format_time),
+            ("children_checktime", "children_checktime", "<", 24, format_time),
             ("size", "size", "<", 8, humanize),
             ("checksum", "checksum", "<", 36, as_is),
             ("id", "id", "<", 80, as_is),
@@ -517,7 +542,7 @@ class LocalTree(TreeTable):
         super(LocalTree, self).__init__(proj_local_path)
         self.proj_local_path = proj_local_path
 
-    def needs_update(self, existing):
+    def needs_update(self, existing, get_children):
         path = existing['path']
         if not os.path.exists(path):
             return True
@@ -529,7 +554,7 @@ class LocalTree(TreeTable):
         """Do not insert non-existent"""
         return
 
-    def _make_record(self, local_abspath, checktime):
+    def _make_record(self, local_abspath, checktime, children_checktime=None):
         """Make a record dict for a local path
 
         Arguments:
@@ -537,6 +562,9 @@ class LocalTree(TreeTable):
                 Absolute path to file or directory
             checktime: float
                 Time the API call to check the object was made (s since the epoch).
+            children_checktime: float or None
+                Time the API call to check the directory children was made (s since the
+                epoch).
 
         Returns:
             record: dict, suitable for database insertion
@@ -561,7 +589,7 @@ class LocalTree(TreeTable):
 
         record['mtime'] = os.path.getmtime(local_abspath)
         record['checktime'] = checktime
-
+        record['children_checktime'] = children_checktime
         return record
 
     def _check(self, path, checktime=None, get_children=True):
@@ -591,13 +619,17 @@ class LocalTree(TreeTable):
         if checktime is None:
             checktime = time.time()
         checktime = checktime
+        children_checktime = None
 
         if isinstance(local_abspath, str):
             try:
                 if not os.path.exists(local_abspath):
                     return (file_or_dir, children)
 
-                file_or_dir = self._make_record(local_abspath, checktime)
+                if get_children:
+                    children_checktime = checktime
+                file_or_dir = self._make_record(local_abspath, checktime,
+                    children_checktime=children_checktime)
             except cliexcept.MCCLIException:
                 pass
         else:
