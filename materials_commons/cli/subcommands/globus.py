@@ -59,9 +59,13 @@ class GlobusUploadTaskSubcommand(ListObjects):
         upload.project_id = upload._data["project_id"]
         status_code = upload._data["status"]
         if status_code == 0:
+            status_message = "Done"  # user should not see this
+        elif status_code == 1:
             status_message = "Finishing"  # processing uploaded files into project
         elif status_code == 2:
-            status_message = "Ready"    # user may upload
+            status_message = "Ready"  # user may upload
+        elif status_code == 3:
+            status_message = "Not started"  # user should not see this
         else:
             status_message = "Error - Unknown status code: " + str(status_code)
         upload.status_code = status_code
