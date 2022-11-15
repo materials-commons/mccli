@@ -288,7 +288,8 @@ class GlobusDownloadTaskSubcommand(ListObjects):
             headers=['', 'project_name', 'project_id', 'type', 'name', 'id', 'created', 'status'],
             deletable=True,
             creatable=True,
-            custom_selection_actions=['goto'],
+            custom_actions=['unset'],
+            custom_selection_actions=['goto', 'set'],
             request_confirmation_actions={
                 'goto': 'You want to goto these downloads in a web browser?'
             }
