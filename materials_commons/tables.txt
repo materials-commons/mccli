@@ -1,0 +1,24 @@
+create table if not exists files (
+    id integer primary key autoincrement,
+    remote_id integer,
+    path text,
+    lmtime real,
+    rmtime real,
+    lchecksum text,
+    rchecksum text,
+    type text, # d = directory, f = file
+    state text # c = conflict
+)
+
+create table if not exists conflicts (
+    id integer primary key autoincrement,
+    remote_id integer,
+    file_id integer,
+    path text,
+    CONSTRAINT `fk_conflicts_file` FOREIGN KEY (`files_id`) REFERENCES `files`(`id`)
+)
+
+create table if not exists added_files (
+    id integer primary key autoincrement,
+    path text
+)

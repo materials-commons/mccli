@@ -10,6 +10,7 @@ import materials_commons.cli.exceptions as cliexcept
 import materials_commons.cli.functions as clifuncs
 import materials_commons.cli.file_functions as filefuncs
 from materials_commons.cli.sqltable import SqlTable, sql_iter
+from materials_commons.cli.stat_functions import *
 
 
 # tree:

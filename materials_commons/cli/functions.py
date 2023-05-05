@@ -17,6 +17,7 @@ from materials_commons.cli.print_formatter import PrintFormatter, trunc
 from materials_commons.cli.sqltable import SqlTable
 from materials_commons.cli.user_config import Config, RemoteConfig
 
+
 # TODO: mcapi.Config, mcapi.Remote, mcapi.RemoteConfig
 
 def mkdir_if(path):
@@ -24,26 +25,31 @@ def mkdir_if(path):
     if not os.path.exists(path):
         os.mkdir(path)
 
+
 def remove_if(path):
     """Convenience function for removing a file, if it exists. """
     if os.path.exists(path):
         os.remove(path)
+
 
 def rmdir_if(path):
     """Convenience function for removing a directory, if it exists. """
     if os.path.exists(path):
         os.rmdir(path)
 
+
 def make_file(path, text):
     """Convenience function for writing "text" to a file at "path". """
     with open(path, 'w') as f:
         f.write(text)
+
 
 def remove_hidden_project_files(project_path):
     """Removes a local project's configuration files and directory"""
     remove_if(os.path.join(project_path, ".mc", "config.json"))
     remove_if(os.path.join(project_path, ".mc", "project.db"))
     rmdir_if(os.path.join(project_path, ".mc"))
+
 
 def getit(obj, name, default=None):
     """Returns the "name" attribute (or default value) whether "obj" is a dict or an object."""
@@ -52,9 +58,11 @@ def getit(obj, name, default=None):
     else:
         return getattr(obj, name, default)
 
+
 def as_is(value):
     """Returns value without any changes. A placeholder for when a function is needed."""
     return value
+
 
 def epoch_time(time_value):
     """Attempts to convert various time representations into s since the epoch
@@ -81,7 +89,7 @@ def epoch_time(time_value):
             | Else              | str(type(time_value))                                      |
             +-------------------+------------------------------------------------------------+
     """
-    if isinstance(time_value, str): # expect ISO 8601 str
+    if isinstance(time_value, str):  # expect ISO 8601 str
         return dateutil.parser.parse(time_value).timestamp()
     elif isinstance(time_value, (float, int)):
         return float(time_value)
@@ -93,6 +101,7 @@ def epoch_time(time_value):
         return None
     else:
         return str(type(time_value))
+
 
 def format_time(time_value, fmt="%Y %b %d %H:%M:%S"):
     """Attempts to put various time representations into specified format for printing
@@ -121,7 +130,7 @@ def format_time(time_value, fmt="%Y %b %d %H:%M:%S"):
             | Else              | str(type(time_value))                           |
             +-------------------+-------------------------------------------------+
     """
-    if isinstance(time_value, str): # expect ISO 8601 str
+    if isinstance(time_value, str):  # expect ISO 8601 str
         return dateutil.parser.parse(time_value).astimezone().strftime(fmt)
     elif isinstance(time_value, (float, int)):
         return time.strftime(fmt, time.localtime(time_value))
@@ -134,10 +143,12 @@ def format_time(time_value, fmt="%Y %b %d %H:%M:%S"):
     else:
         return str(type(time_value))
 
+
 def checksum(path):
     """Generate MD5 checksum for the file at "path" """
     with open(path, 'rb') as f:
         return hashlib.md5(f.read()).hexdigest()
+
 
 def random_name(n=3, max_letters=6, sep='-'):
     """Generates a random name for "n" words of max "max_letters" length, joined by "sep" """
@@ -150,10 +161,10 @@ def random_name(n=3, max_letters=6, sep='-'):
         word_site = "http://svnweb.freebsd.org/csrg/share/dict/words?view=co&content-type=text/plain"
         response = requests.get(word_site)
         WORDS = response.content.decode("utf-8").splitlines()
-    results=[]
-    count=0
-    while count<n:
-        word = WORDS[random.randint(0, len(WORDS)-1)]
+    results = []
+    count = 0
+    while count < n:
+        word = WORDS[random.randint(0, len(WORDS) - 1)]
         if word[0].isupper():
             continue
         if len(word) > max_letters:
@@ -180,6 +191,7 @@ def print_table(data, columns=[], headers=[], out=None):
     out.write(tabulate(tabulate_in, headers=headers))
     out.write('\n')
 
+
 def print_projects(projects, current=None):
     """Prints a list of projects, including a '*' indicating the project containing the current working directory
 
@@ -196,14 +208,15 @@ def print_projects(projects, current=None):
         data.append({
             'current': _is_current,
             'name': trunc(p.name, 40),
-            'owner': p.owner_id,    # TODO: owner email
+            'owner': p.owner_id,  # TODO: owner email
             'id': p.id,
             'modified_at': format_time(p.updated_at)
         })
 
-    columns=['current', 'name', 'owner', 'id', 'modified_at']
-    headers=['', 'name', 'owner', 'id', 'modified_at']
+    columns = ['current', 'name', 'owner', 'id', 'modified_at']
+    headers = ['', 'name', 'owner', 'id', 'modified_at']
     print_table(data, columns=columns, headers=headers)
+
 
 def print_remote_help():
     """Print a help message for cases when no remotes are configured"""
@@ -228,6 +241,7 @@ def add_remote_option(parser, help):
     """
     parser.add_argument('--remote', nargs=2, metavar=('EMAIL', 'URL'), help=help)
 
+
 def optional_remote_config(args):
     """Return remote configuration parameters specified by cli option "--remote", or the user's default remote
 
@@ -244,12 +258,14 @@ def optional_remote_config(args):
 
         remote_config = RemoteConfig(mcurl=url, email=email)
         if remote_config not in config.remotes:
-            raise MissingRemoteException("Could not find remote: {0} {1}".format(remote_config.email, remote_config.mcurl))
+            raise MissingRemoteException(
+                "Could not find remote: {0} {1}".format(remote_config.email, remote_config.mcurl))
         return config.remotes[config.remotes.index(remote_config)]
     else:
         if not config.default_remote.mcurl or not config.default_remote.mcapikey:
             raise NoDefaultRemoteException("Default remote not set")
         return config.default_remote
+
 
 def optional_remote(args, default_client=None):
     """Return remote specified by cli option "--remote", or the user's default remote
@@ -270,7 +286,8 @@ def optional_remote(args, default_client=None):
 
         remote_config = RemoteConfig(mcurl=url, email=email)
         if remote_config not in config.remotes:
-            raise MissingRemoteException("Could not find remote: {0} {1}".format(remote_config.email, remote_config.mcurl))
+            raise MissingRemoteException(
+                "Could not find remote: {0} {1}".format(remote_config.email, remote_config.mcurl))
 
         return config.remotes[config.remotes.index(remote_config)].make_client()
     else:
@@ -281,6 +298,7 @@ def optional_remote(args, default_client=None):
             return config.default_remote.make_client()
         else:
             return default_client
+
 
 def print_remotes(config_remotes, show_apikey=False):
     """Print a table with remote Materials Commons instance configuration parameters (email, url, apikey)
@@ -296,7 +314,7 @@ def print_remotes(config_remotes, show_apikey=False):
     default_remote = Config().default_remote
 
     from operator import itemgetter
-    #data = sorted([vars(rconfig) for rconfig in config_remotes], key=itemgetter('mcurl', 'email'))
+    # data = sorted([vars(rconfig) for rconfig in config_remotes], key=itemgetter('mcurl', 'email'))
 
     data = []
     for remote_config in config_remotes:
@@ -329,6 +347,7 @@ def print_remotes(config_remotes, show_apikey=False):
     for record in data:
         pformatter.print(record)
 
+
 def make_local_project_client(path):
     """Construct a client to access project data from the local project configuration
 
@@ -347,9 +366,12 @@ def make_local_project_client(path):
     if remote_config == config.default_remote:
         return config.default_remote.make_client()
     elif remote_config not in config.remotes:
-        raise MissingRemoteException("Could not make project Client, failed to find remote config: {0} {1}".format(remote_config.email, remote_config.mcurl))
+        raise MissingRemoteException(
+            "Could not make project Client, failed to find remote config: {0} {1}".format(remote_config.email,
+                                                                                          remote_config.mcurl))
     remote_config_with_apikey = config.remotes[config.remotes.index(remote_config)]
     return remote_config_with_apikey.make_client()
+
 
 class ProjectTable(SqlTable):
     """The ProjectTable creates a sqlite "project" table to cache some basic project data"""
@@ -375,7 +397,7 @@ class ProjectTable(SqlTable):
             "uuid": ["text"],
             "name": ["text"],
             "data": ["text"],
-            "checktime": ["real"]     # last time the remote data was queried (s since epoch)
+            "checktime": ["real"]  # last time the remote data was queried (s since epoch)
         }
 
     @staticmethod
@@ -399,6 +421,7 @@ class ProjectTable(SqlTable):
         """
         self.curs.execute("SELECT * FROM " + self.tablename())
         return self.curs.fetchall()
+
 
 def make_local_project(path, data=None):
     """Read local project config file and use to construct materials_commons.api.models.Project
@@ -435,7 +458,8 @@ def make_local_project(path, data=None):
         raise MCCLIException("Project db error: Found >1 project")
 
     client = make_local_project_client(path)
-    if not results or not project_config.remote_updatetime or results[0]['checktime'] < project_config.remote_updatetime:
+    if not results or not project_config.remote_updatetime or results[0][
+        'checktime'] < project_config.remote_updatetime:
         checktime = time.time()
         try:
             if data is None:
@@ -465,6 +489,7 @@ def make_local_project(path, data=None):
     proj.remote = client
     return proj
 
+
 def make_local_expt(proj):
     """Read local project configuration to construct "current experiment" object
 
@@ -485,6 +510,7 @@ def make_local_expt(proj):
 
     return None
 
+
 def humanize(file_size_bytes):
     """Get a nice string representation of file size
 
@@ -499,6 +525,7 @@ def humanize(file_size_bytes):
         _size = (file_size_bytes >> val)
         if _size < 1000 or key == "T":
             return str(_size) + key
+
 
 def request_confirmation(msg, force=False):
     """Request user confirmation
@@ -525,6 +552,7 @@ def request_confirmation(msg, force=False):
     else:
         return True
 
+
 def _proj_path(path):
     """Returns the path to a local project directory if it contains "path", else None"""
     # if not os.path.isdir(path):
@@ -541,15 +569,18 @@ def _proj_path(path):
             curr = os.path.dirname(curr)
     return None
 
+
 def project_path(path):
     """Returns the path to a local project directory if it contains "path", else None"""
     return _proj_path(path)
+
 
 def project_exists(path):
     """Returns True if a local project directory exists containing "path" """
     if _proj_path(path):
         return True
     return False
+
 
 def _mcdir(path):
     """Find project .mc directory path if it already exists, else return None"""
@@ -565,6 +596,7 @@ def _proj_config(path):
     if dirpath is None:
         return None
     return os.path.join(dirpath, '.mc', 'config.json')
+
 
 class ProjectConfig(object):
     """Facilitates reading and writing a JSON file storing local project configuration values
@@ -599,6 +631,7 @@ class ProjectConfig(object):
         globus_download_id (int or None): ID specifying which Globus download directory should be used for Globus downloads.
 
     """
+
     def __init__(self, project_path):
         """Construct by reading local project configuration file if it exists
 
@@ -619,9 +652,12 @@ class ProjectConfig(object):
             config = Config()
             matching = [remote_config for remote_config in config.remotes if remote_config.mcurl == data['remote_url']]
             if len(matching) == 0:
-                raise MissingRemoteException("Could not get project data. Failed to find remote with url: {0}".format(data['remote_url']))
+                raise MissingRemoteException(
+                    "Could not get project data. Failed to find remote with url: {0}".format(data['remote_url']))
             elif len(matching) > 1:
-                raise MultipleRemoteException("Could not get project data. Found multiple remote accounts for url: {0}".format(data['remote_url']))
+                raise MultipleRemoteException(
+                    "Could not get project data. Found multiple remote accounts for url: {0}".format(
+                        data['remote_url']))
             else:
                 data['remote'] = dict()
                 data['remote']['mcurl'] = matching[0].mcurl
@@ -660,6 +696,7 @@ class ProjectConfig(object):
             json.dump(self.to_dict(), f)
         return
 
+
 def read_project_config(path):
     """Read local project configuration
 
@@ -672,6 +709,7 @@ def read_project_config(path):
         return ProjectConfig(project_path(path))
     else:
         return None
+
 
 def clone_project(remote_config, project_id, parent_dest, name=None):
     """Clone a remote project to a local directory

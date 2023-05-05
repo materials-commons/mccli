@@ -5,11 +5,14 @@ import requests
 import materials_commons.api as mcapi
 from materials_commons.cli.exceptions import MCCLIException
 
+
 def isfile(file_or_dir):
     return isinstance(file_or_dir, mcapi.File) and file_or_dir.mime_type != "directory"
 
+
 def isdir(file_or_dir):
     return isinstance(file_or_dir, mcapi.File) and file_or_dir.mime_type == "directory"
+
 
 def get_parent_id(file_or_dir):
     """Get file_or_dir.directory_id, else raise"""
@@ -20,8 +23,10 @@ def get_parent_id(file_or_dir):
     else:
         raise MCCLIException("file_or_dir is missing attribute directory_id")
 
+
 def make_local_abspath(proj_local_path, mcpath):
     return os.path.normpath(os.path.join(proj_local_path, os.path.relpath(mcpath, "/")))
+
 
 def path_in_project(proj_local_path, local_abspath):
     """Check if local path is within the local project directory
@@ -34,6 +39,7 @@ def path_in_project(proj_local_path, local_abspath):
     Returns: True, if local_abspath is within the local project directory.
     """
     return os.path.commonpath([proj_local_path, local_abspath]) == os.path.normpath(proj_local_path)
+
 
 def make_mcpath(proj_local_path, local_abspath):
     """
@@ -60,6 +66,7 @@ def make_mcpath(proj_local_path, local_abspath):
         mcpath = os.path.join("/", relpath)
     return mcpath
 
+
 def get_by_path_if_exists(client, project_id, file_path):
     """
     Get file (or directory) by path in project, if it exists.
@@ -74,6 +81,7 @@ def get_by_path_if_exists(client, project_id, file_path):
         if e.response.status_code == 404:
             return None
         raise e
+
 
 def _check_file_selection_dirs(path, file_selection, orig_path=None):
     """Recursively checks if a path is included in a dataset file selection, and why"""
@@ -91,6 +99,7 @@ def _check_file_selection_dirs(path, file_selection, orig_path=None):
             return (False, None)
         else:
             return _check_file_selection_dirs(parent, file_selection, orig_path=orig_path)
+
 
 def check_file_selection(path, file_selection):
     """Check if a file or directory is selected in a dataset file selection, and why.
@@ -124,6 +133,7 @@ def check_file_selection(path, file_selection):
     else:
         result = _check_file_selection_dirs(path, file_selection, orig_path=path)
     return result
+
 
 def download_file_as_string(client, project_id, file_id):
     f = io.BytesIO()
