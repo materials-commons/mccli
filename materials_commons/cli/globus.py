@@ -19,7 +19,7 @@ def check_for_consent_required(client, target):
     return None
 
 
-def get_transfer_rt_or_login(scopes=TransferScopes.all):
+def get_transfer_rt_or_login(scopes=TransferScopes.all, reauth=False):
     """Get the Globus transfer refresh token, prompting for login if necessary
 
     If not yet configured, will prompt user to login and enter a code used to obtain the refresh
@@ -34,8 +34,9 @@ def get_transfer_rt_or_login(scopes=TransferScopes.all):
     config = Config()
 
     # return existing transfer_rt
-    if config.globus.transfer_rt:
-        return config.globus.transfer_rt
+    if not reauth:
+        if config.globus.transfer_rt:
+            return config.globus.transfer_rt
 
     # authenticate
 
@@ -251,7 +252,7 @@ class GlobusOperations(object):
         if consent_required_scopes:
             print("One or more of the endpoints requires consent in order to be used.\n"
                   "You must login a second time to grant consents.\n\n")
-            tr = get_transfer_rt_or_login(scopes=consent_required_scopes)
+            tr = get_transfer_rt_or_login(scopes=consent_required_scopes, reauth=True)
             self.tc = make_transfer_client(tr)
         tdata = globus_sdk.TransferData(self.tc, self.local_endpoint_id, upload.globus_endpoint_id, label=label, sync_level=sync_level)
 
