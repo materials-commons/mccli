@@ -99,7 +99,7 @@ Second, configure the client side to use Globus. There are two typical cases:
   - Find the Globus endpoint ID for the endpoint you will use. Endpoint UUIDs can be found on the `Globus endpoints web interface`_.
   - Configure ``mc`` to use the Globus endpoint ID: ::
 
-      mc globus --set-globus-endpoint-id <endpoint_id>
+      mc config --set-globus-endpoint-id <endpoint_id>
 
 
 Uploading files with Globus
