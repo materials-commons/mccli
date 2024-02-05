@@ -254,6 +254,7 @@ class GlobusOperations(object):
                   "You must login a second time to grant consents.\n\n")
             tr = get_transfer_rt_or_login(scopes=consent_required_scopes, reauth=True)
             self.tc = make_transfer_client(tr)
+
         tdata = globus_sdk.TransferData(self.tc, self.local_endpoint_id, upload.globus_endpoint_id, label=label, sync_level=sync_level)
 
         # add items
@@ -328,6 +329,22 @@ class GlobusOperations(object):
         sync_level = "checksum"
         if no_compare is True:
             sync_level = None
+
+        consent_required_scopes = []
+        consent_required = check_for_consent_required(self.tc, self.local_endpoint_id)
+        if consent_required is not None:
+            consent_required_scopes.extend(consent_required)
+
+        consent_required = check_for_consent_required(self.tc, upload.globus_endpoint_id)
+        if consent_required is not None:
+            consent_required_scopes.extend(consent_required)
+
+        if consent_required_scopes:
+            print("One or more of the endpoints requires consent in order to be used.\n"
+                  "You must login a second time to grant consents.\n\n")
+            tr = get_transfer_rt_or_login(scopes=consent_required_scopes, reauth=True)
+            self.tc = make_transfer_client(tr)
+
         tdata = globus_sdk.TransferData(self.tc, download.globus_endpoint_id, self.local_endpoint_id, label=label, sync_level=sync_level)
 
         # add items
