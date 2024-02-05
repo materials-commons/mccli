@@ -32,7 +32,6 @@ def config_file_contents():
             "transfer_rt": None,
             "endpoint_id": None
         },
-        "interfaces": [],
         "developer_mode": False,
         "REST_logging": False
     }

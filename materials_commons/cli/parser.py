@@ -1,5 +1,4 @@
 import argparse
-import imp
 import os
 import sys
 from io import StringIO
@@ -52,11 +51,7 @@ standard_usage = [
 ]
 standard_interfaces = {d['name']: d for d in standard_usage}
 
-developer_usage = [
-    # {'name': 'actions', 'desc': 'List REST API actions', 'subcommand': ActionsSubcommand()}
-]
-
-def make_parser(custom_interfaces={}, developer_interfaces={}):
+def make_parser():
 
     usage_help = StringIO()
     usage_help.write("mc <command> [<args>]\n\n")
@@ -64,18 +59,6 @@ def make_parser(custom_interfaces={}, developer_interfaces={}):
 
     for name, interface in standard_interfaces.items():
         usage_help.write("  {:10} {:40}\n".format(name, interface['desc']))
-
-    # read custom interfaces from config file
-    if len(custom_interfaces):
-        usage_help.write("\nSpecialized commands are:\n")
-        for name, interface in custom_interfaces.items():
-            usage_help.write("  {:10} {:40}\n".format(name, interface['desc']))
-
-    # hide from most users
-    if len(developer_interfaces):
-        usage_help.write("\nDeveloper commands are:\n")
-        for name, interface in developer_interfaces.items():
-            usage_help.write("  {:10} {:40}\n".format(name, interface['desc']))
 
     parser = argparse.ArgumentParser(
         description='Materials Commons command line interface',
@@ -97,13 +80,7 @@ def main(argv=None, working_dir=None):
             mcapi.Client.set_debug_on()
             pass
 
-        custom_interfaces = {d['name']: d for d in config.interfaces}
-
-        developer_interfaces = {}
-        if config.developer_mode:
-            developer_interfaces = {d['name']: d for d in developer_usage}
-
-        parser = make_parser(custom_interfaces, developer_interfaces)
+        parser = make_parser()
 
         if len(argv) < 2:
             parser.print_help()
@@ -115,23 +92,6 @@ def main(argv=None, working_dir=None):
 
         if args.command in standard_interfaces:
             result = standard_interfaces[args.command]['subcommand'](argv[2:], working_dir)
-            return result
-
-        elif args.command in custom_interfaces:
-            # load module and run command
-            modulename = custom_interfaces[args.command]['module']
-            subcommandname = custom_interfaces[args.command]['subcommand']
-            f, filename, description = imp.find_module(modulename)
-            try:
-                module = imp.load_module(modulename, f, filename, description)
-                result = getattr(module, subcommandname)(argv[2:], working_dir)
-            finally:
-                if f:
-                    f.close()
-            return result
-
-        elif args.command in developer_interfaces:
-            result = developer_interfaces[args.command]['subcommand'](argv[2:], working_dir)
             return result
 
         else:

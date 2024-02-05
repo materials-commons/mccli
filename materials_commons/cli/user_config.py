@@ -29,16 +29,6 @@ class GlobusConfig(object):
         self.transfer_rt = transfer_rt
         self.endpoint_id = endpoint_id
 
-class InterfaceConfig(object):
-    def __init__(self, name=None, module=None, subcommand=None, desc=None):
-        self.name = name
-        self.module = module
-        self.subcommand = subcommand
-        self.desc = desc
-
-    def __eq__(self, other):
-        return vars(self) == vars(other)
-
 
 class Config(object):
     """Configuration variables
@@ -64,14 +54,6 @@ class Config(object):
                 },
                 ...
             ],
-            "interfaces": [
-                {   'name': 'casm',
-                    'desc':'Create CASM samples, processes, measurements, etc.',
-                    'subcommand':'casm_subcommand',
-                    'module':'casm_mcapi'
-                },
-                ...
-            ],
             "globus": {
                 "transfer_rt": <token>
             },
@@ -84,7 +66,6 @@ class Config(object):
     Attributes:
         remotes: Dict of RemoteConfig, mapping of remote name to RemoteConfig instance
         default_remote: RemoteConfig, configuration for default Remote
-        interfaces: List of InterfaceConfig, settings for software interfaces for the `mc` CLI program
         globus: GlobusConfig, globus configuration settings
 
     Arguments:
@@ -113,7 +94,6 @@ class Config(object):
                 'mcurl': None,
                 'email': None,
                 'remotes': {},
-                'interfaces': {},
                 'globus': {}
             }
 
@@ -153,8 +133,6 @@ class Config(object):
         self.remotes = [RemoteConfig(**kwargs) for kwargs in config.get('remotes',[])]
         self.default_remote = RemoteConfig(**config.get('default_remote',{}))
 
-        self.interfaces = [InterfaceConfig(**kwargs) for kwargs in config.get('interfaces',[])]
-
         self.globus = GlobusConfig(**config.get('globus', {}))
 
         self.developer_mode = config.get('developer_mode', False)
@@ -165,7 +143,6 @@ class Config(object):
             'default_remote': vars(self.default_remote),
             'remotes': [vars(value) for value in self.remotes],
             'globus': vars(self.globus),
-            'interfaces': [vars(value) for value in self.interfaces],
             'developer_mode': self.developer_mode,
             'REST_logging': self.REST_logging
         }
