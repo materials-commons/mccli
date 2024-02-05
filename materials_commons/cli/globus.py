@@ -335,7 +335,7 @@ class GlobusOperations(object):
         if consent_required is not None:
             consent_required_scopes.extend(consent_required)
 
-        consent_required = check_for_consent_required(self.tc, upload.globus_endpoint_id)
+        consent_required = check_for_consent_required(self.tc, download.globus_endpoint_id)
         if consent_required is not None:
             consent_required_scopes.extend(consent_required)
 
