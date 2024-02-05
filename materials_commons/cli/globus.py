@@ -1,4 +1,5 @@
 import globus_sdk
+from globus_sdk.scopes import TransferScopes
 import os
 
 import materials_commons.api as mcapi
@@ -9,8 +10,16 @@ from materials_commons.cli.user_config import Config
 
 CLIENT_ID = '1e4aacbc-8c10-4812-a54a-8434d2030a41'
 
+def check_for_consent_required(client, target):
+    try:
+        client.operation_ls(target, path="/")
+    except globus_sdk.TransferAPIError as err:
+        if err.info.consent_required:
+            return err.info.consent_required.required_scopes
+    return None
 
-def get_transfer_rt_or_login():
+
+def get_transfer_rt_or_login(scopes=TransferScopes.all):
     """Get the Globus transfer refresh token, prompting for login if necessary
 
     If not yet configured, will prompt user to login and enter a code used to obtain the refresh
@@ -31,7 +40,7 @@ def get_transfer_rt_or_login():
     # authenticate
 
     client = globus_sdk.NativeAppAuthClient(CLIENT_ID)
-    client.oauth2_start_flow(refresh_tokens=True)
+    client.oauth2_start_flow(refresh_tokens=True, requested_scopes=scopes)
 
     authorize_url = client.oauth2_get_authorize_url()
     try:
@@ -229,6 +238,21 @@ class GlobusOperations(object):
         sync_level = "checksum"
         if no_compare is True:
             sync_level = None
+
+        consent_required_scopes = []
+        consent_required = check_for_consent_required(self.tc, self.local_endpoint_id)
+        if consent_required is not None:
+            consent_required_scopes.extend(consent_required)
+
+        consent_required = check_for_consent_required(self.tc, upload.globus_endpoint_id)
+        if consent_required is not None:
+            consent_required_scopes.extend(consent_required)
+
+        if consent_required_scopes:
+            print("One or more of the endpoints requires consent in order to be used.\n"
+                  "You must login a second time to grant consents.\n\n")
+            tr = get_transfer_rt_or_login(scopes=consent_required_scopes)
+            self.tc = make_transfer_client(tr)
         tdata = globus_sdk.TransferData(self.tc, self.local_endpoint_id, upload.globus_endpoint_id, label=label, sync_level=sync_level)
 
         # add items
