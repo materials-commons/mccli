@@ -147,7 +147,7 @@ class DatasetSubcommand(ListObjects):
     def print_details(self, obj, args, out=sys.stdout):
         # TODO: fix this
         out.write("** WARNING: `mc dataset --details` is under development, some dataset attributes (for example: tags) may appear as 'null' even if they do exist. **\n")
-        if args.all:
+        if args.all or not clifuncs.project_exists(self.working_dir):
             client = self.get_remote(args)
             if args.file_selection:
                 out.write("** NOTE: --file-selection: Not available for public datasets **\n")
@@ -191,13 +191,18 @@ class DatasetSubcommand(ListObjects):
 
         .. note:: The downloaded dataset is named dataset.<dataset_uuid>.zip
         """
-        proj = clifuncs.make_local_project(self.working_dir)
+
+        if args.all or not clifuncs.project_exists(self.working_dir):
+            remote = self.get_remote(args)
+        else:
+            proj = clifuncs.make_local_project(self.working_dir)
+            remote = proj.remote
         for obj in objects:
             self.print_details(obj, args, out=out)
             out.write("Downloading...\n")
             dataset_id = obj.id
             to = "dataset." + obj.uuid + ".zip"
-            proj.remote.download_published_dataset_zipfile(dataset_id, to)
+            remote.download_published_dataset_zipfile(dataset_id, to)
             out.write("DONE\n\n")
         return
 
