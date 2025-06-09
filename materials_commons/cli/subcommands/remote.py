@@ -21,8 +21,9 @@ def make_parser():
 
     parser.add_argument('-l', '--list', action="store_true", default=False,  help='List known remote urls.')
     parser.add_argument('--show-apikey', action="store_true", default=False,  help='Show apikey.')
-    parser.add_argument('--add', nargs=2, metavar=('EMAIL', 'URL'), help='Add a new remote.')
-    parser.add_argument('--remove', nargs=2, metavar=('EMAIL', 'URL'), help='Remove a remote from the list.')
+    parser.add_argument('--add', nargs=1, metavar=('EMAIL'), help='Add a new remote. Defaults to URL https://materialscommons.org/api. Use --url to specify a different URL.')
+    parser.add_argument('--remove', nargs=1, metavar=('EMAIL'), help='Remove a remote from the list. Defaults to URL https://materialscommons.org/api. Use --url to specify a different URL.')
+    parser.add_argument('--url', default='https://materialscommons.org/api', help='Remote server API URL (default: https://materialscommons.org/api)')
     parser.add_argument('--set-default', nargs=2, metavar=('EMAIL', 'URL'), help='Set default remote to be used when not in a project.')
     return parser
 
@@ -46,7 +47,7 @@ def remote_subcommand(argv, working_dir):
 
     elif args.add:
         email = args.add[0]
-        url = args.add[1]
+        url = args.url
 
         config = Config()
         remote_config = RemoteConfig(mcurl=url, email=email)
@@ -71,12 +72,14 @@ def remote_subcommand(argv, working_dir):
 
         config.remotes.append(remote_config)
         config.save()
+        if url == 'https://materialscommons.org/api':
+            set_default_remote(email, url)
         print("Added " + email + " at " + url)
 
 
     elif args.remove:
         email = args.remove[0]
-        url = args.remove[1]
+        url = args.url
 
         config = Config()
         remote_config = RemoteConfig(mcurl=url, email=email)
@@ -91,17 +94,9 @@ def remote_subcommand(argv, working_dir):
     elif args.set_default:
         email = args.set_default[0]
         url = args.set_default[1]
-
-        config = Config()
-        remote_config = RemoteConfig(mcurl=url, email=email)
-
-        if remote_config in config.remotes:
-            config.default_remote = config.remotes[config.remotes.index(remote_config)]
-        else:
-            print("Failed: " + email + " at " + url + " not found.")
-            print_remotes(config.remotes)
-            return 1
-        config.save()
+        rv = set_default_remote(email, url)
+        if rv != 0:
+            return rv
         print("Set default: " + email + " at " + url)
 
     else:
@@ -117,3 +112,16 @@ def remote_subcommand(argv, working_dir):
             return 1
 
     return
+
+def set_default_remote(email, url):
+    config = Config()
+    remote_config = RemoteConfig(mcurl=url, email=email)
+
+    if remote_config in config.remotes:
+        config.default_remote = config.remotes[config.remotes.index(remote_config)]
+    else:
+        print("Failed: " + email + " at " + url + " not found.")
+        print_remotes(config.remotes)
+        return 1
+    config.save()
+    return 0
