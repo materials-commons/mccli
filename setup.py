@@ -4,7 +4,7 @@ from setuptools import setup, find_namespace_packages
 from materials_commons.cli import __version__
 
 setup(
-    name='materials_commons-cli',
+    name='materials_commons_cli',
     version=__version__,
     description='Materials Commons CLI',
     long_description="""This package contains the materials_commons.cli module. This module is an interface
