@@ -14,7 +14,7 @@ setup(
     tools in that context.""",
     url='https://materials-commons.github.io/materials-commons-cli/html/index.html',
     author='Materials Commons development team',
-    author_email='materials-commons-authors@umich.edu',
+    author_email='materials-commons-help@umich.edu',
     license='MIT',
     package_data={
         # If any package contains *.txt or *.rst files, include them:
@@ -56,6 +56,7 @@ setup(
         "python-dateutil",
         "pyyaml",
         "requests",
+        "setuptools",
         "sortedcontainers",
         "tabulate"
     ]

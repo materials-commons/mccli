@@ -1,12 +1,14 @@
 globus-cli
-globus-sdk
+globus-sdk~=3.13.0
 igittigitt==2.1.0
 materials-commons-api
-python-dateutil
-pyyaml
-requests
-sortedcontainers
-tabulate
+python-dateutil~=2.8.2
+pyyaml~=6.0
+requests~=2.28.1
+sortedcontainers~=2.4.0
+tabulate~=0.9.0
 
 # for testing only
-pytest
+pytest~=7.2.0
+
+setuptools~=60.2.0
