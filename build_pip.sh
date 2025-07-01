@@ -2,7 +2,7 @@
 # Create a ~/.pypirc file with [pypi-mc] and/or [testpypi-mc] configured
 
 rm -r build dist
-python setup.py sdist bdist_wheel --universal
+python3 setup.py sdist bdist_wheel --universal
 twine upload dist/* -r pypi
 
 # Install from testpypi:
