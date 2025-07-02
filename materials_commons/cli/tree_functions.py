@@ -466,7 +466,7 @@ def check_and_upload_directory(proj, local_abspath, working_dir, limit=50,
         if os.path.isfile(child_local_abspath):
 
             file_result, error_msg = check_and_upload_file(proj, child_local_abspath, working_dir,
-                limit=50, no_compare=no_compare, upload_as=child_upload_as, localtree=localtree,
+                limit=limit, no_compare=no_compare, upload_as=child_upload_as, localtree=localtree,
                 remotetree=remotetree, parent_id=id, child_data=child_data, update_remotetree=True)
 
             if file_result is not None:
