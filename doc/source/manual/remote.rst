@@ -32,11 +32,9 @@ Getting started
 
 Assuming you have an account on the public instance of Materials Commons, ``materialscommons.org``, add it as a remote, using the email address used for your account. ::
 
-    mc remote --add <email> https://materialscommons.org/api
+    mc remote --add <email>
 
-This will prompt you for your password in order to get and save your apikey locally. Next, set that account and instance of Materials Commons as the default remote: ::
-
-    mc remote --set-default <email> https://materialscommons.org/api
+This will prompt you for your password in order to get and save your apikey locally.
 
 Once done successfully, you will be able to list projects you have access to at ``materialscommons.org`` using: ::
 
@@ -55,13 +53,13 @@ Add a remote, to store your apikey locally. Note that `"/api"` is included at th
 
 ::
 
-   	mc remote --add <email> <url>
+   	mc remote --add <email> --url <url>
 
 Remove a remote, deleting your apikey.
 
 ::
 
-   	mc remote --remote <email> <url>
+   	mc remote --remove <email> <url>
 
 List remotes that have been added and show the current default. Optionally, print the apikeys.
 
