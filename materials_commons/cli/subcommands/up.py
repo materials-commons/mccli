@@ -1,14 +1,14 @@
 import argparse
-import os
-import sys
-import time
+import threading
+from pathlib import Path
 
 import materials_commons.cli.exceptions as cliexcept
 import materials_commons.cli.functions as clifuncs
 import materials_commons.cli.globus as cliglobus
-import materials_commons.cli.file_functions as filefuncs
 import materials_commons.cli.tree_functions as treefuncs
 from materials_commons.cli.treedb import LocalTree, RemoteTree
+from materials_commons.cli.file_functions import make_mcpath
+
 
 def make_parser():
     """Make argparse.ArgumentParser for `mc up`"""
@@ -134,3 +134,42 @@ def up_subcommand(argv, working_dir):
                                   remotetree=remotetree)
 
     return
+
+MB = 1024 * 1024
+
+class UploadCallbacks:
+    def __init__(self, proj, max_upload_size):
+        self.proj = proj
+        self.max_upload_size = max_upload_size * MB
+
+    def file_upload_callback(self, p: Path):
+
+        # We can only upload files up to self.max_upload_size. To eliminate calls to the
+        # server for files that are too big we first check the file size. If it's larger
+        # than self.max_upload_size, then we skip processing this file.
+        sinfo = p.stat()
+        if sinfo.st_size > self.max_upload_size:
+            # The file is too big to upload
+            return
+
+        # If we are here, then this file is a candidate for upload. First, let's do
+        # some conversion, so we have the file represented as the project path on
+        # the Materials Commons server.
+        file_path_on_mc = make_mcpath(self.proj.local_path, p.as_posix())
+
+        # Next, let's retrieve the remote file and do some sanity checking.
+        remote_file = self.proj.client.get_file_by_path(self.proj.id, file_path_on_mc)
+        if remote_file.mime_type == "directory":
+            # Locally we have a file, but on the server that file is a directory. We can't upload
+            # a file with the same name so we skip it.
+            return
+
+        if remote_file.size != sinfo.st_size:
+            # This is a shortcut check. If the files are different size then they can't be the
+            # same. Thus, it is safe to upload the file.
+            self.proj.client.upload_file_by_path(self.proj.id, p.as_posix(), file_path_on_mc)
+        else:
+            # Sizes are the same. Compare checksums.
+            checksum = clifuncs.checksum(p.as_posix())
+            if checksum != remote_file.checksum:
+                self.proj.client.upload_file_by_path(self.proj.id, p.as_posix(), file_path_on_mc)
