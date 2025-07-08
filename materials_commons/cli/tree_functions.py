@@ -1,17 +1,18 @@
 import copy
-import igittigitt
 import json
 import os
 import pathlib
-import requests
 import shutil
-from sortedcontainers import SortedSet
 import time
 
+import igittigitt
 import materials_commons.api as mcapi
+import requests
+
 import materials_commons.cli.exceptions as cliexcept
-import materials_commons.cli.functions as clifuncs
 import materials_commons.cli.file_functions as filefuncs
+import materials_commons.cli.functions as clifuncs
+
 
 def clipaths_to_local_abspaths(proj_local_path, clipaths, working_dir):
     """Convert CLI paths input to local absolute paths
@@ -1133,6 +1134,7 @@ def treecompare(proj, paths, checksum=False, localtree=None, remotetree=None,
         Remote objects, 'r_obj', are only returned if remotetree is None.
 
     """
+
     _treecomparer = _TreeCompare(proj, localtree=localtree, remotetree=remotetree)
     return _treecomparer(paths, checksum=checksum, get_children=get_children)
 
