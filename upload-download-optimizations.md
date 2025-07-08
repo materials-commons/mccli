@@ -8,7 +8,7 @@ Based on my analysis of the codebase, here are comprehensive recommendations to 
 ### For Upload (`up.py`)
 ```python
 # Add to standard_upload_v2 in tree_functions.py
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def parallel_upload_files(proj, file_paths, working_dir, **kwargs):
     results = {'files': {}, 'errors': {}}
