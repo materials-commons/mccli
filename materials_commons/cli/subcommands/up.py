@@ -7,7 +7,7 @@ import materials_commons.cli.functions as clifuncs
 import materials_commons.cli.globus as cliglobus
 import materials_commons.cli.tree_functions as treefuncs
 from materials_commons.cli.treedb import LocalTree, RemoteTree
-from materials_commons.cli.file_functions import make_mcpath, get_by_path_if_exists
+import materials_commons.cli.file_functions as filefuncs
 
 
 def make_parser():
@@ -159,10 +159,10 @@ class UploadCallbacks:
         # If we are here, then this file is a candidate for upload. First, let's do
         # some path conversion, so we have the file represented as the project path on
         # the Materials Commons server.
-        file_path_on_mc = make_mcpath(self.proj.local_path, p.as_posix())
+        file_path_on_mc = filefuncs.make_mcpath(self.proj.local_path, p.as_posix())
 
         # Next, let's retrieve the remote file and do some sanity checking.
-        remote_file = get_by_path_if_exists(self.proj.client, self.proj.id, file_path_on_mc)
+        remote_file = filefuncs.get_by_path_if_exists(self.proj.client, self.proj.id, file_path_on_mc)
 
         if remote_file is None:
             # File doesn't exist on the server, so upload it.
@@ -175,8 +175,8 @@ class UploadCallbacks:
             return
 
         if remote_file.size != sinfo.st_size:
-            # This is a shortcut check. If the files are different in size, then they can't be the
-            # same. Thus, it is safe to upload the file.
+            # If the files are different in size, then they can't be the same.
+            # Thus, it is safe to upload the file.
             self.proj.client.upload_file_by_path(self.proj.id, p.as_posix(), file_path_on_mc)
         else:
             # The sizes are the same. Compare checksums.
