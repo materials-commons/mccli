@@ -7,7 +7,7 @@ import materials_commons.cli.functions as clifuncs
 import materials_commons.cli.globus as cliglobus
 import materials_commons.cli.tree_functions as treefuncs
 from materials_commons.cli.treedb import LocalTree, RemoteTree
-from materials_commons.cli.file_functions import make_mcpath
+from materials_commons.cli.file_functions import make_mcpath, get_by_path_if_exists
 
 
 def make_parser():
@@ -37,8 +37,10 @@ def make_parser():
                         help='Globus transfer label to make finding tasks simpler. Default is `<project name>-<upload name>.')
     parser.add_argument('--no-compare', action="store_true", default=False,
                         help='Upload without checking if remote is equivalent.')
-    parser.add_argument('--upload-as', nargs=1, default=None, help='Upload to a different location than standard upload. Specified as if it were a local path.')
+    parser.add_argument('--upload-as', nargs=1, default=None,
+                        help='Upload to a different location than standard upload. Specified as if it were a local path.')
     return parser
+
 
 def up_subcommand(argv, working_dir):
     """
@@ -84,7 +86,7 @@ def up_subcommand(argv, working_dir):
 
         mcpaths = treefuncs.clipaths_to_mcpaths(proj.local_path, local_abspaths, working_dir)
 
-        all_uploads = {upload.id:upload for upload in proj.remote.get_all_globus_upload_requests(proj.id)}
+        all_uploads = {upload.id: upload for upload in proj.remote.get_all_globus_upload_requests(proj.id)}
 
         globus_upload_id = None
         if pconfig.globus_upload_id:
@@ -102,8 +104,9 @@ def up_subcommand(argv, working_dir):
             upload = all_uploads[globus_upload_id]
             print("Using current globus upload (name=" + upload.name + ", id=" + str(upload.id) + ").")
 
-        if upload.status != 2:    # TODO clean up status code / message
-            raise cliexcept.MCCLIException("Current Globus upload (id=" + str(globus_upload_id) + ") not ready for uploading.")
+        if upload.status != 2:  # TODO clean up status code / message
+            raise cliexcept.MCCLIException(
+                "Current Globus upload (id=" + str(globus_upload_id) + ") not ready for uploading.")
 
         label = proj.name + "-" + upload.name
         if args.label:
@@ -120,7 +123,7 @@ def up_subcommand(argv, working_dir):
             print("Use `mc globus upload` to manage Globus uploads.")
             print("Multiple transfer tasks may be initiated.")
             print("When all tasks finish uploading, use `mc globus upload --id " + str(upload.id) +
-                " --finish` " + "to import all uploaded files into the Materials Commons project.")
+                  " --finish` " + "to import all uploaded files into the Materials Commons project.")
 
     else:
         localtree = None
@@ -128,24 +131,25 @@ def up_subcommand(argv, working_dir):
             localtree = LocalTree(proj.local_path)
 
         treefuncs.standard_upload_v2(proj, args.paths, working_dir,
-                                  recursive=args.recursive, limit=args.limit[0],
-                                  no_compare=args.no_compare,
-                                  upload_as=upload_as, localtree=localtree,
-                                  remotetree=remotetree)
+                                     recursive=args.recursive, limit=args.limit[0],
+                                     no_compare=args.no_compare,
+                                     upload_as=upload_as, localtree=localtree,
+                                     remotetree=remotetree)
 
     return
 
-MB = 1024 * 1024
 
 class UploadCallbacks:
+    MB = 1024 * 1024
+
     def __init__(self, proj, max_upload_size):
         self.proj = proj
-        self.max_upload_size = max_upload_size * MB
+        self.max_upload_size = max_upload_size * UploadCallbacks.MB
 
     def file_upload_callback(self, p: Path):
 
         # We can only upload files up to self.max_upload_size. To eliminate calls to the
-        # server for files that are too big we first check the file size. If it's larger
+        # server for files that are too big, we first check the file size. If it's larger
         # than self.max_upload_size, then we skip processing this file.
         sinfo = p.stat()
         if sinfo.st_size > self.max_upload_size:
@@ -153,23 +157,30 @@ class UploadCallbacks:
             return
 
         # If we are here, then this file is a candidate for upload. First, let's do
-        # some conversion, so we have the file represented as the project path on
+        # some path conversion, so we have the file represented as the project path on
         # the Materials Commons server.
         file_path_on_mc = make_mcpath(self.proj.local_path, p.as_posix())
 
         # Next, let's retrieve the remote file and do some sanity checking.
-        remote_file = self.proj.client.get_file_by_path(self.proj.id, file_path_on_mc)
+        remote_file = get_by_path_if_exists(self.proj.client, self.proj.id, file_path_on_mc)
+
+        if remote_file is None:
+            # File doesn't exist on the server, so upload it.
+            self.proj.client.upload_file_by_path(self.proj.id, p.as_posix(), file_path_on_mc)
+            return
+
         if remote_file.mime_type == "directory":
             # Locally we have a file, but on the server that file is a directory. We can't upload
-            # a file with the same name so we skip it.
+            # a file with the same name, so we skip it.
             return
 
         if remote_file.size != sinfo.st_size:
-            # This is a shortcut check. If the files are different size then they can't be the
+            # This is a shortcut check. If the files are different in size, then they can't be the
             # same. Thus, it is safe to upload the file.
             self.proj.client.upload_file_by_path(self.proj.id, p.as_posix(), file_path_on_mc)
         else:
-            # Sizes are the same. Compare checksums.
+            # The sizes are the same. Compare checksums.
             checksum = clifuncs.checksum(p.as_posix())
             if checksum != remote_file.checksum:
+                # Checksums don't match, so upload it.
                 self.proj.client.upload_file_by_path(self.proj.id, p.as_posix(), file_path_on_mc)
