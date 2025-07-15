@@ -130,7 +130,6 @@ def main(argv=None, working_dir=None):
 	if working_dir is None:
 		working_dir = os.getcwd()
 	try:
-
 		config = Config()
 		if config.REST_logging:
 			mcapi.Client.set_debug_on()
@@ -162,14 +161,19 @@ def main(argv=None, working_dir=None):
 						# Execute the plugin script with any remaining arguments
 						import subprocess
 						try:
-							result = subprocess.run([plugin_script] + argv[3:], cwd=working_dir)
+							env = {
+								"MCAPIKEY": config.default_remote.mcapikey,
+								"MCURL": config.default_remote.mcurl,
+							}
+							result = subprocess.run([plugin_script] + argv[3:], cwd=working_dir, env=env)
+							check_package_version()
 							return result.returncode
 						except Exception as e:
 							print(f"Error executing plugin script: {e}")
 							return 1
 					else:
-						print(f"Plugin script '{argv[2]}' not found or not executable in plugin '{args.command}'")
-						print(f"Available scripts in plugin '{args.command}':")
+						print(f"Command '{argv[2]}' not found or not executable in plugin '{args.command}'")
+						print(f"Available commands for plugin '{args.command}':")
 						for script in os.listdir(plugin_dir):
 							script_path = os.path.join(plugin_dir, script)
 							if os.path.isfile(script_path) and os.access(script_path, os.X_OK):
