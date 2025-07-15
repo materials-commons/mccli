@@ -13,6 +13,7 @@
     ls
     mkdir
     mv
+    plugin
     proj
     remote
     rm

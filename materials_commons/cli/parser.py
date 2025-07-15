@@ -25,6 +25,7 @@ from materials_commons.cli.subcommands.ls import ls_subcommand
 from materials_commons.cli.subcommands.mkdir import mkdir_subcommand
 from materials_commons.cli.subcommands.mv import mv_subcommand
 # from materials_commons.cli.subcommands.proc import ProcSubcommand
+from materials_commons.cli.subcommands.plugin import plugin_subcommand
 from materials_commons.cli.subcommands.proj import ProjSubcommand
 from materials_commons.cli.subcommands.remote import remote_subcommand
 from materials_commons.cli.subcommands.rm import rm_subcommand
@@ -50,6 +51,7 @@ standard_usage = [
 	{'name': 'versions', 'desc': 'List file versions', 'subcommand': versions_subcommand},
 	# {'name': 'proc', 'desc': 'List processes', 'subcommand': ProcSubcommand()},
 	# {'name': 'samp', 'desc': 'List samples', 'subcommand': SampSubcommand()},
+	{'name': 'plugin', 'desc': 'Create a plugin for extending the CLI', 'subcommand': plugin_subcommand},
 	{'name': 'config', 'desc': 'Configure `mc`', 'subcommand': config_subcommand}
 ]
 standard_interfaces = {d['name']: d for d in standard_usage}
@@ -150,9 +152,41 @@ def main(argv=None, working_dir=None):
 			return result
 
 		else:
-			print('Unrecognized command')
-			parser.print_help()
-			return 1
+			# Check if this is a plugin command
+			plugin_dir = os.path.expanduser(f"~/.materialscommons/plugins/{args.command}")
+			if os.path.isdir(plugin_dir):
+				# This is a plugin command, check if there's a subcommand
+				if len(argv) >= 3:
+					plugin_script = os.path.join(plugin_dir, argv[2])
+					if os.path.exists(plugin_script) and os.access(plugin_script, os.X_OK):
+						# Execute the plugin script with any remaining arguments
+						import subprocess
+						try:
+							result = subprocess.run([plugin_script] + argv[3:], cwd=working_dir)
+							return result.returncode
+						except Exception as e:
+							print(f"Error executing plugin script: {e}")
+							return 1
+					else:
+						print(f"Plugin script '{argv[2]}' not found or not executable in plugin '{args.command}'")
+						print(f"Available scripts in plugin '{args.command}':")
+						for script in os.listdir(plugin_dir):
+							script_path = os.path.join(plugin_dir, script)
+							if os.path.isfile(script_path) and os.access(script_path, os.X_OK):
+								print(f"  {script}")
+						return 1
+				else:
+					# No subcommand provided, list available scripts
+					print(f"Available scripts in plugin '{args.command}':")
+					for script in os.listdir(plugin_dir):
+						script_path = os.path.join(plugin_dir, script)
+						if os.path.isfile(script_path) and os.access(script_path, os.X_OK):
+							print(f"  {script}")
+					return 0
+			else:
+				print('Unrecognized command')
+				parser.print_help()
+				return 1
 
 	except MissingRemoteException as e:
 		print("Error:", e)
