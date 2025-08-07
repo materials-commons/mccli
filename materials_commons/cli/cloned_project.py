@@ -183,7 +183,7 @@ class ClonedProject(object):
 
         Args:
             recursive (bool): Download directory contents recursively
-            limit (str): File size upload limit (MB). Default="50" (50MB). Does
+            limit (str): File size upload limit (MB). Default="250" (250MB). Does
                 not apply to Globus uploads.
             globus (bool): Use globus to download files
             label (str): Globus transfer label to make finding tasks simpler

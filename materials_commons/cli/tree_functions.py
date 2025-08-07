@@ -112,7 +112,7 @@ def make_mcpaths_for_upload(proj_local_path, paths):
             _paths.append(path)
     return _paths
 
-def upload_file(proj, local_abspath, mcpath, working_dir, parent_id=None, limit=50, remotetree=None, update_remotetree=True):
+def upload_file(proj, local_abspath, mcpath, working_dir, parent_id=None, limit=250, remotetree=None, update_remotetree=True):
     """Upload one file
 
     Notes:
@@ -208,7 +208,7 @@ def upload_file(proj, local_abspath, mcpath, working_dir, parent_id=None, limit=
         print("uploaded:", printpath, "as", printdestpath)
     return (file_result, error_result)
 
-def check_and_upload_file(proj, local_abspath, working_dir, limit=50, no_compare=False,
+def check_and_upload_file(proj, local_abspath, working_dir, limit=250, no_compare=False,
     upload_as=None, localtree=None, remotetree=None, parent_id=None, child_data=None,
     update_remotetree=True):
     """Checks validity and upload one file
@@ -354,7 +354,7 @@ def filter_local_abspaths(proj_local_path, local_abspaths, working_dir):
     return _local_abspaths
 
 
-def check_and_upload_directory(proj, local_abspath, working_dir, limit=50,
+def check_and_upload_directory(proj, local_abspath, working_dir, limit=250,
     no_compare=False, upload_as=None, localtree=None, remotetree=None, parent_id=None):
     """Checks validity and uploads a directory and contents recursively
 
@@ -494,7 +494,7 @@ def check_and_upload_directory(proj, local_abspath, working_dir, limit=50,
     return (file_results, error_results)
 
 
-def standard_upload_v2(proj, paths, working_dir, recursive=False, limit=50, no_compare=False, upload_as=None, localtree=None, remotetree=None):
+def standard_upload_v2(proj, paths, working_dir, recursive=False, limit=250, no_compare=False, upload_as=None, localtree=None, remotetree=None):
     """Upload files and directories to Materials Commons
 
     Args:
@@ -590,7 +590,7 @@ def standard_upload_v2(proj, paths, working_dir, recursive=False, limit=50, no_c
 
 
 
-def standard_upload(proj, paths, working_dir, recursive=False, limit=50, no_compare=False, upload_as=None, localtree=None, remotetree=None):
+def standard_upload(proj, paths, working_dir, recursive=False, limit=250, no_compare=False, upload_as=None, localtree=None, remotetree=None):
     """Upload files to Materials Commons
 
     Args:
