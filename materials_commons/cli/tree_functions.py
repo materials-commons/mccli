@@ -112,7 +112,7 @@ def make_mcpaths_for_upload(proj_local_path, paths):
             _paths.append(path)
     return _paths
 
-def upload_file(proj, local_abspath, mcpath, working_dir, parent_id=None, limit=250, remotetree=None, update_remotetree=True):
+def upload_file(proj, local_abspath, mcpath, working_dir, parent_id=None, limit=750, remotetree=None, update_remotetree=True):
     """Upload one file
 
     Notes:
@@ -208,7 +208,7 @@ def upload_file(proj, local_abspath, mcpath, working_dir, parent_id=None, limit=
         print("uploaded:", printpath, "as", printdestpath)
     return (file_result, error_result)
 
-def check_and_upload_file(proj, local_abspath, working_dir, limit=250, no_compare=False,
+def check_and_upload_file(proj, local_abspath, working_dir, limit=750, no_compare=False,
     upload_as=None, localtree=None, remotetree=None, parent_id=None, child_data=None,
     update_remotetree=True):
     """Checks validity and upload one file
@@ -257,8 +257,8 @@ def check_and_upload_file(proj, local_abspath, working_dir, limit=250, no_compar
         error_results: str
             Error messages for unsuccessful file uploads
     """
-    file_result = None
-    error_result = None
+    file_results = {}
+    error_results = {}
 
     printpath = os.path.relpath(local_abspath, start=working_dir)
 
@@ -281,14 +281,14 @@ def check_and_upload_file(proj, local_abspath, working_dir, limit=250, no_compar
         if child_data[mcpath]['r_type'] == 'directory':
             msg = printpath + ": remote is directory (skipping)"
             print(msg)
-            error_resuts[local_abspath] = msg
+            error_results[local_abspath] = msg
             return (file_results, error_results)
 
         # if local and remote files exists, and checksums known and match -> skip, continue
         if 'eq' in child_data[mcpath] and child_data[mcpath]['eq'] is True:
             msg = printpath + ": local is equivalent to remote (skipping)"
             print(msg)
-            error_resuts[child_local_abspath] = msg
+            # error_results[child_local_abspath] = msg
             return (file_results, error_results)
 
         # else, get parent_id if not already known (might be None)
@@ -305,7 +305,7 @@ def check_and_upload_file(proj, local_abspath, working_dir, limit=250, no_compar
         if mcpath in dirs_data and dirs_data[mcpath]['r_type'] == 'directory':
             msg = printpath + ": remote is directory (skipping)"
             print(msg)
-            return (file_result, msg)
+            return (file_results, msg)
 
         # if remote file exists
         if mcpath in files_data:
@@ -315,7 +315,7 @@ def check_and_upload_file(proj, local_abspath, working_dir, limit=250, no_compar
             if 'eq' in file_data and file_data['eq'] is True:
                 msg = printpath + ": local is equivalent to remote (skipping)"
                 print(msg)
-                return (file_result, msg)
+                return (file_results, msg)
 
             # else, get parent_id if not already known (still might be None)
             if parent_id is None:
@@ -354,7 +354,7 @@ def filter_local_abspaths(proj_local_path, local_abspaths, working_dir):
     return _local_abspaths
 
 
-def check_and_upload_directory(proj, local_abspath, working_dir, limit=250,
+def check_and_upload_directory(proj, local_abspath, working_dir, limit=750,
     no_compare=False, upload_as=None, localtree=None, remotetree=None, parent_id=None):
     """Checks validity and uploads a directory and contents recursively
 
@@ -494,7 +494,7 @@ def check_and_upload_directory(proj, local_abspath, working_dir, limit=250,
     return (file_results, error_results)
 
 
-def standard_upload_v2(proj, paths, working_dir, recursive=False, limit=250, no_compare=False, upload_as=None, localtree=None, remotetree=None):
+def standard_upload_v2(proj, paths, working_dir, recursive=False, limit=750, no_compare=False, upload_as=None, localtree=None, remotetree=None):
     """Upload files and directories to Materials Commons
 
     Args:
@@ -590,7 +590,7 @@ def standard_upload_v2(proj, paths, working_dir, recursive=False, limit=250, no_
 
 
 
-def standard_upload(proj, paths, working_dir, recursive=False, limit=250, no_compare=False, upload_as=None, localtree=None, remotetree=None):
+def standard_upload(proj, paths, working_dir, recursive=False, limit=750, no_compare=False, upload_as=None, localtree=None, remotetree=None):
     """Upload files to Materials Commons
 
     Args:
@@ -1270,7 +1270,7 @@ class _Mover(object):
                 print(dest_printpath + ": does not exist on remote (may not rename multiple src)")
                 valid_usage = False
         elif self.dest_remote_type != 'directory':
-            raise cliexcept.MCCLIException("Error in mv: dest_path='" + dest_path + "', dest_remote_type='" + str(dest_remote_type) + "'")
+            raise cliexcept.MCCLIException("Error in mv: dest_path='" + dest_path + "', dest_remote_type='" + str(self.dest_remote_type) + "'")
 
         # check local dest type
         if not self.remote_only:
@@ -1283,7 +1283,7 @@ class _Mover(object):
                     print(dest_printpath + ": does not exist locally (may not rename multiple src)")
                     valid_usage = False
             elif self.dest_local_type != 'directory':
-                raise cliexcept.MCCLIException("Error in mv: dest_path='" + dest_path + "', dest_remote_type='" + str(dest_local_type) + "'")
+                raise cliexcept.MCCLIException("Error in mv: dest_path='" + dest_path + "', dest_remote_type='" + str(self.dest_local_type) + "'")
 
             if self.dest_remote_type != self.dest_local_type:
                 print(dest_printpath + ": local and remote types do not match")

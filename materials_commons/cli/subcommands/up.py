@@ -1,14 +1,11 @@
 import argparse
-import os
-import sys
-import time
 
 import materials_commons.cli.exceptions as cliexcept
 import materials_commons.cli.functions as clifuncs
 import materials_commons.cli.globus as cliglobus
-import materials_commons.cli.file_functions as filefuncs
 import materials_commons.cli.tree_functions as treefuncs
 from materials_commons.cli.treedb import LocalTree, RemoteTree
+
 
 def make_parser():
     """Make argparse.ArgumentParser for `mc up`"""
@@ -29,8 +26,8 @@ def make_parser():
     parser.add_argument('paths', nargs='*', default=None, help='Files or directories')
     parser.add_argument('-r', '--recursive', action="store_true", default=False,
                         help='Upload directory contents recursively')
-    parser.add_argument('--limit', nargs=1, type=float, default=[250],
-                        help='File size upload limit (MB). Default=250MB. Does not apply to Globus uploads.')
+    parser.add_argument('--limit', nargs=1, type=float, default=[750],
+                        help='File size upload limit (MB). Default=750MB. Max size is also 750MB. Does not apply to Globus uploads.')
     parser.add_argument('-g', '--globus', action="store_true", default=False,
                         help=globus_help)
     parser.add_argument('--label', nargs=1, type=str,
