@@ -1,6 +1,8 @@
 materials\_commons namespace
 ============================
 
+.. py:module:: materials_commons
+
 Subpackages
 -----------
 

@@ -12,6 +12,7 @@ Submodules
    materials_commons.cli.subcommands.dataset
    materials_commons.cli.subcommands.down
    materials_commons.cli.subcommands.expt
+   materials_commons.cli.subcommands.fetch
    materials_commons.cli.subcommands.globus
    materials_commons.cli.subcommands.init
    materials_commons.cli.subcommands.ls
