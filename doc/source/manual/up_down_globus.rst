@@ -71,7 +71,7 @@ If the current working directory is ``/Users/me/local/mc_projects/MyProject/``, 
 
 By default, ``mc up``/``mc down`` will check MD5 checksums and not transfer files that already exist. This can be skipped with the ``--no-compare`` option.
 
-There is a limit to the size of files that can be uploaded using the standard file upload process. that depends on the configuration of the particular instance of Materials Commons. The ``mc`` program will skip (with a warning message) uploading any file larger than the size given by the ``--limit`` option (given in MB). The default limit is 50MB.
+There is a limit to the size of files that can be uploaded using the standard file upload process. that depends on the configuration of the particular instance of Materials Commons. The ``mc`` program will skip (with a warning message) uploading any file larger than the size given by the ``--limit`` option (given in MB). The default limit is 750MB.
 
 When uploading a file results in "overwriting" an existing file at the same location, Materials Commons saves the previously existing file as a "version". Access to previous file versions will be enabled in a subsequent release, along with details about how ``mc rm`` and ``mc mv`` effect versions.
 
