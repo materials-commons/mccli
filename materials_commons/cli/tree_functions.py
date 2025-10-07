@@ -13,6 +13,7 @@ import materials_commons.cli.exceptions as cliexcept
 import materials_commons.cli.functions as clifuncs
 import materials_commons.cli.file_functions as filefuncs
 
+
 def clipaths_to_local_abspaths(proj_local_path, clipaths, working_dir):
     """Convert CLI paths input to local absolute paths
 
@@ -37,6 +38,7 @@ def clipaths_to_local_abspaths(proj_local_path, clipaths, working_dir):
             p = os.path.join(working_dir, p)
         local_abspaths.append(p)
     return local_abspaths
+
 
 def clipaths_to_mcpaths(proj_local_path, clipaths, working_dir):
     """Convert CLI paths input to Materials Commons standardized paths
@@ -64,6 +66,7 @@ def clipaths_to_mcpaths(proj_local_path, clipaths, working_dir):
         mcpaths.append(mcpath)
     return mcpaths
 
+
 def make_local_abspaths_for_upload(proj_local_path, paths):
     """Clean paths for uploads
 
@@ -87,6 +90,7 @@ def make_local_abspaths_for_upload(proj_local_path, paths):
         else:
             _paths.append(path)
     return _paths
+
 
 def make_mcpaths_for_upload(proj_local_path, paths):
     """Clean paths for uploads
@@ -112,15 +116,14 @@ def make_mcpaths_for_upload(proj_local_path, paths):
             _paths.append(path)
     return _paths
 
-def upload_file(proj, local_abspath, mcpath, working_dir, parent_id=None, limit=750, remotetree=None, update_remotetree=True):
+
+def upload_file(proj, local_abspath, mcpath, working_dir, parent_id=None, remotetree=None, update_remotetree=True):
     """Upload one file
 
     Notes:
         - Creates parent and intermediate directories as necessary
         - Does not allow filename change, with message:
             `--upload-as file name changed (skipping)`
-        - Will not upload files over the size `limit`, with message:
-            `file too large (size={1}MB, limit={0}MB) (not uploaded)`
 
     Args:
         proj (:class:`materials_commons.api.Project`): Project instance with
@@ -132,7 +135,6 @@ def upload_file(proj, local_abspath, mcpath, working_dir, parent_id=None, limit=
             None, in which case the directory os.path.dirname(mcpath) will be created.
         working_dir (str): Current working directory, used for making relative
             paths and printing messages.
-        limit (int): The limit in MB on the size of the file allowed to be uploaded.
         remotetree (RemoteTree): A RemoteTree object stores remote file and
             directory information to minimize API calls and data transfer.
             Optional, will be used and updated if provided.
@@ -157,9 +159,9 @@ def upload_file(proj, local_abspath, mcpath, working_dir, parent_id=None, limit=
     if os.path.basename(local_abspath) != os.path.basename(mcpath):
         msg = printpath + ": --upload-as file name changed (skipping)"
         print(msg)
-        extended_msg = "The --upload-as option may be used to upload a directory with a different "\
-            "name, or upload a file to a different directory. To change a file name, first "\
-            "upload, then mv."
+        extended_msg = "The --upload-as option may be used to upload a directory with a different " \
+                       "name, or upload a file to a different directory. To change a file name, first " \
+                       "upload, then mv."
         print(extended_msg)
         return (file_result, msg)
 
@@ -176,14 +178,6 @@ def upload_file(proj, local_abspath, mcpath, working_dir, parent_id=None, limit=
             print(msg)
             return (file_result, msg)
         parent_id = parent.id
-
-    # if file size > limit -> error
-    file_size_mb = os.path.getsize(local_abspath) >> 20
-    if file_size_mb > limit:
-        msg = printpath + ": file too large (size={1}MB, limit={0}MB) (not uploaded)".\
-            format(limit, file_size_mb)
-        print(msg)
-        return (file_result, msg)
 
     # else: -> upload, return results
     file_result = proj.remote.upload_file(proj.id, parent_id, local_abspath)
@@ -208,9 +202,10 @@ def upload_file(proj, local_abspath, mcpath, working_dir, parent_id=None, limit=
         print("uploaded:", printpath, "as", printdestpath)
     return (file_result, error_result)
 
-def check_and_upload_file(proj, local_abspath, working_dir, limit=750, no_compare=False,
-    upload_as=None, localtree=None, remotetree=None, parent_id=None, child_data=None,
-    update_remotetree=True):
+
+def check_and_upload_file(proj, local_abspath, working_dir, no_compare=False,
+                          upload_as=None, localtree=None, remotetree=None, parent_id=None, child_data=None,
+                          update_remotetree=True):
     """Checks validity and upload one file
 
     Notes:
@@ -227,7 +222,6 @@ def check_and_upload_file(proj, local_abspath, working_dir, limit=750, no_compar
         local_abspath (str): Local absolute path to file to be uploaded
         working_dir (str): Current working directory, used for making relative
             paths and printing messages.
-        limit (int): The limit in MB on the size of the file allowed to be uploaded.
         no_compare (bool): By default, this function checks local and remote
             file checksum to avoid downloading files that already exist. If
             no_compare is True, this check is skipped and all specified files
@@ -322,8 +316,7 @@ def check_and_upload_file(proj, local_abspath, working_dir, limit=750, no_compar
                 parent_id = file_data['parent_id']
 
     return upload_file(proj, local_abspath, mcpath, working_dir, parent_id=parent_id,
-                       limit=limit, remotetree=remotetree,
-                       update_remotetree=update_remotetree)
+                       remotetree=remotetree, update_remotetree=update_remotetree)
 
 
 def filter_local_abspaths(proj_local_path, local_abspaths, working_dir):
@@ -342,7 +335,7 @@ def filter_local_abspaths(proj_local_path, local_abspaths, working_dir):
     """
     ignore_parser = igittigitt.IgnoreParser()
     ignore_parser.parse_rule_files(base_dir=proj_local_path, filename=".mcignore",
-        add_default_patterns=False)
+                                   add_default_patterns=False)
     _local_abspaths = []
     for local_abspath in local_abspaths:
         name = os.path.basename(local_abspath)
@@ -354,8 +347,8 @@ def filter_local_abspaths(proj_local_path, local_abspaths, working_dir):
     return _local_abspaths
 
 
-def check_and_upload_directory(proj, local_abspath, working_dir, limit=750,
-    no_compare=False, upload_as=None, localtree=None, remotetree=None, parent_id=None):
+def check_and_upload_directory(proj, local_abspath, working_dir, no_compare=False, upload_as=None, localtree=None,
+                               remotetree=None, parent_id=None):
     """Checks validity and uploads a directory and contents recursively
 
     Notes:
@@ -369,7 +362,6 @@ def check_and_upload_directory(proj, local_abspath, working_dir, limit=750,
         local_abspath (str): Local absolute path to directory to be uploaded recursively
         working_dir (str): Current working directory, used for making relative
             paths and printing messages.
-        limit (int): The limit in MB on the size of the files allowed to be uploaded.
         no_compare (bool): By default, this function checks local and remote
             file checksum to avoid downloading files that already exist. If
             no_compare is True, this check is skipped and all specified files
@@ -466,8 +458,10 @@ def check_and_upload_directory(proj, local_abspath, working_dir, limit=750,
         if os.path.isfile(child_local_abspath):
 
             file_result, error_msg = check_and_upload_file(proj, child_local_abspath, working_dir,
-                limit=limit, no_compare=no_compare, upload_as=child_upload_as, localtree=localtree,
-                remotetree=remotetree, parent_id=id, child_data=child_data, update_remotetree=True)
+                                                           no_compare=no_compare,
+                                                           upload_as=child_upload_as, localtree=localtree,
+                                                           remotetree=remotetree, parent_id=id, child_data=child_data,
+                                                           update_remotetree=True)
 
             if file_result is not None:
                 file_results[child_local_abspath] = file_result
@@ -478,9 +472,9 @@ def check_and_upload_directory(proj, local_abspath, working_dir, limit=750,
         elif os.path.isdir(child_local_abspath):
 
             file_results_tmp, error_results_tmp = \
-                check_and_upload_directory(proj, child_local_abspath, working_dir, limit=limit,
-                    no_compare=no_compare, upload_as=child_upload_as, localtree=localtree,
-                    remotetree=remotetree, parent_id=id)
+                check_and_upload_directory(proj, child_local_abspath, working_dir, no_compare=no_compare,
+                                           upload_as=child_upload_as, localtree=localtree, remotetree=remotetree,
+                                           parent_id=id)
 
             for tpath in file_results_tmp:
                 file_results[tpath] = file_results_tmp[tpath]
@@ -494,7 +488,8 @@ def check_and_upload_directory(proj, local_abspath, working_dir, limit=750,
     return (file_results, error_results)
 
 
-def standard_upload_v2(proj, paths, working_dir, recursive=False, limit=750, no_compare=False, upload_as=None, localtree=None, remotetree=None):
+def standard_upload_v2(proj, paths, working_dir, recursive=False, no_compare=False, upload_as=None, localtree=None,
+                       remotetree=None):
     """Upload files and directories to Materials Commons
 
     Args:
@@ -507,7 +502,6 @@ def standard_upload_v2(proj, paths, working_dir, recursive=False, limit=750, no_
             paths and printing messages.
         recursive (bool): If True, remove directories recursively. Otherwise,
             will not remove directories.
-        limit (int): The limit in MB on the size of the file allowed to be uploaded.
         no_compare (bool): By default, this function checks local and remote
             file checksum to avoid downloading files that already exist. If
             no_compare is True, this check is skipped and all specified files
@@ -553,8 +547,9 @@ def standard_upload_v2(proj, paths, working_dir, recursive=False, limit=750, no_
         if os.path.isfile(local_abspath):
 
             file_result, error_msg = check_and_upload_file(proj, local_abspath, working_dir,
-                limit=limit, no_compare=no_compare, upload_as=upload_as, localtree=localtree,
-                remotetree=remotetree)
+                                                           no_compare=no_compare, upload_as=upload_as,
+                                                           localtree=localtree,
+                                                           remotetree=remotetree)
 
             if file_result is not None:
                 file_results[local_abspath] = file_result
@@ -571,9 +566,8 @@ def standard_upload_v2(proj, paths, working_dir, recursive=False, limit=750, no_
                 continue
 
             file_results_tmp, error_results_tmp = \
-                check_and_upload_directory(proj, local_abspath, working_dir, limit=limit,
-                    no_compare=no_compare, upload_as=upload_as, localtree=localtree,
-                    remotetree=remotetree)
+                check_and_upload_directory(proj, local_abspath, working_dir, no_compare=no_compare, upload_as=upload_as,
+                                           localtree=localtree, remotetree=remotetree)
 
             for tpath in file_results_tmp:
                 file_results[tpath] = file_results_tmp[tpath]
@@ -589,8 +583,8 @@ def standard_upload_v2(proj, paths, working_dir, recursive=False, limit=750, no_
     return (file_results, error_results)
 
 
-
-def standard_upload(proj, paths, working_dir, recursive=False, limit=750, no_compare=False, upload_as=None, localtree=None, remotetree=None):
+def standard_upload(proj, paths, working_dir, recursive=False, no_compare=False, upload_as=None, localtree=None,
+                    remotetree=None):
     """Upload files to Materials Commons
 
     Args:
@@ -603,7 +597,6 @@ def standard_upload(proj, paths, working_dir, recursive=False, limit=750, no_com
             paths and printing messages.
         recursive (bool): If True, remove directories recursively. Otherwise,
             will not remove directories.
-        limit (int): The limit in MB on the size of the file allowed to be uploaded.
         no_compare (bool): By default, this function checks local and remote
             file checksum to avoid downloading files that already exist. If
             no_compare is True, this check is skipped and all specified files
@@ -642,7 +635,7 @@ def standard_upload(proj, paths, working_dir, recursive=False, limit=750, no_com
         local_abspaths = clipaths_to_local_abspaths(proj.local_path, paths,
                                                     working_dir)
         local_abspaths = make_local_abspaths_for_upload(proj.local_path,
-                                                       local_abspaths)
+                                                        local_abspaths)
 
         local_abspath = local_abspaths[0]
         if not os.path.exists(local_abspath):
@@ -716,12 +709,7 @@ def standard_upload(proj, paths, working_dir, recursive=False, limit=750, no_com
                     error_results[local_abspath] = error_msg
                     print(error_msg)
                     continue
-                file_size_mb = os.path.getsize(local_abspath) >> 20
-                if file_size_mb > limit:
-                    error_msg = printpath + ": file too large (size={1}MB, limit={0}MB) (not uploaded)".format(limit, file_size_mb)
-                    error_results[local_abspath] = error_msg
-                    print(error_msg)
-                    continue
+
                 result = proj.remote.upload_file(proj.id, parent.id, local_abspath)
                 if not filefuncs.isfile(result):
                     error_msg = printpath + ": unknown error (not uploaded)"
@@ -741,9 +729,7 @@ def standard_upload(proj, paths, working_dir, recursive=False, limit=750, no_com
                     if upload_as is None:
                         child_paths = [os.path.join(local_abspath, name) for name in os.listdir(local_abspath)]
                         file_results_tmp, error_results_tmp = \
-                            standard_upload(proj, child_paths, working_dir,
-                                recursive=recursive, limit=limit,
-                                remotetree=remotetree)
+                            standard_upload(proj, child_paths, working_dir, recursive=recursive, remotetree=remotetree)
                         for tpath in file_results_tmp:
                             file_results[tpath] = file_results_tmp[tpath]
                         for tpath in error_results_tmp:
@@ -753,10 +739,8 @@ def standard_upload(proj, paths, working_dir, recursive=False, limit=750, no_com
                             child_path = os.path.join(local_abspath, name)
                             child_upload_as = os.path.join(upload_as, name)
                             file_results_tmp, error_results_tmp = \
-                                standard_upload(proj, [child_path], working_dir,
-                                    recursive=recursive, limit=limit,
-                                    upload_as=child_upload_as,
-                                    remotetree=remotetree)
+                                standard_upload(proj, [child_path], working_dir, recursive=recursive,
+                                                upload_as=child_upload_as, remotetree=remotetree)
                             for tpath in file_results_tmp:
                                 file_results[tpath] = file_results_tmp[tpath]
                             for tpath in error_results_tmp:
@@ -785,6 +769,7 @@ def standard_upload(proj, paths, working_dir, recursive=False, limit=750, no_com
 
     return (file_results, error_results)
 
+
 class _TreeCompare(object):
     """Helper for the treecompare function.
 
@@ -804,12 +789,14 @@ class _TreeCompare(object):
         data transfer. Will be used and updated if provided.
 
     """
+
     def __init__(self, proj, localtree=None, remotetree=None):
         self.proj = proj
         self.localtree = localtree
         self.remotetree = remotetree
 
-        columns = ['l_mtime', 'l_size', 'l_type', 'l_checksum', 'r_mtime', 'r_size', 'r_type', 'r_checksum', 'r_obj', 'path', 'id', 'parent_id']
+        columns = ['l_mtime', 'l_size', 'l_type', 'l_checksum', 'r_mtime', 'r_size', 'r_type', 'r_checksum', 'r_obj',
+                   'path', 'id', 'parent_id']
         self.record_init = {k: None for k in columns}
 
     def _update_local_via_tree(self, path):
@@ -1136,6 +1123,7 @@ def treecompare(proj, paths, checksum=False, localtree=None, remotetree=None,
     _treecomparer = _TreeCompare(proj, localtree=localtree, remotetree=remotetree)
     return _treecomparer(paths, checksum=checksum, get_children=get_children)
 
+
 def get_types(path, files_data, dirs_data):
     """Use treecompare output to get local and remote types
 
@@ -1162,6 +1150,7 @@ def get_types(path, files_data, dirs_data):
 
     return (l_type, r_type)
 
+
 def is_type_mismatch(path, files_data, dirs_data):
     """Check treecompare filds_data and dirs_data output to check for type mismatch
 
@@ -1178,6 +1167,7 @@ def is_type_mismatch(path, files_data, dirs_data):
         return True
     return False
 
+
 def is_child_data_mismatch(child_data):
     """Check treecompare child_data file comparison for type mismatch
 
@@ -1192,8 +1182,10 @@ def is_child_data_mismatch(child_data):
         return True
     return False
 
+
 class _Mover(object):
     """Helper for the move function"""
+
     def __init__(self, proj, remote_only=False, localtree=None, remotetree=None):
         self.proj = proj
         self.remote_only = remote_only
@@ -1270,7 +1262,8 @@ class _Mover(object):
                 print(dest_printpath + ": does not exist on remote (may not rename multiple src)")
                 valid_usage = False
         elif self.dest_remote_type != 'directory':
-            raise cliexcept.MCCLIException("Error in mv: dest_path='" + dest_path + "', dest_remote_type='" + str(self.dest_remote_type) + "'")
+            raise cliexcept.MCCLIException(
+                "Error in mv: dest_path='" + dest_path + "', dest_remote_type='" + str(self.dest_remote_type) + "'")
 
         # check local dest type
         if not self.remote_only:
@@ -1283,7 +1276,8 @@ class _Mover(object):
                     print(dest_printpath + ": does not exist locally (may not rename multiple src)")
                     valid_usage = False
             elif self.dest_local_type != 'directory':
-                raise cliexcept.MCCLIException("Error in mv: dest_path='" + dest_path + "', dest_remote_type='" + str(self.dest_local_type) + "'")
+                raise cliexcept.MCCLIException(
+                    "Error in mv: dest_path='" + dest_path + "', dest_remote_type='" + str(self.dest_local_type) + "'")
 
             if self.dest_remote_type != self.dest_local_type:
                 print(dest_printpath + ": local and remote types do not match")
@@ -1382,6 +1376,7 @@ class _Mover(object):
                     self.localtree.update(to_directory_path)
                     self.localtree.close()
 
+
 def move(proj, paths, remote_only=False, localtree=None, remotetree=None):
     """Move files and directories
 
@@ -1411,12 +1406,13 @@ def move(proj, paths, remote_only=False, localtree=None, remotetree=None):
 
 class _Remover(object):
     """Helper for the remove function"""
+
     def __init__(self, proj, recursive=False, no_compare=False, remote_only=False, localtree=None, remotetree=None):
         self.proj = proj
         self.recursive = recursive
         self.no_compare = no_compare
         self.remote_only = remote_only
-        self.dry_run = False   # needs work to support this
+        self.dry_run = False  # needs work to support this
         self.localtree = localtree
         self.remotetree = remotetree
 
@@ -1453,7 +1449,6 @@ class _Remover(object):
                     print(e)
                     print("  FAILED, for unknown reason")
                 return False
-
 
     def _remove_local_file(self, path):
         local_abspath = filefuncs.make_local_abspath(self.proj.local_path, path)
@@ -1526,7 +1521,6 @@ class _Remover(object):
                     print("  FAILED, for unknown reason")
                 return False
 
-
     def _remove_local_directory(self, path):
         local_abspath = filefuncs.make_local_abspath(self.proj.local_path, path)
         if not os.path.exists(local_abspath):
@@ -1558,9 +1552,9 @@ class _Remover(object):
 
     def __call__(self, path):
 
-        checksum=True
+        checksum = True
         if self.no_compare:
-            checksum=False
+            checksum = False
 
         # if remotetree provided, set updatetime to now
         if self.remotetree:
@@ -1604,6 +1598,7 @@ class _Remover(object):
         else:
             raise cliexcept.MCCLIException("Error in rm_file: unknown error")
 
+
 def remove(proj, paths, recursive=False, no_compare=False, remote_only=False, localtree=None, remotetree=None):
     """Remove files and directories
 
@@ -1635,7 +1630,8 @@ def remove(proj, paths, recursive=False, no_compare=False, remote_only=False, lo
         data transfer. Will be used and updated if provided.
     """
 
-    _remover = _Remover(proj, recursive=recursive, no_compare=no_compare, remote_only=remote_only, localtree=localtree, remotetree=remotetree)
+    _remover = _Remover(proj, recursive=recursive, no_compare=no_compare, remote_only=remote_only, localtree=localtree,
+                        remotetree=remotetree)
     for p in paths:
         _remover(p)
 
@@ -1712,7 +1708,7 @@ def mkdir(proj, path, remote_only=False, create_intermediates=False, remotetree=
         parent_path = os.path.dirname(path)
         if create_intermediates:
             parent = mkdir(proj, parent_path, remote_only=remote_only,
-                create_intermediates=create_intermediates, remotetree=remotetree)
+                           create_intermediates=create_intermediates, remotetree=remotetree)
             result = proj.remote.create_directory(proj.id, os.path.basename(path), parent.id)
             if remotetree:
                 remotetree.connect()

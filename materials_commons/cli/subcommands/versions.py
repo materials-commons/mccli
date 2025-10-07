@@ -4,10 +4,12 @@ import os
 import sys
 
 import materials_commons.api as mcapi
-import materials_commons.cli.functions as clifuncs
+
+import materials_commons.cli.exceptions as cliexcept
 import materials_commons.cli.file_functions as filefuncs
+import materials_commons.cli.functions as clifuncs
 import materials_commons.cli.tmp_functions as tmpfuncs
-from materials_commons.cli.print_formatter import PrintFormatter
+
 
 def make_version_record(file, is_current):
     return {
@@ -23,13 +25,13 @@ def make_versions(proj, path):
     file = filefuncs.get_by_path_if_exists(proj.remote, proj.id, path)
 
     if not file:
-        print(p + ": No such file or directory on remote")
+        print(path + ": No such file or directory on remote")
         return None
     if filefuncs.isdir(file):
-        print(p + ": Is a directory on remote")
+        print(path + ": Is a directory on remote")
         return None
     if not filefuncs.isfile(file):
-        print(p + ": Not a file on remote")
+        print(path + ": Not a file on remote")
         return None
     file_versions = proj.remote.get_file_versions(proj.id, file.id)
 

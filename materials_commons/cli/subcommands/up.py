@@ -13,7 +13,7 @@ def make_parser():
     mc_up_description = "Upload files to Materials Commons"
 
     mc_up_usage = """
-    mc up [-r] [--no-compare] [--limit] <pathspec> [<pathspec> ...]
+    mc up [-r] [--no-compare] <pathspec> [<pathspec> ...]
     mc up -g [-r] [--no-compare] [--label] <pathspec> [<pathspec> ...]"""
 
     globus_help = """Use globus to upload files. Uses the current active upload or creates a new upload.
@@ -26,22 +26,22 @@ def make_parser():
     parser.add_argument('paths', nargs='*', default=None, help='Files or directories')
     parser.add_argument('-r', '--recursive', action="store_true", default=False,
                         help='Upload directory contents recursively')
-    parser.add_argument('--limit', nargs=1, type=float, default=[750],
-                        help='File size upload limit (MB). Default=750MB. Max size is also 750MB. Does not apply to Globus uploads.')
     parser.add_argument('-g', '--globus', action="store_true", default=False,
                         help=globus_help)
     parser.add_argument('--label', nargs=1, type=str,
                         help='Globus transfer label to make finding tasks simpler. Default is `<project name>-<upload name>.')
     parser.add_argument('--no-compare', action="store_true", default=False,
                         help='Upload without checking if remote is equivalent.')
-    parser.add_argument('--upload-as', nargs=1, default=None, help='Upload to a different location than standard upload. Specified as if it were a local path.')
+    parser.add_argument('--upload-as', nargs=1, default=None,
+                        help='Upload to a different location than standard upload. Specified as if it were a local path.')
     return parser
+
 
 def up_subcommand(argv, working_dir):
     """
     upload files to Materials Commons
 
-    mc up [-r] [--no-compare] [--limit] <pathspec> [<pathspec> ...]
+    mc up [-r] [--no-compare] <pathspec> [<pathspec> ...]
     mc up -g [-r] [--no-compare] [--label] <pathspec> [<pathspec> ...]
 
     """
@@ -81,7 +81,7 @@ def up_subcommand(argv, working_dir):
 
         mcpaths = treefuncs.clipaths_to_mcpaths(proj.local_path, local_abspaths, working_dir)
 
-        all_uploads = {upload.id:upload for upload in proj.remote.get_all_globus_upload_requests(proj.id)}
+        all_uploads = {upload.id: upload for upload in proj.remote.get_all_globus_upload_requests(proj.id)}
 
         globus_upload_id = None
         if pconfig.globus_upload_id:
@@ -99,8 +99,9 @@ def up_subcommand(argv, working_dir):
             upload = all_uploads[globus_upload_id]
             print("Using current globus upload (name=" + upload.name + ", id=" + str(upload.id) + ").")
 
-        if upload.status != 2:    # TODO clean up status code / message
-            raise cliexcept.MCCLIException("Current Globus upload (id=" + str(globus_upload_id) + ") not ready for uploading.")
+        if upload.status != 2:  # TODO clean up status code / message
+            raise cliexcept.MCCLIException(
+                "Current Globus upload (id=" + str(globus_upload_id) + ") not ready for uploading.")
 
         label = proj.name + "-" + upload.name
         if args.label:
@@ -117,7 +118,7 @@ def up_subcommand(argv, working_dir):
             print("Use `mc globus upload` to manage Globus uploads.")
             print("Multiple transfer tasks may be initiated.")
             print("When all tasks finish uploading, use `mc globus upload --id " + str(upload.id) +
-                " --finish` " + "to import all uploaded files into the Materials Commons project.")
+                  " --finish` " + "to import all uploaded files into the Materials Commons project.")
 
     else:
         localtree = None
@@ -125,9 +126,7 @@ def up_subcommand(argv, working_dir):
             localtree = LocalTree(proj.local_path)
 
         treefuncs.standard_upload_v2(proj, args.paths, working_dir,
-                                  recursive=args.recursive, limit=args.limit[0],
-                                  no_compare=args.no_compare,
-                                  upload_as=upload_as, localtree=localtree,
-                                  remotetree=remotetree)
+                                     recursive=args.recursive, no_compare=args.no_compare, upload_as=upload_as,
+                                     localtree=localtree, remotetree=remotetree)
 
     return
