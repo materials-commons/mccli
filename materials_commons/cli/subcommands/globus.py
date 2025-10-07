@@ -8,7 +8,7 @@ from io import StringIO
 import materials_commons.api as mcapi
 import materials_commons.cli.functions as clifuncs
 import materials_commons.cli.globus as cliglobus
-from materials_commons.cli.exceptions import MCCLIException
+import materials_commons.cli.exceptions as cliexcept
 from materials_commons.cli.list_objects import ListObjects
 from materials_commons.cli.user_config import Config
 

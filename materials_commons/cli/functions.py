@@ -443,7 +443,7 @@ def make_local_project(path, data=None):
             else:
                 proj = models.Project(data=data)
         except requests.exceptions.ConnectionError as e:
-            raise MCCLIException("Could not connect to " + remote.config.mcurl)
+            raise MCCLIException("Could not connect to " + project_config.remote.mcurl)
         except requests.exceptions.HTTPError as e:
             raise MCCLIException("HTTPError: " + str(e))
 

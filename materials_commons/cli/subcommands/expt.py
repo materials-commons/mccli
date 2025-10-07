@@ -2,6 +2,7 @@ import json
 import sys
 import materials_commons.api as mcapi
 import materials_commons.cli.functions as clifuncs
+import materials_commons.cli.exceptions as cliexcept
 from materials_commons.cli.list_objects import ListObjects
 
 def set_current_experiment(project_local_path, expt=None):
@@ -80,7 +81,7 @@ class ExptSubcommand(ListObjects):
             {"updated_at": clifuncs.format_time(obj.updated_at)}
         ]
         for d in data:
-            out.write(yaml.dump(d, width=70, indent=4), end='')
+            out.write(json.dump(d, width=70, indent=4), end='')
         out.write("\n")
 
     def create(self, args, out=sys.stdout):
