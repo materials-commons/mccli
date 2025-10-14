@@ -12,6 +12,9 @@ import materials_commons.api as mcapi
 import materials_commons.cli.exceptions as cliexcept
 import materials_commons.cli.functions as clifuncs
 import materials_commons.cli.file_functions as filefuncs
+from materials_commons.cli.tqdm_file import TqdmFile
+from tqdm import tqdm
+import os
 
 
 def clipaths_to_local_abspaths(proj_local_path, clipaths, working_dir):
@@ -180,8 +183,18 @@ def upload_file(proj, local_abspath, mcpath, working_dir, parent_id=None, remote
         parent_id = parent.id
 
     # else: -> upload, return results
-    file_result = proj.remote.upload_file(proj.id, parent_id, local_abspath)
-    if not filefuncs.isfile(file_result):
+    fsize = os.path.getsize(local_abspath)
+    file_result = proj.remote.resumable_upload_file(proj.id, parent_id, local_abspath)
+    # with open(local_abspath, 'rb') as fp, tqdm(total=fsize, unit="B", unit_scale=True, unit_divisor=1024) as bar:
+    #     fname = os.path.basename(local_abspath)
+    #     tf = TqdmFile(fp, bar)
+    #     file_result = proj.remote.resumable_upload_file_stream(proj.id, parent_id, fname, tf)
+        # if not file_result:
+        #     msg = printpath + ": unknown error (not uploaded)"
+        #     print(msg)
+        #     return (file_result, msg)
+    # file_result = proj.remote.resumable_upload_file(proj.id, parent_id, local_abspath)
+    if not file_result:
         msg = printpath + ": unknown error (not uploaded)"
         print(msg)
         return (file_result, msg)
@@ -710,8 +723,13 @@ def standard_upload(proj, paths, working_dir, recursive=False, no_compare=False,
                     print(error_msg)
                     continue
 
-                result = proj.remote.upload_file(proj.id, parent.id, local_abspath)
-                if not filefuncs.isfile(result):
+                fsize = os.path.getsize(local_abspath)
+                result = proj.remote.resumable_upload_file(proj.id, parent.id, local_abspath)
+                # with open(local_abspath, 'rb') as fp, tqdm(total=fsize, unit='B', unit_scale=True,):
+                #     fname = os.path.basename(local_abspath)
+                #     tf = TqdmFile(fp)
+                #     result = proj.remote.resumable_upload_file_stream(proj.id, parent.id, fname, tf)
+                if not result:
                     error_msg = printpath + ": unknown error (not uploaded)"
                     error_results[local_abspath] = error_msg
                     print(error_msg)
