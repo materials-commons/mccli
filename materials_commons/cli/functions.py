@@ -134,10 +134,16 @@ def format_time(time_value, fmt="%Y %b %d %H:%M:%S"):
     else:
         return str(type(time_value))
 
-def checksum(path):
+def checksum(path, chunk_size=131072):
     """Generate MD5 checksum for the file at "path" """
+    md5 = hashlib.md5()
     with open(path, 'rb') as f:
-        return hashlib.md5(f.read()).hexdigest()
+        while True:
+            data = f.read(chunk_size)
+            if not data:
+                break
+            md5.update(data)
+    return md5.hexdigest()
 
 def random_name(n=3, max_letters=6, sep='-'):
     """Generates a random name for "n" words of max "max_letters" length, joined by "sep" """
