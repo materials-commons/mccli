@@ -1,10 +1,10 @@
 import getpass
-import json
 import os
-import re
-from os.path import join
-
 import requests
+import warnings
+from os.path import join
+import json
+
 from materials_commons.api.client import Client
 
 

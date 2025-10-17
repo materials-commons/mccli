@@ -267,7 +267,7 @@ class TreeTable(SqlTable):
         Returns:
              List of sqlite3.Row
         """
-        self.curs.execute("SELECT * FROM " + self.tablename() + " WHERE parent_id=?", (parent_id, ))
+        self.curs.execute("SELECT * FROM " + self.tablename() + " WHERE parent_id=?", (parent_path, ))
         return self.curs.fetchall()
 
     def _walk_results(self, path):

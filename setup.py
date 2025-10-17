@@ -52,7 +52,7 @@ setup(
         "globus-cli",
         "globus-sdk",
         "igittigitt==2.1.0",
-        "materials-commons-api>=2.1.0",
+        "materials-commons-api>=2.0.1",
         "python-dateutil",
         "pyyaml",
         "requests",

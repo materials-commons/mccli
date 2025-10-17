@@ -19,7 +19,7 @@ def _add_owner(client, obj):
             users = client.list_users()
             client._users_by_id = {u.id:u for u in users}
         if obj.owner_id not in client._users_by_id:
-            raise MCCLIException("Could not find owner_id:" + str(obj.owner_id))
+            raise MCCLIException("Could not find owner_id:" + str(owner_id))
         obj.owner = client._users_by_id[obj.owner_id]
     else:
         raise MCCLIException("Object does not have owner or owner_id")

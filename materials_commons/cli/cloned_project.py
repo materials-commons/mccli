@@ -177,11 +177,14 @@ class ClonedProject(object):
         except SystemExit as e:
             print("Invalid download request")
 
-    def upload(self, *paths, recursive=False, globus=False, label=None, no_compare=False, upload_as=None):
+    def upload(self, *paths, recursive=False, limit=None, globus=False,
+               label=None, no_compare=False, upload_as=None):
         """Upload requested files to Materials Commons
 
         Args:
             recursive (bool): Download directory contents recursively
+            limit (str): File size upload limit (MB). Default="750" (750MB). Does
+                not apply to Globus uploads.
             globus (bool): Use globus to download files
             label (str): Globus transfer label to make finding tasks simpler
             no_compare (bool): Download remote without checking if local is
@@ -198,6 +201,9 @@ class ClonedProject(object):
         argv = []
         if recursive is True:
             argv.append("-r")
+        if limit is not None:
+            argv.append("--limit")
+            argv.append(str(limit))
         if globus is True:
             argv.append("-g")
         if label is not None:
