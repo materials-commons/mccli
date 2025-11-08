@@ -31,6 +31,7 @@ from materials_commons.cli.subcommands.rm import rm_subcommand
 from materials_commons.cli.subcommands.up import up_subcommand
 from materials_commons.cli.subcommands.versions import versions_subcommand
 from materials_commons.cli.user_config import Config
+from materials_commons.cli.subcommands.server import server_subcommand
 
 standard_usage = [
     {'name': 'remote', 'desc': 'List servers', 'subcommand': remote_subcommand},
@@ -50,7 +51,8 @@ standard_usage = [
     {'name': 'versions', 'desc': 'List file versions', 'subcommand': versions_subcommand},
     # {'name': 'proc', 'desc': 'List processes', 'subcommand': ProcSubcommand()},
     # {'name': 'samp', 'desc': 'List samples', 'subcommand': SampSubcommand()},
-    {'name': 'config', 'desc': 'Configure `mc`', 'subcommand': config_subcommand}
+    {'name': 'config', 'desc': 'Configure `mc`', 'subcommand': config_subcommand},
+    {'name': 'server', 'desc': 'Run MC Server', 'subcommand': server_subcommand}
 ]
 standard_interfaces = {d['name']: d for d in standard_usage}
 

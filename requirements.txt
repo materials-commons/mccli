@@ -1,3 +1,4 @@
+websockets
 globus-cli
 globus-sdk~=3.13.0
 igittigitt==2.1.0
