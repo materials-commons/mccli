@@ -3,7 +3,9 @@ import asyncio
 import json
 import os
 import signal
+import socket
 import ssl
+import uuid
 from typing import Awaitable, Callable, Dict, Any, Optional
 
 # Requires: websockets (asyncio-based websocket client)
@@ -28,9 +30,10 @@ async def _handle_command(cmd: Dict[str, Any], handlers: Dict[str, CommandHandle
 
 
 async def _ws_receive_loop(
-    ws_url: str,
-    token: Optional[str],
-    handlers: Dict[str, CommandHandler],
+        ws_url: str,
+        token: Optional[str],
+        client_uuid: str,
+        handlers: Dict[str, CommandHandler],
 ) -> None:
     """
     Connects to the websocket and processes incoming JSON messages.
@@ -46,13 +49,16 @@ async def _ws_receive_loop(
         headers = {}
         if token:
             headers["Authorization"] = f"Bearer {token}"
+            headers["MC-Client-ID"] = client_uuid
+            headers["MC-Client-Hostname"] = socket.gethostname()
+            headers["MC-Connection-Type"] = "cli"
 
         try:
             async with websockets.connect(ws_url, additional_headers=headers, open_timeout=15, ssl=ssl_context) as ws:
-                # Reset backoff after successful connection
-                backoff = DEFAULT_RECONNECT_MIN_SEC  # keep minimal reconnect state
+                # Reset backoff after a successful connection
+                backoff = DEFAULT_RECONNECT_MIN_SEC  # keep a minimal reconnection state
                 while True:
-                    raw = await ws.recv()  # may raise if connection closes
+                    raw = await ws.recv()  # may raise if the connection closes
                     # Expecting a JSON object or array
                     try:
                         data = json.loads(raw)
@@ -71,24 +77,43 @@ async def _ws_receive_loop(
             backoff = min(DEFAULT_RECONNECT_MAX_SEC, max(DEFAULT_RECONNECT_MIN_SEC, backoff * 2))
 
 
-async def run_command_listener(
-    url: str,
-    token: Optional[str],
-    handlers: Dict[str, CommandHandler],
-) -> None:
-    await _ws_receive_loop(url, token, handlers)
+async def run_command_listener(url: str, token: Optional[str], client_uuid: str,
+                               handlers: Dict[str, CommandHandler], ) -> None:
+    await _ws_receive_loop(url, token, client_uuid, handlers)
 
 
 # Example handlers
 async def handle_sync(cmd: Dict[str, Any]) -> None:
     print(f"[handler] sync -> {cmd}")
 
+
 async def handle_refresh_cache(cmd: Dict[str, Any]) -> None:
     print(f"[handler] refresh_cache -> {cmd}")
+
 
 async def handle_shutdown(cmd: Dict[str, Any]) -> None:
     print(f"[handler] shutdown -> {cmd}")
     os.kill(os.getpid(), signal.SIGINT)
+
+
+async def handle_list_dir(cmd: Dict[str, Any]) -> None:
+    print(f"[handler] list_dir -> {cmd}")
+
+
+async def handle_upload_file(cmd: Dict[str, Any]) -> None:
+    print(f"[handler] upload_file -> {cmd}")
+
+
+async def handle_download_file(cmd: Dict[str, Any]) -> None:
+    print(f"[handler] download_file -> {cmd}")
+
+
+async def handle_upload_dir(cmd: Dict[str, Any]) -> None:
+    print(f"[handler] upload_dir -> {cmd}")
+
+
+async def handle_download_dir(cmd: Dict[str, Any]) -> None:
+    print(f"[handler] download_dir -> {cmd}")
 
 
 def build_handlers() -> Dict[str, CommandHandler]:
@@ -96,6 +121,11 @@ def build_handlers() -> Dict[str, CommandHandler]:
         "sync": handle_sync,
         "refresh_cache": handle_refresh_cache,
         "shutdown": handle_shutdown,
+        "list_dir": handle_list_dir,
+        "upload_file": handle_upload_file,
+        "download_file": handle_download_file,
+        "upload_dir": handle_upload_dir,
+        "download_dir": handle_download_dir,
     }
 
 
@@ -128,9 +158,13 @@ def server_subcommand(argv, working_dir=None):
     handlers = build_handlers()
 
     config = Config()
+    if config.client_uuid is None:
+        config.client_uuid = str(uuid.uuid4())
+        config.save()
 
     async def main():
-        listener = asyncio.create_task(run_command_listener(args.ws_url, config.default_remote.mcapikey, handlers))
+        listener = asyncio.create_task(
+            run_command_listener(args.ws_url, config.default_remote.mcapikey, config.client_uuid, handlers))
         await listener
 
     try:
@@ -146,4 +180,3 @@ def server_subcommand(argv, working_dir=None):
         except Exception:
             pass
         loop.close()
-
