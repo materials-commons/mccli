@@ -10,8 +10,12 @@ from typing import Awaitable, Callable, Dict, Any, Optional
 
 # Requires: websockets (asyncio-based websocket client)
 import websockets
+from materials_commons.cli import desktop
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK, InvalidStatus
+
+from materials_commons.cli.desktop.websocket_server import WebSocketCommandListener
 from materials_commons.cli.user_config import Config
+import materials_commons.cli.desktop
 
 CommandHandler = Callable[[Dict[str, Any]], Awaitable[None]]
 
@@ -20,13 +24,13 @@ DEFAULT_RECONNECT_MIN_SEC = 1
 DEFAULT_RECONNECT_MAX_SEC = 30
 
 
-async def _handle_command(cmd: Dict[str, Any], handlers: Dict[str, CommandHandler]) -> None:
+async def _handle_command(ws, cmd: Dict[str, Any], handlers: Dict[str, CommandHandler]) -> None:
     kind = cmd.get("type") or cmd.get("command")
     if not kind:
         return
     handler = handlers.get(kind)
     if handler:
-        await handler(cmd)
+        await handler(ws, cmd)
 
 
 async def _ws_receive_loop(
@@ -49,9 +53,13 @@ async def _ws_receive_loop(
         headers = {}
         if token:
             headers["Authorization"] = f"Bearer {token}"
-            headers["MC-Client-ID"] = client_uuid
-            headers["MC-Client-Hostname"] = socket.gethostname()
-            headers["MC-Connection-Type"] = "cli"
+
+        headers["MC-Client-ID"] = client_uuid
+        headers["MC-Client-Hostname"] = socket.gethostname()
+        headers["MC-Connection-Type"] = "cli"
+
+        projects = desktop.list_local_projects()
+        headers["MC-Client-Projects"] = ",".join([str(p["project_id"]) for p in projects])
 
         try:
             async with websockets.connect(ws_url, additional_headers=headers, open_timeout=15, ssl=ssl_context) as ws:
@@ -67,11 +75,11 @@ async def _ws_receive_loop(
 
                     # Support either a single command or a batch
                     if isinstance(data, dict):
-                        await _handle_command(data, handlers)
+                        await _handle_command(ws, data, handlers)
                     elif isinstance(data, list):
                         for item in data:
                             if isinstance(item, dict):
-                                await _handle_command(item, handlers)
+                                await _handle_command(ws, item, handlers)
         except (ConnectionClosedOK, ConnectionClosedError, InvalidStatus, OSError, asyncio.TimeoutError):
             await asyncio.sleep(backoff)
             backoff = min(DEFAULT_RECONNECT_MAX_SEC, max(DEFAULT_RECONNECT_MIN_SEC, backoff * 2))
@@ -83,37 +91,40 @@ async def run_command_listener(url: str, token: Optional[str], client_uuid: str,
 
 
 # Example handlers
-async def handle_sync(cmd: Dict[str, Any]) -> None:
+async def handle_sync(ws, cmd: Dict[str, Any]) -> None:
     print(f"[handler] sync -> {cmd}")
 
 
-async def handle_refresh_cache(cmd: Dict[str, Any]) -> None:
+async def handle_refresh_cache(ws, cmd: Dict[str, Any]) -> None:
     print(f"[handler] refresh_cache -> {cmd}")
 
 
-async def handle_shutdown(cmd: Dict[str, Any]) -> None:
+async def handle_shutdown(ws, cmd: Dict[str, Any]) -> None:
     print(f"[handler] shutdown -> {cmd}")
     os.kill(os.getpid(), signal.SIGINT)
 
 
-async def handle_list_dir(cmd: Dict[str, Any]) -> None:
+async def handle_list_dir(ws, cmd: Dict[str, Any]) -> None:
     print(f"[handler] list_dir -> {cmd}")
 
 
-async def handle_upload_file(cmd: Dict[str, Any]) -> None:
+async def handle_upload_file(ws, cmd: Dict[str, Any]) -> None:
     print(f"[handler] upload_file -> {cmd}")
 
 
-async def handle_download_file(cmd: Dict[str, Any]) -> None:
+async def handle_download_file(ws, cmd: Dict[str, Any]) -> None:
     print(f"[handler] download_file -> {cmd}")
 
 
-async def handle_upload_dir(cmd: Dict[str, Any]) -> None:
+async def handle_upload_dir(ws, cmd: Dict[str, Any]) -> None:
     print(f"[handler] upload_dir -> {cmd}")
 
 
-async def handle_download_dir(cmd: Dict[str, Any]) -> None:
+async def handle_download_dir(ws, cmd: Dict[str, Any]) -> None:
     print(f"[handler] download_dir -> {cmd}")
+
+async def handle_list_projects(ws, cmd: Dict[str, Any]) -> None:
+    print(f"[handler] list_projects -> {cmd}")
 
 
 def build_handlers() -> Dict[str, CommandHandler]:
@@ -163,9 +174,11 @@ def server_subcommand(argv, working_dir=None):
         config.save()
 
     async def main():
-        listener = asyncio.create_task(
-            run_command_listener(args.ws_url, config.default_remote.mcapikey, config.client_uuid, handlers))
-        await listener
+        listener = WebSocketCommandListener(args.ws_url, config.default_remote.mcapikey, config.client_uuid)
+        await listener.run()
+        # listener = asyncio.create_task(
+        #     run_command_listener(args.ws_url, config.default_remote.mcapikey, config.client_uuid, handlers))
+        # await listener
 
     try:
         loop = asyncio.new_event_loop()
