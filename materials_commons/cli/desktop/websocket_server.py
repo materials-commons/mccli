@@ -52,11 +52,11 @@ class WebSocketCommandListener:
     DEFAULT_RECONNECT_MIN_SEC = 1
     DEFAULT_RECONNECT_MAX_SEC = 30
 
-    def __init__(self, ws_url: str, token: Optional[str], client_uuid: str, handlers: Dict[str, CommandHandler]):
+    def __init__(self, ws_url: str, token: Optional[str], client_uuid: str, handlers: Dict[str, CommandHandler], queue: asyncio.Queue):
         self.ws_url = ws_url
         self.token = token
         self.client_uuid = client_uuid
-        self.queue = asyncio.Queue()
+        self.queue = queue
         self.backoff = self.DEFAULT_RECONNECT_MIN_SEC
         self.handlers = handlers
 

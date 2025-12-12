@@ -7,6 +7,7 @@ from typing import Awaitable, Callable, Dict, Any
 from materials_commons.cli.desktop.command_handlers import register_handlers
 from materials_commons.cli.desktop.websocket_server import WebSocketCommandListener
 from materials_commons.cli.user_config import Config
+from materials_commons.cli.desktop.local_rest_server import LocalRestServer
 
 CommandHandler = Callable[[Dict[str, Any]], Awaitable[None]]
 
@@ -42,9 +43,17 @@ def server_subcommand(argv, working_dir=None):
         config.save()
 
     async def main():
-        listener = WebSocketCommandListener(args.ws_url, config.default_remote.mcapikey, config.client_uuid,
-                                            register_handlers())
-        await listener.run()
+        queue = asyncio.Queue()
+        running_loop = asyncio.get_running_loop()
+        local_rest_server = LocalRestServer(loop=running_loop, queue=queue)
+        local_rest_server.start()
+
+        try:
+            listener = WebSocketCommandListener(args.ws_url, config.default_remote.mcapikey, config.client_uuid,
+                                                register_handlers(), queue)
+            await listener.run()
+        finally:
+            local_rest_server.stop()
 
     try:
         loop = asyncio.new_event_loop()
