@@ -4,6 +4,7 @@ import os
 import signal
 import socket
 import ssl
+from _asyncio import Task
 from typing import Dict, Any, Optional, Callable, Awaitable
 
 import websockets
@@ -14,29 +15,50 @@ from materials_commons.cli import desktop
 CommandHandler = Callable[[Any, Dict[str, Any]], Awaitable[None]]
 
 
+async def cleanup_tasks(receiver_task: Task[None], sender_task: Task[Any]):
+    # Wait for either task to finish/fail. This prevents the issue where
+    # one of the tasks aborts and the other keeps going.
+    done, pending = await asyncio.wait(
+        [sender_task, receiver_task],
+        return_when=asyncio.FIRST_COMPLETED
+    )
+
+    # If we are here then we need to cancel both done and pending tasks. Then
+    # we can safely restart.
+
+    # First we cancel pending tasks
+    for task in pending:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    # Next, cancel done tasks
+    for task in done:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    # 4. Check for exceptions to log them (optional)
+    for task in done:
+        if task.exception():
+            print(f"Task failed: {task.exception()}")
+
+
 class WebSocketCommandListener:
     DEFAULT_RECONNECT_MIN_SEC = 1
     DEFAULT_RECONNECT_MAX_SEC = 30
 
-    def __init__(self, ws_url: str, token: Optional[str], client_uuid: str):
+    def __init__(self, ws_url: str, token: Optional[str], client_uuid: str, handlers: Dict[str, CommandHandler]):
         self.ws_url = ws_url
         self.token = token
         self.client_uuid = client_uuid
+        self.queue = asyncio.Queue()
         self.backoff = self.DEFAULT_RECONNECT_MIN_SEC
-        self.handlers = self._build_handlers()
-
-    def _build_handlers(self) -> Dict[str, CommandHandler]:
-        return {
-            "sync": self.handle_sync,
-            "refresh_cache": self.handle_refresh_cache,
-            "shutdown": self.handle_shutdown,
-            "list_dir": self.handle_list_dir,
-            "upload_file": self.handle_upload_file,
-            "download_file": self.handle_download_file,
-            "upload_dir": self.handle_upload_dir,
-            "download_dir": self.handle_download_dir,
-            "list_projects": self.handle_list_projects,
-        }
+        self.handlers = handlers
 
     async def run(self) -> None:
         """
@@ -60,35 +82,65 @@ class WebSocketCommandListener:
                     # Reset backoff after a successful connection
                     self.backoff = self.DEFAULT_RECONNECT_MIN_SEC
 
-                    while True:
-                        raw = await ws.recv()
-                        try:
-                            data = json.loads(raw)
-                        except json.JSONDecodeError:
-                            continue
+                    # Create the sender and receiver tasks for the websocket
+                    sender_task = asyncio.create_task(self._ws_sender_loop(ws))
+                    receiver_task = asyncio.create_task(self._ws_receiver_loop(ws))
 
-                        # Support either a single command or a batch
-                        if isinstance(data, dict):
-                            await self._dispatch(ws, data)
-                        elif isinstance(data, list):
-                            for item in data:
-                                if isinstance(item, dict):
-                                    await self._dispatch(ws, item)
+                    await cleanup_tasks(receiver_task, sender_task)
 
-            except (ConnectionClosedOK, ConnectionClosedError, InvalidStatus, OSError, asyncio.TimeoutError):
+            except (ConnectionClosedOK, ConnectionClosedError, InvalidStatus, OSError, asyncio.TimeoutError) as e:
+                print(f"Connection lost: {e}, attemping to reconnect in {self.backoff} seconds")
                 await asyncio.sleep(self.backoff)
                 self.backoff = min(
                     self.DEFAULT_RECONNECT_MAX_SEC,
                     max(self.DEFAULT_RECONNECT_MIN_SEC, self.backoff * 2)
                 )
 
-    async def _dispatch(self, ws, cmd: Dict[str, Any]) -> None:
+    async def _ws_sender_loop(self, ws):
+        """Reads from the queue and sends to the websocket."""
+        while True:
+            # wait for an item from the queue. This message is now in flight and not in queue.
+            msg = await self.queue.get()
+            try:
+                # Attempt to send the message
+                await ws.send(json.dumps(msg))
+            except Exception as e:
+                # If we are here, then we took a message out of the queue but failed to send it.
+                # That means the message could be lost if we don't re-queue it. For now, we assume
+                # there is no message ordering requirement, so we can just re-queue it. This
+                # shouldn't cause us any problems. If the server we connected to is dead then
+                # we just keep trying to reconnect and send the messages when it comes back.
+                await self.queue.put(msg)
+
+                # We want to exit the loop if we encounter an error, so raise the exception
+                raise e
+            finally:
+                self.queue.task_done()
+
+    async def _ws_receiver_loop(self, ws):
+        """Reads from the websocket and puts messages into the queue."""
+        while True:
+            raw = await ws.recv()
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+
+            if isinstance(data, dict):
+                await self._dispatch(data)
+            elif isinstance(data, list):
+                for item in data:
+                    if isinstance(item, dict):
+                        await self._dispatch(item)
+
+
+    async def _dispatch(self, cmd: Dict[str, Any]) -> None:
         kind = cmd.get("type") or cmd.get("command")
         if not kind:
             return
         handler = self.handlers.get(kind)
         if handler:
-            await handler(ws, cmd)
+            await handler(self.queue, cmd)
 
     def _build_headers(self) -> Dict[str, str]:
         headers = {}
@@ -108,32 +160,3 @@ class WebSocketCommandListener:
 
         return headers
 
-    # --- Handlers ---
-
-    async def handle_sync(self, ws, cmd: Dict[str, Any]) -> None:
-        print(f"[handler] sync -> {cmd}")
-
-    async def handle_refresh_cache(self, ws, cmd: Dict[str, Any]) -> None:
-        print(f"[handler] refresh_cache -> {cmd}")
-
-    async def handle_shutdown(self, ws, cmd: Dict[str, Any]) -> None:
-        print(f"[handler] shutdown -> {cmd}")
-        os.kill(os.getpid(), signal.SIGINT)
-
-    async def handle_list_dir(self, ws, cmd: Dict[str, Any]) -> None:
-        print(f"[handler] list_dir -> {cmd}")
-
-    async def handle_upload_file(self, ws, cmd: Dict[str, Any]) -> None:
-        print(f"[handler] upload_file -> {cmd}")
-
-    async def handle_download_file(self, ws, cmd: Dict[str, Any]) -> None:
-        print(f"[handler] download_file -> {cmd}")
-
-    async def handle_upload_dir(self, ws, cmd: Dict[str, Any]) -> None:
-        print(f"[handler] upload_dir -> {cmd}")
-
-    async def handle_download_dir(self, ws, cmd: Dict[str, Any]) -> None:
-        print(f"[handler] download_dir -> {cmd}")
-
-    async def handle_list_projects(self, ws, cmd: Dict[str, Any]) -> None:
-        print(f"[handler] list_projects -> {cmd}")
