@@ -3,6 +3,9 @@ from typing import Dict, Any,Callable, Awaitable
 from materials_commons.cli import desktop
 import os
 import signal
+import logging
+
+logger = logging.getLogger(__name__)
 
 CommandHandler = Callable[[Any, Dict[str, Any]], Awaitable[None]]
 def register_handlers() -> Dict[str, CommandHandler]:
@@ -11,11 +14,14 @@ def register_handlers() -> Dict[str, CommandHandler]:
         "refresh_cache": handle_refresh_cache,
         "shutdown": handle_shutdown,
         "list_dir": handle_list_dir,
-        "upload_file": handle_upload_file,
         "download_file": handle_download_file,
-        "upload_dir": handle_upload_dir,
         "download_dir": handle_download_dir,
         "list_projects": handle_list_projects,
+        "upload_file": handle_upload_file,
+        "upload_directory": handle_upload_directory,
+        "cancel_upload": handle_cancel_upload,
+        "pause_upload": handle_pause_upload,
+        "resume_upload": handle_resume_upload,
     }
 
 async def handle_sync(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
@@ -31,14 +37,8 @@ async def handle_shutdown(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
 async def handle_list_dir(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] list_dir -> {cmd}")
 
-async def handle_upload_file(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
-    print(f"[handler] upload_file -> {cmd}")
-
 async def handle_download_file(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] download_file -> {cmd}")
-
-async def handle_upload_dir(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
-    print(f"[handler] upload_dir -> {cmd}")
 
 async def handle_download_dir(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] download_dir -> {cmd}")
@@ -47,3 +47,164 @@ async def handle_list_projects(queue: asyncio.Queue, cmd: Dict[str, Any]) -> Non
     # print(f"[handler] list_projects -> {cmd}")
     projects = desktop.list_local_projects()
     await queue.put({"command": "list_projects", "payload": projects})
+
+async def handle_upload_file(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
+    """
+    Handler for UPLOAD_FILE command from the server.
+
+    Expected payload:
+    {
+        "file_path": "path/to/file/in/project/file.csv",
+        "project_id": 1047,
+        "directory_id": 100,
+        "chunk_size": 1048576 // optional
+    }
+    """
+    print(f"[handler] upload_file_request -> {cmd}")
+    payload = cmd.get("payload", {})
+    file_path = payload.get("file_path")
+    project_id = payload.get("project_id")
+    directory_id = payload.get("directory_id")
+    chunk_size = payload.get("chunk_size", 1024 * 1024)
+
+    if not file_path or not project_id or not directory_id:
+        logger.error("Missing required fields in UPLOAD_FILE command")
+        return
+
+    # This will be set by the listener
+    file_manager = cmd.get("_file_manager")
+    if not file_manager:
+        logger.error("File transfer manager not available")
+        return
+
+    logger.info(f"Received upload request for: {file_path}")
+
+    try:
+        transfer_id = await file_manager.upload_file(
+            file_path=file_path,
+            project_id=project_id,
+            directory_id=directory_id,
+            chunk_size=chunk_size,
+            progress_callback=lambda sent, total: logger.debug(f"{file_path}: {sent}/{total}")
+        )
+        logger.info(f"Queued upload: {file_path} (transfer_id: {transfer_id})")
+    except Exception as e:
+        logger.error(f"Failed to queue upload: {e}")
+
+
+async def handle_upload_directory(queue: asyncio.Queue, cmd: Dict[str, Any]):
+    """
+    Handler for UPLOAD_DIRECTORY command from the server.
+
+    Expected payload:
+    {
+        "directory_path": "/local/path/to/data",
+        "project_id": 1047,
+        "directory_id": 100,
+        "recursive": true,
+        "chunk_size": 1048576 // optional
+    }
+    """
+    payload = cmd.get("payload", {})
+    directory_path = payload.get("directory_path")
+    project_id = payload.get("project_id")
+    directory_id = payload.get("directory_id")
+    recursive = payload.get("recursive", True)
+    chunk_size = payload.get("chunk_size", 1024 * 1024)
+
+    if not directory_path or not project_id or not directory_id:
+        logger.error("Missing required fields in UPLOAD_DIRECTORY command")
+        return
+
+    file_manager = cmd.get("_file_manager")
+    if not file_manager:
+        logger.error("File transfer manager not available")
+        return
+
+    logger.info(f"Received directory upload request for: {directory_path}")
+
+    try:
+        transfer_ids = await file_manager.upload_directory(
+            dir_path=directory_path,
+            project_id=project_id,
+            directory_id=directory_id,
+            recursive=recursive,
+            progress_callback=lambda fname, sent, total:
+            logger.debug(f"{fname}: {sent}/{total}")
+        )
+        logger.info(f"Queued {len(transfer_ids)} files from {directory_path}")
+    except Exception as e:
+        logger.error(f"Failed to queue directory upload: {e}")
+
+
+async def handle_cancel_upload(queue: asyncio.Queue, cmd: Dict[str, Any]):
+    """
+    Handler for CANCEL_UPLOAD command from the server.
+
+    Expected payload:
+    {
+        "transfer_id": "uuid-here"
+    }
+    """
+    payload = cmd.get("payload", {})
+    transfer_id = payload.get("transfer_id")
+
+    if not transfer_id:
+        logger.error("Missing transfer_id in CANCEL_UPLOAD command")
+        return
+
+    file_manager = cmd.get("_file_manager")
+    if not file_manager:
+        logger.error("File transfer manager not available")
+        return
+
+    logger.info(f"Received cancel request for transfer: {transfer_id}")
+    file_manager.cancel_upload(transfer_id)
+
+
+async def handle_pause_upload(queue: asyncio.Queue, cmd: Dict[str, Any]):
+    """
+    Handler for PAUSE_UPLOAD command from the server.
+
+    Expected payload:
+    {
+        "transfer_id": "uuid-here"
+    }
+    """
+    payload = cmd.get("payload", {})
+    transfer_id = payload.get("transfer_id")
+
+    if not transfer_id:
+        logger.error("Missing transfer_id in PAUSE_UPLOAD command")
+        return
+
+    file_manager = cmd.get("_file_manager")
+    if not file_manager:
+        return
+
+    logger.info(f"Received pause request for transfer: {transfer_id}")
+    file_manager.pause_upload(transfer_id)
+
+
+async def handle_resume_upload(queue: asyncio.Queue, cmd: Dict[str, Any]):
+    """
+    Handler for RESUME_UPLOAD command from the server.
+
+    Expected payload:
+    {
+        "transfer_id": "uuid-here"
+    }
+    """
+    payload = cmd.get("payload", {})
+    transfer_id = payload.get("transfer_id")
+
+    if not transfer_id:
+        logger.error("Missing transfer_id in RESUME_UPLOAD command")
+        return
+
+    file_manager = cmd.get("_file_manager")
+    if not file_manager:
+        return
+
+    logger.info(f"Received resume request for transfer: {transfer_id}")
+    file_manager.resume_upload(transfer_id)

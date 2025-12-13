@@ -48,11 +48,12 @@ def server_subcommand(argv, working_dir=None):
         local_rest_server = LocalRestServer(loop=running_loop, queue=queue)
         local_rest_server.start()
 
+        listener = WebSocketCommandListener(args.ws_url, config.default_remote.mcapikey, config.client_uuid,
+                                            register_handlers(), queue)
         try:
-            listener = WebSocketCommandListener(args.ws_url, config.default_remote.mcapikey, config.client_uuid,
-                                                register_handlers(), queue)
             await listener.run()
         finally:
+            await listener.shutdown()
             local_rest_server.stop()
 
     try:
