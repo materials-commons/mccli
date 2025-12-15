@@ -154,6 +154,7 @@ class WebSocketCommandListener:
             except json.JSONDecodeError:
                 continue
 
+            print(f"Received message: {data}")
             if isinstance(data, dict):
                 await self._dispatch(data)
             elif isinstance(data, list):

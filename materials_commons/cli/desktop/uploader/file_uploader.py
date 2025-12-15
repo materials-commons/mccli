@@ -2,7 +2,7 @@ import asyncio
 import json
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Callable, Dict, Any
 import hashlib
@@ -101,7 +101,7 @@ class FileUploader:
         msg = {
             "command": "TRANSFER_INIT",
             "id": str(uuid.uuid4()),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "client_id": self.client_id,
             "payload": {
                 "transfer_id": self.transfer_id,
@@ -219,7 +219,7 @@ class FileUploader:
         msg = {
             "command": "TRANSFER_COMPLETE",
             "id": str(uuid.uuid4()),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "client_id": self.client_id,
             "payload": {
                 "transfer_id": self.transfer_id,
@@ -431,7 +431,7 @@ class FileTransferManager:
         msg = {
             "command": "TRANSFER_RESUME",
             "id": str(uuid.uuid4()),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "clientId": self.client_id,
             "payload": {
                 "transfer_id": transfer_id

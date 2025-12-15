@@ -16,12 +16,12 @@ def register_handlers() -> Dict[str, CommandHandler]:
         "list_dir": handle_list_dir,
         "download_file": handle_download_file,
         "download_dir": handle_download_dir,
-        "list_projects": handle_list_projects,
-        "upload_file": handle_upload_file,
-        "upload_directory": handle_upload_directory,
-        "cancel_upload": handle_cancel_upload,
-        "pause_upload": handle_pause_upload,
-        "resume_upload": handle_resume_upload,
+        "LIST_PROJECTS": handle_list_projects,
+        "UPLOAD_FILE": handle_upload_file,
+        "UPLOAD_DIRECTORY": handle_upload_directory,
+        "CANCEL_UPLOAD": handle_cancel_upload,
+        "UPLOAD_PAUSE": handle_pause_upload,
+        "UPLOAD_RESUME": handle_resume_upload,
     }
 
 async def handle_sync(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
@@ -61,7 +61,7 @@ async def handle_upload_file(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     }
     """
     print(f"[handler] upload_file_request -> {cmd}")
-    payload = cmd.get("payload", {})
+    payload = cmd.get("payload") or {}
     file_path = payload.get("file_path")
     project_id = payload.get("project_id")
     directory_id = payload.get("directory_id")
