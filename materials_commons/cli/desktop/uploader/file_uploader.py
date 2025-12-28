@@ -18,6 +18,7 @@ class FileUploader:
             self,
             send_queue: asyncio.Queue,
             file_path: str,
+            project_file_path: str,
             project_id: int,
             directory_id: int,
             client_id: str,
@@ -26,6 +27,7 @@ class FileUploader:
     ):
         self.send_queue = send_queue
         self.file_path = Path(file_path)
+        self.project_file_path = Path(project_file_path)
         self.project_id = project_id
         self.directory_id = directory_id
         self.client_id = client_id
@@ -106,8 +108,7 @@ class FileUploader:
             "payload": {
                 "transfer_id": self.transfer_id,
                 "project_id": self.project_id,
-                "directory_id": self.directory_id,
-                "file_name": self.file_path.name,
+                "file_path": self.file_path.as_posix(),
                 "file_size": self.file_size,
                 "chunk_size": self.chunk_size,
                 "checksum": self._calculate_md5() if self.file_size < 100 * 1024 * 1024 else ""
@@ -373,6 +374,7 @@ class FileTransferManager:
         uploader = FileUploader(
             send_queue=self.send_queue,
             file_path=file_path,
+            project_file_path=file_path,
             project_id=project_id,
             directory_id=directory_id,
             client_id=self.client_id,
