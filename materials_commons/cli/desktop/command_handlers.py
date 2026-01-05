@@ -50,26 +50,42 @@ async def handle_list_projects(queue: asyncio.Queue, cmd: Dict[str, Any]) -> Non
 
 async def handle_upload_file(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     """
-    Handler for UPLOAD_FILE command from the server.
+    Handler for UPLOAD_FILE command from the server. It will receive a request that
+    contains the project_id and project_path. It will optionally receive the file_path
+    if the file being requested is not in the project. Optionally, the server can send
+    a chunk_size to use for uploading the file.
 
     Expected payload:
     {
-        "file_path": "path/to/file/in/project/file.csv",
+        "project_path": "/path/to/file/in/project", # This assumes / for project root, client will resolve to file_path
+        "file_path": "path/to/file/in/project/file.csv", # Optional
         "project_id": 1047,
-        "directory_id": 100,
-        "chunk_size": 1048576 // optional
+        "chunk_size": 1048576 # Optional
     }
     """
     print(f"[handler] upload_file_request -> {cmd}")
     payload = cmd.get("payload") or {}
+    project_path = payload.get("project_path")
     file_path = payload.get("file_path")
     project_id = payload.get("project_id")
-    directory_id = payload.get("directory_id")
     chunk_size = payload.get("chunk_size", 1024 * 1024)
 
-    if not file_path or not project_id or not directory_id:
+    # Validate that we at least have a project_id and project_path
+    if not project_path or not project_id:
         logger.error("Missing required fields in UPLOAD_FILE command")
         return
+
+    # The server may send us just a project_path. If that happens, then we need to resolve it to a file_path
+    # based on the local project's path. The project_path the server sends us is the path on the MC server.
+    # All MC server projects start with /, so we need to resolve to the local client path to the project.
+    if project_path and not file_path:
+        p = desktop.get_local_project_by_id(project_id)
+        if not p:
+            logger.error(f"Project {project_id} not found in local projects")
+            return
+        file_path = os.path.join(p["project_dir_path"], project_path)
+
+    print(f"Resolved file_path: {file_path}")
 
     # This will be set by the listener
     file_manager = cmd.get("_file_manager")
@@ -83,7 +99,7 @@ async def handle_upload_file(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
         transfer_id = await file_manager.upload_file(
             file_path=file_path,
             project_id=project_id,
-            directory_id=directory_id,
+            project_path=project_path,
             chunk_size=chunk_size,
             progress_callback=lambda sent, total: logger.debug(f"{file_path}: {sent}/{total}")
         )

@@ -125,8 +125,9 @@ class WebSocketCommandListener:
                 if isinstance(msg, dict) and msg.get("_binary_frame"):
                     # Build binary frame by sending a JSON header + newline + binary data
                     header = msg["header"]
+                    print(f"Sending binary frame: {header}")
                     data = msg["data"]
-                    header_bytes = json.dumps(header + "\n").encode("utf-8")
+                    header_bytes = (json.dumps(header) + "\n").encode("utf-8")
                     frame = header_bytes + data
                     await ws.send(frame)
                 else:

@@ -9,6 +9,7 @@ def list_local_projects():
     # Iterate over all entries in the current directory
     for entry in os.listdir(current_directory):
         project_dir = os.path.join(current_directory, entry)
+        print(f"project_dir: {project_dir}")
 
         # We only care about directories
         if not os.path.isdir(project_dir):
@@ -27,6 +28,7 @@ def list_local_projects():
                 if "project_id" in data:
                     projects.append({
                         "directory": entry,
+                        "project_dir_path": project_dir,
                         "project_id": data["project_id"]
                     })
         except (json.JSONDecodeError, IOError):
@@ -34,3 +36,10 @@ def list_local_projects():
             continue
 
     return projects
+
+def get_local_project_by_id(project_id):
+    projects = list_local_projects()
+    for project in projects:
+        if project["project_id"] == project_id:
+            return project
+    return None
