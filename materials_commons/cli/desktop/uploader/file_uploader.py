@@ -22,6 +22,7 @@ class FileUploader:
             project_id: int,
             client_id: str,
             chunk_size: int = 1024 * 1024,  # 1MB default
+            window_size: int = 10,
             progress_callback: Optional[Callable[[int, int], None]] = None
     ):
         self.send_queue = send_queue
@@ -30,6 +31,7 @@ class FileUploader:
         self.project_id = project_id
         self.client_id = client_id
         self.chunk_size = chunk_size
+        self.window_size = window_size
         self.progress_callback = progress_callback
 
         self.transfer_id = str(uuid.uuid4())
@@ -37,6 +39,12 @@ class FileUploader:
         self.bytes_sent = 0
         self.paused = False
         self.cancelled = False
+
+        # Sliding window for chunk sending
+        self.next_chunk_to_send = 0
+        self.in_flight_chunks = 0
+        self.last_acked_chunk = -1
+        self._state_lock = asyncio.Lock()
 
         # Response handling
         self.response_queue: asyncio.Queue = asyncio.Queue()
@@ -55,9 +63,24 @@ class FileUploader:
             if not await self._wait_for_acceptance():
                 return False
 
-            # Step 3: Send file chunks
-            if not await self._send_chunks():
+            # # Step 3: Send file chunks
+            # if not await self._send_chunks():
+            #     return False
+
+            ### New
+            # Step 3: Start ACK processor and chunk sender concurrently
+            process_acks_task = asyncio.create_task(self._process_acks())
+            send_chunks_task = asyncio.create_task(self._send_chunks_windowed())
+
+            # Wait for both to complete
+            send_chunks_result = await send_chunks_task
+            if not send_chunks_result:
+                process_acks_task.cancel()
                 return False
+
+            # Wait for all ACKs to be received
+            await process_acks_task
+            ### End New
 
             # Step 4: Send completion
             if not await self._send_transfer_complete():
@@ -110,7 +133,7 @@ class FileUploader:
                 "project_path": self.project_path.as_posix(),
                 "file_size": self.file_size,
                 "chunk_size": self.chunk_size,
-                "checksum": self._calculate_md5() if self.file_size < 100 * 1024 * 1024 else ""
+                "checksum": self._calculate_md5()
             }
         }
 
@@ -145,6 +168,133 @@ class FileUploader:
 
         logger.error(f"Unexpected response: {msg['command']}")
         return False
+
+    async def _send_chunks2(self):
+        # Start ACK processor and chunk sender concurrently
+        process_acks_task = asyncio.create_task(self._process_acks())
+        send_chunks_task = asyncio.create_task(self._send_chunks_windowed())
+
+        # Wait for both to complete
+        send_chunks_result = await send_chunks_task
+        if not send_chunks_result:
+            process_acks_task.cancel()
+            return False
+
+        # Wait for all ACKs to be received
+        await process_acks_task
+
+        # We don't care about the process_acks_task result, just return True.
+        # If there are errors, it will be seen in later processing.
+        return True
+
+    async def _send_chunks_windowed(self, start_chunk: int = 0) -> bool:
+        """Send file chunks using sliding window (don't wait for each ACK)"""
+        total_chunks = (self.file_size + self.chunk_size - 1) // self.chunk_size
+
+        with open(self.file_path, 'rb') as f:
+            # Single seek to start position (for resume)
+            if start_chunk > 0:
+                f.seek(start_chunk * self.chunk_size)
+
+            async with self._state_lock:
+                self.next_chunk_to_send = start_chunk
+
+            while True:
+                # Wait if paused
+                while self.paused and not self.cancelled:
+                    await asyncio.sleep(0.1)
+
+                if self.cancelled:
+                    return False
+
+                # Check if we can send (within window and not done)
+                async with self._state_lock:
+                    if self.next_chunk_to_send >= total_chunks:
+                        break  # All chunks sent
+
+                    # Wait if the window is full
+                    if self.in_flight_chunks >= self.window_size:
+                        # Release the lock while waiting
+                        window_full = True
+                    else:
+                        # Reserve a slot in the window
+                        window_full = False
+                        chunk_seq = self.next_chunk_to_send
+                        self.next_chunk_to_send += 1
+                        self.in_flight_chunks += 1
+
+                # If the window was full, wait and retry
+                if window_full:
+                    await asyncio.sleep(0.01)
+                    continue
+
+                # Read the next chunk (outside lock - file I/O can be slow)
+                chunk = f.read(self.chunk_size)
+                if not chunk:
+                    break
+
+                print(f"Sending chunk {chunk_seq} ({len(chunk)} bytes)")
+                # Build binary frame
+                header = {
+                    "transfer_id": self.transfer_id,
+                    "sequence": chunk_seq,
+                    "size": len(chunk),
+                    "is_last": (chunk_seq == total_chunks - 1)
+                }
+
+                binary_frame = {
+                    "_binary_frame": True,
+                    "header": header,
+                    "data": chunk
+                }
+
+                await self.send_queue.put(binary_frame)
+
+        return True
+
+    async def _process_acks(self):
+        """Process ACKs asynchronously"""
+        total_chunks = (self.file_size + self.chunk_size - 1) // self.chunk_size
+
+        while True:
+            async with self._state_lock:
+                if self.last_acked_chunk >= total_chunks - 1:
+                    break  # All chunks ACKed
+
+            try:
+                # Wait for ACK with timeout (outside lock)
+                ack_msg = await asyncio.wait_for(self.response_queue.get(), timeout=30.0)
+            except asyncio.TimeoutError:
+                logger.error("Timeout waiting for CHUNK_ACK")
+                raise
+
+            command = ack_msg.get("command")
+
+            if command == "CHUNK_ACK":
+                payload = ack_msg["payload"]
+                chunk_seq = payload["chunk_sequence"]
+                bytes_received = payload["bytes_received"]
+
+                # Update the state under lock
+                async with self._state_lock:
+                    if chunk_seq > self.last_acked_chunk:
+                        self.last_acked_chunk = chunk_seq
+
+                        # Recalculate in-flight chunks
+                        self.in_flight_chunks = (self.next_chunk_to_send - 1) - self.last_acked_chunk
+
+                    self.bytes_sent = bytes_received
+
+                # Progress callback outside lock
+                if self.progress_callback:
+                    self.progress_callback(self.bytes_sent, self.file_size)
+
+            elif command == "CHUNK_ERROR":
+                error = ack_msg["payload"].get("error", "unknown")
+                logger.error(f"Chunk error: {error}")
+                raise Exception(f"Chunk error: {error}")
+
+        logger.debug(f"All chunks ACKed for {self.file_path.name}")
 
     async def _send_chunks(self, start_chunk: int = 0) -> bool:
         """Send file chunks as binary frames via queue"""
