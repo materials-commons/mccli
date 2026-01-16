@@ -17,6 +17,7 @@ DEFAULT_RECONNECT_MAX_SEC = 30
 
 
 def _install_signal_handlers(loop: asyncio.AbstractEventLoop):
+    # Installs signal handlers for graceful shutdown
     for sig in (signal.SIGINT, signal.SIGTERM):
         try:
             loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(_graceful_stop(loop)), None)
@@ -25,6 +26,7 @@ def _install_signal_handlers(loop: asyncio.AbstractEventLoop):
 
 
 async def _graceful_stop(loop: asyncio.AbstractEventLoop):
+    """Cancels pending tasks then stops the event loop"""
     tasks = [t for t in asyncio.all_tasks(loop) if t is not asyncio.current_task(loop)]
     for t in tasks:
         t.cancel()
@@ -42,6 +44,7 @@ def server_subcommand(argv, working_dir=None):
         config.client_uuid = str(uuid.uuid4())
         config.save()
 
+    # Runs local REST server and remote command listener
     async def main():
         queue = asyncio.Queue()
         running_loop = asyncio.get_running_loop()
@@ -56,6 +59,7 @@ def server_subcommand(argv, working_dir=None):
             await listener.shutdown()
             local_rest_server.stop()
 
+    # Creates event loop; runs main; handles interrupts
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)

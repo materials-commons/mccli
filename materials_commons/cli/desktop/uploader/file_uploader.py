@@ -539,7 +539,6 @@ class FileTransferManager:
             self,
             dir_path: str,
             project_id: int,
-            directory_id: int,
             recursive: bool = True,
             progress_callback: Optional[Callable[[str, int, int], None]] = None
     ) -> list[str]:
@@ -565,7 +564,6 @@ class FileTransferManager:
                 transfer_id = await self.upload_file(
                     str(file_path),
                     project_id,
-                    directory_id,
                     progress_callback=file_progress
                 )
                 transfer_ids.append(transfer_id)

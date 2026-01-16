@@ -116,19 +116,17 @@ async def handle_upload_directory(queue: asyncio.Queue, cmd: Dict[str, Any]):
     {
         "directory_path": "/local/path/to/data",
         "project_id": 1047,
-        "directory_id": 100,
         "recursive": true,
         "chunk_size": 1048576 // optional
     }
     """
-    payload = cmd.get("payload", {})
+    payload = cmd.get("payload") or {}
     directory_path = payload.get("directory_path")
     project_id = payload.get("project_id")
-    directory_id = payload.get("directory_id")
     recursive = payload.get("recursive", True)
     chunk_size = payload.get("chunk_size", 1024 * 1024)
 
-    if not directory_path or not project_id or not directory_id:
+    if not directory_path or not project_id:
         logger.error("Missing required fields in UPLOAD_DIRECTORY command")
         return
 
@@ -139,18 +137,17 @@ async def handle_upload_directory(queue: asyncio.Queue, cmd: Dict[str, Any]):
 
     logger.info(f"Received directory upload request for: {directory_path}")
 
-    try:
-        transfer_ids = await file_manager.upload_directory(
-            dir_path=directory_path,
-            project_id=project_id,
-            directory_id=directory_id,
-            recursive=recursive,
-            progress_callback=lambda fname, sent, total:
-            logger.debug(f"{fname}: {sent}/{total}")
-        )
-        logger.info(f"Queued {len(transfer_ids)} files from {directory_path}")
-    except Exception as e:
-        logger.error(f"Failed to queue directory upload: {e}")
+    # try:
+    #     transfer_ids = await file_manager.upload_directory(
+    #         dir_path=directory_path,
+    #         project_id=project_id,
+    #         directory_id=directory_id,
+    #         recursive=recursive,
+    #         progress_callback=lambda fname, sent, total: logger.debug(f"{fname}: {sent}/{total}")
+    #     )
+    #     logger.info(f"Queued {len(transfer_ids)} files from {directory_path}")
+    # except Exception as e:
+    #     logger.error(f"Failed to queue directory upload: {e}")
 
 
 async def handle_cancel_upload(queue: asyncio.Queue, cmd: Dict[str, Any]):
