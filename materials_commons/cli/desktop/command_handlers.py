@@ -1,13 +1,16 @@
 import asyncio
-from typing import Dict, Any,Callable, Awaitable
+from typing import Dict, Any, Callable, Awaitable
 from materials_commons.cli import desktop
 import os
 import signal
 import logging
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 CommandHandler = Callable[[Any, Dict[str, Any]], Awaitable[None]]
+
+
 def register_handlers() -> Dict[str, CommandHandler]:
     return {
         "sync": handle_sync,
@@ -24,29 +27,37 @@ def register_handlers() -> Dict[str, CommandHandler]:
         "UPLOAD_RESUME": handle_resume_upload,
     }
 
+
 async def handle_sync(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] sync -> {cmd}")
 
+
 async def handle_refresh_cache(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] refresh_cache -> {cmd}")
+
 
 async def handle_shutdown(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] shutdown -> {cmd}")
     os.kill(os.getpid(), signal.SIGINT)
 
+
 async def handle_list_dir(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] list_dir -> {cmd}")
+
 
 async def handle_download_file(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] download_file -> {cmd}")
 
+
 async def handle_download_dir(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] download_dir -> {cmd}")
+
 
 async def handle_list_projects(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     # print(f"[handler] list_projects -> {cmd}")
     projects = desktop.list_local_projects()
     await queue.put({"command": "list_projects", "payload": projects})
+
 
 async def handle_upload_file(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     """
@@ -70,20 +81,27 @@ async def handle_upload_file(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     project_id = payload.get("project_id")
     chunk_size = payload.get("chunk_size", 1024 * 1024)
 
-    # Validate that we at least have a project_id and project_path
-    if not project_path or not project_id:
-        logger.error("Missing required fields in UPLOAD_FILE command")
+    # We must have a project_id
+    if not project_id:
+        logger.error("Missing required field project_id in UPLOAD_FILE command")
+        return
+
+    # We also must have a project_path
+    if not project_path:
+        logger.error("Missing required field project_path in UPLOAD_FILE command")
         return
 
     # The server may send us just a project_path. If that happens, then we need to resolve it to a file_path
     # based on the local project's path. The project_path the server sends us is the path on the MC server.
     # All MC server projects start with /, so we need to resolve to the local client path to the project.
-    if project_path and not file_path:
+    # To do this, we get the local path for the project, then join project_path and the local project's path
+    # to get the full local path. Note that project_path may start with a /, so we strip it off before joining.
+    if file_path:
         p = desktop.get_local_project_by_id(project_id)
         if not p:
             logger.error(f"Project {project_id} not found in local projects")
             return
-        file_path = os.path.join(p["project_dir_path"], project_path)
+        file_path = os.path.join(p["project_dir_path"], project_path.lstrip("/"))
 
     print(f"Resolved file_path: {file_path}")
 
@@ -114,6 +132,7 @@ async def handle_upload_directory(queue: asyncio.Queue, cmd: Dict[str, Any]):
 
     Expected payload:
     {
+        "project_path": "/path/to/file/in/project", # This assumes / for project root, client will resolve to file_path
         "directory_path": "/local/path/to/data",
         "project_id": 1047,
         "recursive": true,
@@ -121,21 +140,33 @@ async def handle_upload_directory(queue: asyncio.Queue, cmd: Dict[str, Any]):
     }
     """
     payload = cmd.get("payload") or {}
+    project_path = payload.get("project_path")
     directory_path = payload.get("directory_path")
     project_id = payload.get("project_id")
     recursive = payload.get("recursive", True)
     chunk_size = payload.get("chunk_size", 1024 * 1024)
 
-    if not directory_path or not project_id:
-        logger.error("Missing required fields in UPLOAD_DIRECTORY command")
+    if not project_id:
+        logger.error("Missing required field project_id in UPLOAD_DIRECTORY command")
         return
+
+    if not project_path:
+        logger.error("Missing required field project_path in UPLOAD_DIRECTORY command")
+        return
+
+    if not directory_path:
+        p = desktop.get_local_project_by_id(project_id)
+        if not p:
+            logger.error(f"Project {project_id} not found in local projects")
+            return
+        directory_path = os.path.join(p["project_dir_path"], project_path.lstrip("/"))
 
     file_manager = cmd.get("_file_manager")
     if not file_manager:
         logger.error("File transfer manager not available")
         return
 
-    logger.info(f"Received directory upload request for: {directory_path}")
+    print(f"Received directory upload request for project_id {project_id} project_path {project_path} directory_path {directory_path}")
 
     # try:
     #     transfer_ids = await file_manager.upload_directory(

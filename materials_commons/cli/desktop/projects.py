@@ -1,9 +1,18 @@
 import os
 import json
 
+_projects = None
 
-def list_local_projects():
-    projects = []
+def list_local_projects(reload=False):
+    global _projects
+
+    # if _projects are not None, and we haven't been asked to reload the _projects,
+    # then return the cached list. A user might ask for a reload when they think
+    # the list has changed.
+    if _projects is not None:
+        if not reload:
+            return _projects
+    _projects = []
     current_directory = os.getcwd()
 
     # Iterate over all entries in the current directory
@@ -26,7 +35,7 @@ def list_local_projects():
 
                 # Check if project_id exists in the JSON data
                 if "project_id" in data:
-                    projects.append({
+                    _projects.append({
                         "directory": entry,
                         "project_dir_path": project_dir,
                         "project_id": data["project_id"]
@@ -35,7 +44,7 @@ def list_local_projects():
             # Skip files that aren't valid JSON or can't be read
             continue
 
-    return projects
+    return _projects
 
 def get_local_project_by_id(project_id):
     projects = list_local_projects()

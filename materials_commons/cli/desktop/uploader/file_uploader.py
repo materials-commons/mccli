@@ -1,12 +1,11 @@
 import asyncio
-import json
+import hashlib
+import logging
 import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Callable, Dict, Any
-import hashlib
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -537,7 +536,9 @@ class FileTransferManager:
 
     async def upload_directory(
             self,
+            dest_dir: str,
             dir_path: str,
+            local_project_root: str,
             project_id: int,
             recursive: bool = True,
             progress_callback: Optional[Callable[[str, int, int], None]] = None
@@ -547,6 +548,21 @@ class FileTransferManager:
         """
         dir_path = Path(dir_path)
         transfer_ids = []
+
+        def get_files():
+            # Yields filepaths via recursive or shallow traversal
+            if recursive:
+                for root, _, filenames in os.walk(dir_path):
+                    for filename in filenames:
+                        yield os.path.join(root, filename)
+            else:
+                with os.scandir(dir_path) as d:
+                    for entry in d:
+                        if entry.is_file():
+                            yield entry.path
+
+        for file_path in get_files():
+            pass
 
         if recursive:
             files = dir_path.rglob('*')
