@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional, Callable, Awaitable
 import websockets
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK, InvalidStatus
 from materials_commons.cli import desktop
-from materials_commons.cli.desktop.uploader.file_uploader import FileTransferManager
+from materials_commons.cli.desktop.uploader.file_transfer_manager import FileTransferManager
 
 # Type alias for handler functions
 CommandHandler = Callable[[Any, Dict[str, Any]], Awaitable[None]]
