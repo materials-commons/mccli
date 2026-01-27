@@ -20,10 +20,10 @@ class FileDownloader:
             send_queue: asyncio.Queue,
             file_id: int,
             file_path: str,  # Destination path on local filesystem
-            download_url: str,  # REST endpoint URL
+            base_url: str,  # REST endpoint URL
             project_id: int,
             client_id: str,
-            apikey: str,
+            apitoken: str,
             expected_size: Optional[int] = None,
             expected_checksum: Optional[str] = None,
             chunk_size: int = 1024 * 1024,  # 1MB chunks for streaming
@@ -32,7 +32,8 @@ class FileDownloader:
         self.send_queue = send_queue
         self.file_id = file_id
         self.file_path = Path(file_path)
-        self.download_url = download_url
+        self.base_url = base_url
+        self.apitoken = apitoken
         self.project_id = project_id
         self.client_id = client_id
         self.expected_size = expected_size
@@ -49,6 +50,8 @@ class FileDownloader:
         self.part_file = self.file_path.with_suffix(self.file_path.suffix + '.part')
         self.meta_file = self.file_path.with_suffix(self.file_path.suffix + '.meta.json')
 
+        self.download_url = f"{self.base_url}/projects/{self.project_id}/files/{self.file_id}/download"
+
     async def download(self) -> bool:
         """
         Download the file with resume support. Returns True on success.
@@ -61,8 +64,10 @@ class FileDownloader:
                 logger.info(f"Resuming download from byte {resume_from}")
 
             # Download the file
+            print("calling download with ranges")
             if not await self._download_with_ranges(resume_from):
                 return False
+            print("download complete")
 
             # Verify checksum if provided
             if self.expected_checksum:
@@ -122,7 +127,7 @@ class FileDownloader:
     async def _download_with_ranges(self, resume_from: int = 0) -> bool:
         """Download file using HTTP Range requests with streaming"""
         headers = {
-            'Authorization': f'Bearer {self.apikey}',
+            'Authorization': f'Bearer {self.apitoken}',
         }
 
         # Add Range header if resuming
@@ -136,6 +141,7 @@ class FileDownloader:
                 None,
                 lambda: requests.get(
                     self.download_url,
+                    verify=False,
                     headers=headers,
                     stream=True,
                     timeout=30
@@ -220,11 +226,7 @@ class FileDownloader:
     async def _verify_checksum(self) -> bool:
         """Verify MD5 checksum of downloaded file"""
         loop = asyncio.get_event_loop()
-        actual_checksum = await loop.run_in_executor(
-            None,
-            self._calculate_md5,
-            self.part_file
-        )
+        actual_checksum = await loop.run_in_executor(None, self._calculate_md5, self.part_file)
 
         if actual_checksum != self.expected_checksum:
             logger.error(f"Checksum mismatch: expected {self.expected_checksum}, got {actual_checksum}")

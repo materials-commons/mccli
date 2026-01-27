@@ -9,9 +9,11 @@ from materials_commons.cli.desktop.downloader.file_downloader import FileDownloa
 class FileDownloadManager:
     """Manages multiple concurrent file downloads"""
 
-    def __init__(self, send_queue: asyncio.Queue, client_id: str, max_concurrent: int = 3):
+    def __init__(self, send_queue: asyncio.Queue, client_id: str, mcurl: str, apitoken: str, max_concurrent: int = 3):
         self.send_queue = send_queue
         self.client_id = client_id
+        self.mcurl = mcurl
+        self.apitoken = apitoken
         self.max_concurrent = max_concurrent
 
         # Active downloads indexed by transfer_id
@@ -68,10 +70,9 @@ class FileDownloadManager:
 
     async def download_file(
             self,
+            project_id: int,
             file_id: int,
             file_path: str,
-            download_url: str,
-            project_id: int,
             expected_size: Optional[int] = None,
             expected_checksum: Optional[str] = None,
             chunk_size: int = 1024 * 1024,
@@ -80,11 +81,13 @@ class FileDownloadManager:
         """
         Queue a file for download. Returns transfer_id.
         """
+        print("Created FileDownloader")
         downloader = FileDownloader(
             send_queue=self.send_queue,
             file_id=file_id,
             file_path=file_path,
-            download_url=download_url,
+            base_url=self.mcurl,
+            apitoken=self.apitoken,
             project_id=project_id,
             client_id=self.client_id,
             expected_size=expected_size,
@@ -97,71 +100,6 @@ class FileDownloadManager:
         logger.info(f"Queued download: {file_path} (transfer_id: {downloader.transfer_id})")
 
         return downloader.transfer_id
-
-    async def download_directory(
-            self,
-            directory_id: int,
-            dest_path: str,
-            files: list[Dict[str, Any]],
-            project_id: int,
-            base_url: str,
-            chunk_size: int = 1024 * 1024,
-            progress_callback: Optional[Callable[[str, int, int], None]] = None
-    ) -> list[str]:
-        """
-        Download all files in a directory. Returns list of transfer_ids.
-
-        Args:
-            directory_id: Server-side directory ID
-            dest_path: Local destination directory path
-            files: List of file metadata dicts with keys: id, name, path, size, checksum
-            project_id: Project ID
-            base_url: Base URL for file downloads (e.g., "https://api.mc.org/api/v3")
-            chunk_size: Chunk size for streaming
-            progress_callback: Optional callback for progress updates
-        """
-        dest_path = Path(dest_path)
-        dest_path.mkdir(parents=True, exist_ok=True)
-
-        transfer_ids = []
-
-        for file_info in files:
-            file_id = file_info['id']
-            file_name = file_info['name']
-            file_relative_path = file_info.get('path', '')  # Relative path within directory
-            file_size = file_info.get('size')
-            file_checksum = file_info.get('checksum')
-
-            # Construct local destination path
-            if file_relative_path:
-                local_file_path = dest_path / file_relative_path / file_name
-            else:
-                local_file_path = dest_path / file_name
-
-            # Ensure parent directory exists
-            local_file_path.parent.mkdir(parents=True, exist_ok=True)
-
-            # Construct download URL
-            download_url = f"{base_url}/projects/{project_id}/files/{file_id}/download"
-
-            logger.info(f"Queueing download: {file_name} -> {local_file_path}")
-
-            transfer_id = await self.download_file(
-                file_id=file_id,
-                file_path=str(local_file_path),
-                download_url=download_url,
-                project_id=project_id,
-                expected_size=file_size,
-                expected_checksum=file_checksum,
-                chunk_size=chunk_size,
-                progress_callback=lambda sent, total, fname=file_name: (
-                    progress_callback(fname, sent, total) if progress_callback else None
-                )
-            )
-            transfer_ids.append(transfer_id)
-
-        logger.info(f"Queued {len(transfer_ids)} files for download to {dest_path}")
-        return transfer_ids
 
     def pause_download(self, transfer_id: str):
         """Pause an active download"""

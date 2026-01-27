@@ -326,7 +326,7 @@ async def handle_download_file(queue: asyncio.Queue, cmd: Dict[str, Any]) -> Non
 
     try:
         print(f"I would download to {file_path} with size {size} and checksum {checksum}, file_id {file_id}")
-        # await file_manager.download_file(file_id, file_path, size, checksum)
+        await file_manager.download_file(project_id, file_id, file_path, size, checksum)
         logger.info(f"Queued download of file: {file_path}")
     except Exception as e:
         logger.error(f"Failed to queue download of file: {e}")
