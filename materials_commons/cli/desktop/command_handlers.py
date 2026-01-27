@@ -50,9 +50,15 @@ async def handle_list_dir(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] list_dir -> {cmd}")
 
 async def handle_list_projects(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
-    # print(f"[handler] list_projects -> {cmd}")
+    print(f"[handler] list_projects -> {cmd}")
+    payload = cmd.get("payload") or {}
     projects = desktop.list_local_projects()
-    await queue.put({"command": "list_projects", "payload": projects})
+    response_payload = {
+        "projects": projects,
+        "request_id": payload.get("request_id"),
+    }
+    print(f"[handler] list_projects returning -> {response_payload}")
+    await queue.put({"command": "LIST_PROJECTS", "payload": response_payload})
 
 
 async def handle_upload_file(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
