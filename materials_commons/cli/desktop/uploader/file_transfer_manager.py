@@ -112,9 +112,9 @@ class FileTransferManager:
             self,
             dest_dir: str,
             dir_path: str,
-            local_project_root: str,
             project_id: int,
             recursive: bool = True,
+            chunk_size: int = 1024 * 1024,
             progress_callback: Optional[Callable[[str, int, int], None]] = None
     ) -> list[str]:
         """
@@ -126,38 +126,29 @@ class FileTransferManager:
         def get_files():
             # Yields filepaths via recursive or shallow traversal
             if recursive:
+                print(f" in recursive {dir_path}")
                 for root, _, filenames in os.walk(dir_path):
                     for filename in filenames:
                         yield os.path.join(root, filename)
             else:
+                print(f" in not recursive {dir_path}")
                 with os.scandir(dir_path) as d:
                     for entry in d:
                         if entry.is_file():
                             yield entry.path
 
         for file_path in get_files():
-            await self.upload_file(file_path, project_id, local_project_root, progress_callback=progress_callback)
-            pass
+            # Let's get the destination for the file. First we need to get the file relative to the
+            # dir_path we are walking. For example if dir_path is /home/user/proj/Aging
+            # and file_path is /home/user/proj/Aging/B/C/D/file.txt then relative_path is B/C/D/file.txt
+            relative_path = Path(file_path).relative_to(dir_path)
 
-        if recursive:
-            files = dir_path.rglob('*')
-        else:
-            files = dir_path.glob('*')
+            # Now we want to construct the destination. That will be dest_dir/relative_path. For example.
+            destination = Path(dest_dir) / relative_path
 
-        for file_path in files:
-            if file_path.is_file():
-                # Wrap progress callback with filename
-                file_progress = None
-                if progress_callback:
-                    file_progress = lambda sent, total, fname=file_path.name: \
-                        progress_callback(fname, sent, total)
-
-                transfer_id = await self.upload_file(
-                    str(file_path),
-                    project_id,
-                    progress_callback=file_progress
-                )
-                transfer_ids.append(transfer_id)
+            print(f"I would upload {file_path} to dest_dir {destination}")
+            transfer_id = await self.upload_file(file_path, project_id, str(destination), chunk_size, progress_callback)
+            transfer_ids.append(transfer_id)
 
         logger.info(f"Queued {len(transfer_ids)} files from {dir_path}")
         return transfer_ids

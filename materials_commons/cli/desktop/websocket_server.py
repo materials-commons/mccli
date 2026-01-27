@@ -11,6 +11,7 @@ import websockets
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK, InvalidStatus
 from materials_commons.cli import desktop
 from materials_commons.cli.desktop.uploader.file_transfer_manager import FileTransferManager
+from materials_commons.cli.desktop.downloader.file_download_manager import FileDownloadManager
 
 # Type alias for handler functions
 CommandHandler = Callable[[Any, Dict[str, Any]], Awaitable[None]]
@@ -54,7 +55,7 @@ class WebSocketCommandListener:
     DEFAULT_RECONNECT_MAX_SEC = 30
 
     def __init__(self, ws_url: str, token: Optional[str], client_uuid: str, handlers: Dict[str, CommandHandler],
-                 queue: asyncio.Queue, max_concurrent_uploads: int = 3):
+                 queue: asyncio.Queue, max_concurrent: int = 3):
         self.ws_url = ws_url
         self.token = token
         self.client_uuid = client_uuid
@@ -62,9 +63,11 @@ class WebSocketCommandListener:
         self.backoff = self.DEFAULT_RECONNECT_MIN_SEC
         self.handlers = handlers
         self.user_id: Optional[int] = None
-        self.max_concurrent_uploads = max_concurrent_uploads
+        self.max_concurrent = max_concurrent
         self.file_transfer_manager = FileTransferManager(send_queue=queue, client_id=client_uuid,
-                                                         max_concurrent=max_concurrent_uploads)
+                                                         max_concurrent=max_concurrent)
+        self.file_download_manager = FileDownloadManager(send_queue=queue, client_id=client_uuid,
+                                                         max_concurrent=max_concurrent)
         self._upload_workers: list[Task] = []
 
     async def run(self) -> None:
@@ -197,6 +200,10 @@ class WebSocketCommandListener:
         if kind in ["UPLOAD_FILE", "UPLOAD_DIRECTORY",
                     "CANCEL_UPLOAD", "PAUSE_UPLOAD", "RESUME_UPLOAD"]:
             cmd["_file_manager"] = self.file_transfer_manager
+
+        if kind in ["DOWNLOAD_FILE", "DOWNLOAD_DIRECTORY",
+                    "CANCEL_DOWNLOAD", "PAUSE_DOWNLOAD", "RESUME_DOWNLOAD"]:
+            cmd["_file_manager"] = self.file_download_manager
 
         handler = self.handlers.get(kind)
         if handler:

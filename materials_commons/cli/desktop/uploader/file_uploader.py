@@ -62,23 +62,23 @@ class FileUploader:
                 return False
 
             # # Step 3: Send file chunks
-            # if not await self._send_chunks():
-            #     return False
-
-            ### New
-            # Step 3: Start ACK processor and chunk sender concurrently
-            process_acks_task = asyncio.create_task(self._process_acks())
-            send_chunks_task = asyncio.create_task(self._send_chunks_windowed())
-
-            # Wait for both to complete
-            send_chunks_result = await send_chunks_task
-            if not send_chunks_result:
-                process_acks_task.cancel()
+            if not await self._send_chunks2():
                 return False
 
-            # Wait for all ACKs to be received
-            await process_acks_task
-            ### End New
+            # ### New
+            # # Step 3: Start ACK processor and chunk sender concurrently
+            # process_acks_task = asyncio.create_task(self._process_acks())
+            # send_chunks_task = asyncio.create_task(self._send_chunks_windowed())
+            #
+            # # Wait for both to complete
+            # send_chunks_result = await send_chunks_task
+            # if not send_chunks_result:
+            #     process_acks_task.cancel()
+            #     return False
+            #
+            # # Wait for all ACKs to be received
+            # await process_acks_task
+            # ### End New
 
             # Step 4: Send completion
             if not await self._send_transfer_complete():
