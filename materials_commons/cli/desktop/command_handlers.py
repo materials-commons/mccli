@@ -5,6 +5,7 @@ import os
 import signal
 import logging
 from pathlib import Path
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,7 @@ def register_handlers() -> Dict[str, CommandHandler]:
         "sync": handle_sync,
         "refresh_cache": handle_refresh_cache,
         "SHUTDOWN": handle_shutdown,
-        "LIST_DIR": handle_list_dir,
+        "LIST_DIRECTORY": handle_list_directory,
         "LIST_PROJECTS": handle_list_projects,
 
         # Upload commands
@@ -46,8 +47,29 @@ async def handle_shutdown(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     os.kill(os.getpid(), signal.SIGINT)
 
 
-async def handle_list_dir(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
-    print(f"[handler] list_dir -> {cmd}")
+async def handle_list_directory(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
+    print(f"[handler] list_directory -> {cmd}")
+    payload = cmd.get("payload") or {}
+    request_id = payload.get("request_id")
+    dir_path = payload.get("directory_path")
+    response_payload = {"files": [], "request_id": request_id}
+    if dir_path:
+        files = []
+        for entry in Path(dir_path).iterdir():
+            try:
+                stat = entry.stat()
+                files.append({
+                    "name": entry.name,
+                    "path": entry.as_posix(),
+                    "type": "directory" if entry.is_dir() else "file",
+                    "size": stat.st_size,
+                    "mtime": datetime.fromtimestamp(stat.st_mtime).isoformat() + "Z",
+                    "ctime": datetime.fromtimestamp(stat.st_ctime).isoformat() + "Z"
+                })
+            except (OSError, PermissionError) as e:
+                logger.warning(f"Could not stat {entry}: {e}")
+        response_payload["files"] = files
+    await queue.put({"command": "LIST_DIRECTORY", "payload": response_payload})
 
 async def handle_list_projects(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] list_projects -> {cmd}")
