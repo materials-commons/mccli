@@ -1,10 +1,10 @@
 import getpass
-import os
-import requests
-import warnings
-from os.path import join
 import json
+import os
+import re
+from os.path import join
 
+import requests
 from materials_commons.api.client import Client
 
 
@@ -94,7 +94,8 @@ class Config(object):
                 'mcurl': None,
                 'email': None,
                 'remotes': {},
-                'globus': {}
+                'globus': {},
+                'client_uuid': None,
             }
 
         # check for recognized environment variables
@@ -137,6 +138,7 @@ class Config(object):
 
         self.developer_mode = config.get('developer_mode', False)
         self.REST_logging = config.get('REST_logging', False)
+        self.client_uuid = config.get('client_uuid', None)
 
     def save(self):
         config = {
@@ -144,7 +146,8 @@ class Config(object):
             'remotes': [vars(value) for value in self.remotes],
             'globus': vars(self.globus),
             'developer_mode': self.developer_mode,
-            'REST_logging': self.REST_logging
+            'REST_logging': self.REST_logging,
+            'client_uuid': self.client_uuid or '',
         }
         if not os.path.exists(self.config_file):
             user = getpass.getuser()

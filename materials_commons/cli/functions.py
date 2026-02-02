@@ -134,15 +134,23 @@ def format_time(time_value, fmt="%Y %b %d %H:%M:%S"):
     else:
         return str(type(time_value))
 
-def checksum(path, chunk_size=131072):
-    """Generate MD5 checksum for the file at "path" """
+def checksum(path, chunk_size=8192):
+    """Generate MD5 checksum for the file at "path"
+
+    Args:
+        path (str): Path to file
+        chunk_size (int): Size of chunks to read (default 8192 bytes)
+
+    Returns:
+        str: MD5 checksum hexdigest
+    """
     md5 = hashlib.md5()
     with open(path, 'rb') as f:
         while True:
-            data = f.read(chunk_size)
-            if not data:
+            chunk = f.read(chunk_size)
+            if not chunk:
                 break
-            md5.update(data)
+            md5.update(chunk)
     return md5.hexdigest()
 
 def random_name(n=3, max_letters=6, sep='-'):
@@ -449,7 +457,7 @@ def make_local_project(path, data=None):
             else:
                 proj = models.Project(data=data)
         except requests.exceptions.ConnectionError as e:
-            raise MCCLIException("Could not connect to " + remote.config.mcurl)
+            raise MCCLIException("Could not connect to " + project_config.remote.mcurl)
         except requests.exceptions.HTTPError as e:
             raise MCCLIException("HTTPError: " + str(e))
 
