@@ -18,7 +18,7 @@ def list_local_projects(reload=False):
     # Iterate over all entries in the current directory
     for entry in os.listdir(current_directory):
         project_dir = os.path.join(current_directory, entry)
-        print(f"project_dir: {project_dir}")
+        # print(f"project_dir: {project_dir}")
 
         # We only care about directories
         if not os.path.isdir(project_dir):

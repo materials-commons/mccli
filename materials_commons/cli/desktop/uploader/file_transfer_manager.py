@@ -25,6 +25,7 @@ class FileTransferManager:
     async def start_workers(self):
         """Start background workers to process upload queue"""
         self._workers_running = True
+        print(f"Starting upload workers {self.max_concurrent}")
         workers = [
             asyncio.create_task(self._upload_worker(i))
             for i in range(self.max_concurrent)

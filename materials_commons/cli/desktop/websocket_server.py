@@ -91,7 +91,7 @@ class WebSocketCommandListener:
         self._download_workers = await self.file_download_manager.start_workers()
 
         while True:
-            headers = self._build_headers()
+            headers = self.build_headers()
 
             try:
                 async with websockets.connect(
@@ -230,7 +230,7 @@ class WebSocketCommandListener:
         if handler:
             await handler(self.queue, cmd)
 
-    def _build_headers(self) -> Dict[str, str]:
+    def build_headers(self) -> Dict[str, str]:
         headers = {}
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"

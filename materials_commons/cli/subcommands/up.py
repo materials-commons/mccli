@@ -1,10 +1,16 @@
 import argparse
+import logging
+import sys
 
 import materials_commons.cli.exceptions as cliexcept
 import materials_commons.cli.functions as clifuncs
 import materials_commons.cli.globus as cliglobus
 import materials_commons.cli.tree_functions as treefuncs
 from materials_commons.cli.treedb import LocalTree, RemoteTree
+from materials_commons.cli.subcommands.server import DEFAULT_WS_URL
+from materials_commons.cli.desktop.uploader.api import ws_upload_synchronous
+import os
+from pathlib import Path
 
 
 def make_parser():
@@ -14,10 +20,13 @@ def make_parser():
 
     mc_up_usage = """
     mc up [-r] [--no-compare] [--limit] <pathspec> [<pathspec> ...]
-    mc up -g [-r] [--no-compare] [--label] <pathspec> [<pathspec> ...]"""
+    mc up -g [-r] [--no-compare] [--label] <pathspec> [<pathspec> ...]
+    mc up --websocket [-r] <pathspec> [<pathspec> ...]"""
 
     globus_help = """Use globus to upload files. Uses the current active upload or creates a new upload.
      Use `globus task list` to monitor transfer tasks. Use `mc globus upload` to manage uploads."""
+
+    websocket_help = """Use websockets to upload files. Files are uploaded in parallel and progress is reported."""
 
     parser = argparse.ArgumentParser(
         description=mc_up_description,
@@ -30,12 +39,20 @@ def make_parser():
                         help='File size upload limit (MB). Default=750MB. Max size is also 750MB. Does not apply to Globus uploads.')
     parser.add_argument('-g', '--globus', action="store_true", default=False,
                         help=globus_help)
+    parser.add_argument('--websocket', '--ws', action="store_true", default=False, help=websocket_help)
+    parser.add_argument('--ws-url', type=str, default=DEFAULT_WS_URL, help='WebSocket URL for commands')
     parser.add_argument('--label', nargs=1, type=str,
                         help='Globus transfer label to make finding tasks simpler. Default is `<project name>-<upload name>.')
     parser.add_argument('--no-compare', action="store_true", default=False,
                         help='Upload without checking if remote is equivalent.')
-    parser.add_argument('--upload-as', nargs=1, default=None, help='Upload to a different location than standard upload. Specified as if it were a local path.')
+    parser.add_argument('--upload-as', nargs=1, default=None,
+                        help='Upload to a different location than standard upload. Specified as if it were a local path.')
+    parser.add_argument('--chunk-size', type=int, default=1024 * 1024,
+                        help='Chunk size for websocket uploads (default: 1MB)')
+    parser.add_argument('--max-concurrent', type=int, default=3,
+                        help='Maximum concurrent uploads for websocket mode (default: 3)')
     return parser
+
 
 def up_subcommand(argv, working_dir):
     """
@@ -43,12 +60,20 @@ def up_subcommand(argv, working_dir):
 
     mc up [-r] [--no-compare] [--limit] <pathspec> [<pathspec> ...]
     mc up -g [-r] [--no-compare] [--label] <pathspec> [<pathspec> ...]
-
+    mc up --ws [-r] <pathspec> [<pathspec> ...]
     """
     parser = make_parser()
     args = parser.parse_args(argv)
 
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[logging.StreamHandler(sys.stdout)]
+    )
+
+    print("call make_local_project")
     proj = clifuncs.make_local_project(working_dir)
+    print("past make_local_project")
 
     pconfig = clifuncs.read_project_config(proj.local_path)
     remotetree = None
@@ -62,6 +87,12 @@ def up_subcommand(argv, working_dir):
     if args.upload_as and args.globus:
         print("--upload-as option is not supported with --globus")
         raise cliexcept.MCCLIException("Invalid upload request")
+    if args.upload_as and args.websocket:
+        print("--upload-as option is not supported with --websocket")
+        raise cliexcept.MCCLIException("Invalid upload request")
+    if args.globus and args.websocket:
+        print("--globus option is not supported with --websocket")
+        raise cliexcept.MCCLIException("Invalid upload request")
 
     upload_as = None
     if args.upload_as:
@@ -69,7 +100,58 @@ def up_subcommand(argv, working_dir):
                                                   args.upload_as,
                                                   working_dir)[0]
 
-    if args.globus:
+    if args.websocket:
+        # convert input paths (absolute or relative to working_dir) to local_abspath
+        local_abspaths = treefuncs.clipaths_to_local_abspaths(
+            proj.local_path, args.paths, working_dir)
+
+        # filter, skipping .mc, those specified by .mcignore
+        local_abspaths = treefuncs.filter_local_abspaths(
+            proj.local_path, local_abspaths, working_dir)
+
+        mcpaths = treefuncs.clipaths_to_mcpaths(proj.local_path, local_abspaths, working_dir)
+
+        file_paths = []
+        project_paths = []
+
+        for local_path, mc_path in zip(local_abspaths, mcpaths):
+            if treefuncs.os.path.isdir(local_path):
+                if args.recursive:
+                    for root, dirs, files in os.walk(local_path):
+                        for filename in files:
+                            file_path = os.path.join(root, filename)
+
+                            # Calculate relative path and construct mc_path
+                            relative = Path(file_path).relative_to(local_path)
+                            file_mc_path = str(Path(mc_path) / relative)
+                            file_paths.append(file_path)
+                            project_paths.append(file_mc_path)
+                            print(f"I'm upload {file_path} to {file_mc_path}")
+                else:
+                    print("Skipping directory without --recursive option: " + local_path)
+            else:
+                print(f"Uploading {local_path} to {mc_path}")
+                file_paths.append(local_path)
+                project_paths.append(mc_path)
+        if not file_paths:
+            print("No files to upload.")
+            return
+
+        status = ws_upload_synchronous(
+            file_paths=file_paths,
+            project_paths=project_paths,
+            project_id=proj.id,
+            chunk_size=args.chunk_size,
+            max_concurrent=args.max_concurrent,
+            ws_url=args.ws_url
+        )
+        if not status:
+            print("\nSome uploads failed.")
+            raise cliexcept.MCCLIException(
+                "Upload failed. Check server logs for details.")
+
+        print("\nAll uploads completed successfully!")
+    elif args.globus:
 
         # convert input paths (absolute or relative to working_dir) to local_abspath
         local_abspaths = treefuncs.clipaths_to_local_abspaths(
@@ -81,7 +163,7 @@ def up_subcommand(argv, working_dir):
 
         mcpaths = treefuncs.clipaths_to_mcpaths(proj.local_path, local_abspaths, working_dir)
 
-        all_uploads = {upload.id:upload for upload in proj.remote.get_all_globus_upload_requests(proj.id)}
+        all_uploads = {upload.id: upload for upload in proj.remote.get_all_globus_upload_requests(proj.id)}
 
         globus_upload_id = None
         if pconfig.globus_upload_id:
@@ -99,8 +181,9 @@ def up_subcommand(argv, working_dir):
             upload = all_uploads[globus_upload_id]
             print("Using current globus upload (name=" + upload.name + ", id=" + str(upload.id) + ").")
 
-        if upload.status != 2:    # TODO clean up status code / message
-            raise cliexcept.MCCLIException("Current Globus upload (id=" + str(globus_upload_id) + ") not ready for uploading.")
+        if upload.status != 2:  # TODO clean up status code / message
+            raise cliexcept.MCCLIException(
+                "Current Globus upload (id=" + str(globus_upload_id) + ") not ready for uploading.")
 
         label = proj.name + "-" + upload.name
         if args.label:
@@ -117,7 +200,7 @@ def up_subcommand(argv, working_dir):
             print("Use `mc globus upload` to manage Globus uploads.")
             print("Multiple transfer tasks may be initiated.")
             print("When all tasks finish uploading, use `mc globus upload --id " + str(upload.id) +
-                " --finish` " + "to import all uploaded files into the Materials Commons project.")
+                  " --finish` " + "to import all uploaded files into the Materials Commons project.")
 
     else:
         localtree = None
@@ -125,9 +208,9 @@ def up_subcommand(argv, working_dir):
             localtree = LocalTree(proj.local_path)
 
         treefuncs.standard_upload_v2(proj, args.paths, working_dir,
-                                  recursive=args.recursive, limit=args.limit[0],
-                                  no_compare=args.no_compare,
-                                  upload_as=upload_as, localtree=localtree,
-                                  remotetree=remotetree)
+                                     recursive=args.recursive, limit=args.limit[0],
+                                     no_compare=args.no_compare,
+                                     upload_as=upload_as, localtree=localtree,
+                                     remotetree=remotetree)
 
     return
