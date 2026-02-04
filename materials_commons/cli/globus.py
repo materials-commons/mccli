@@ -392,7 +392,7 @@ class GlobusOperations(object):
             # create missing local parent directories
             local_dir = os.path.dirname(local_abspath)
             if not os.path.exists(local_dir):
-                os.path.makedirs(local_dir)
+                os.makedirs(local_dir)
             if not os.path.isdir(local_dir):
                 if self.verbose:
                     print(printpath + ": parent not a directory (skipping)")
