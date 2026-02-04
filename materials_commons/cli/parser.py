@@ -62,8 +62,13 @@ def make_parser():
     usage_help.write("mc <command> [<args>]\n\n")
     usage_help.write("The standard mc commands are:\n")
 
+    beta = os.getenv('MC_BETA')
     for name, interface in standard_interfaces.items():
-        usage_help.write("  {:10} {:40}\n".format(name, interface['desc']))
+        if name == 'server':
+            if beta:
+                usage_help.write("  {:10} {:40}\n".format(name, interface['desc']))
+        else:
+            usage_help.write("  {:10} {:40}\n".format(name, interface['desc']))
 
     parser = argparse.ArgumentParser(
         description='Materials Commons command line interface',
@@ -132,7 +137,6 @@ def main(argv=None, working_dir=None):
     if working_dir is None:
         working_dir = os.getcwd()
     try:
-
         config = Config()
         if config.REST_logging:
             mcapi.Client.set_debug_on()

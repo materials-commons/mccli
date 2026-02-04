@@ -54,6 +54,7 @@ async def ws_upload(
     ssl_context.check_hostname = False
     ssl_context.verify_mode = ssl.CERT_NONE
 
+    # build headers that are used for authentication
     headers = listener.build_headers()
 
     try:
@@ -71,7 +72,7 @@ async def ws_upload(
             sender_task = asyncio.create_task(listener._ws_sender_loop(ws))
             receiver_task = asyncio.create_task(listener._ws_receiver_loop(ws))
 
-            # Now that connection is established and sender/receiver are running, queue uploads
+            # Now that connection is established, and sender/receiver are running, queue uploads
             logger.info("Connection established, queueing uploads...")
 
             transfer_ids = []
@@ -91,14 +92,6 @@ async def ws_upload(
             logger.info("Waiting for uploads to complete...")
             await listener.file_transfer_manager.wait_all()
 
-            # Check results for each upload
-            all_succeeded = True
-            for transfer_id in transfer_ids:
-                success = listener.file_transfer_manager.results.get(transfer_id, False)
-                if not success:
-                    all_succeeded = False
-                    logger.error(f"Upload failed for transfer_id: {transfer_id}")
-
             # Cancel sender/receiver tasks
             sender_task.cancel()
             receiver_task.cancel()
@@ -111,8 +104,15 @@ async def ws_upload(
             except asyncio.CancelledError:
                 pass
 
-            # Return upload success
-            return all_succeeded
+            # Check results for each upload
+            for transfer_id in transfer_ids:
+                success = listener.file_transfer_manager.results.get(transfer_id, False)
+                if not success:
+                    # At least one upload failed so return False
+                    return False
+
+            # If we are here then all uploads succeeded
+            return True
 
     except (ConnectionClosedOK, ConnectionClosedError, InvalidStatus, OSError, asyncio.TimeoutError) as e:
         logger.error(f"WebSocket connection failed: {e}")
@@ -142,6 +142,24 @@ def ws_upload_synchronous(
         ws_url: str = "wss://materialscommons.org/ws",
         chunk_size: int = 1024 * 1024,
         max_concurrent: int = 3) -> bool:
+    """
+    Uploads files to a specified server synchronously by making use of an asynchronous upload function.
+
+    This function wraps an asynchronous upload operation into a synchronous context by using asyncio's
+    event loop. In case of errors such as keyboard interruptions or unexpected issues
+    during the upload, the function gracefully handles them by returning a failure state.
+
+    Parameters:
+        file_paths (List[str]): A list of local file paths to be uploaded.
+        project_paths (List[str]): A list of corresponding project paths for the files being uploaded.
+        project_id (int): The unique identifier of the project associated with the upload.
+        ws_url (str): The WebSocket URL used for the upload connection. Defaults to "wss://materialscommons.org/ws".
+        chunk_size (int): The size of file chunks to be uploaded concurrently. Defaults to 1 MiB.
+        max_concurrent (int): The maximum number of concurrent uploads allowed. Defaults to 3.
+
+    Returns:
+        bool: True if the upload was successful, False otherwise.
+    """
     try:
         return asyncio.run(
             ws_upload(

@@ -25,7 +25,6 @@ class FileTransferManager:
     async def start_workers(self):
         """Start background workers to process upload queue"""
         self._workers_running = True
-        print(f"Starting upload workers {self.max_concurrent}")
         workers = [
             asyncio.create_task(self._upload_worker(i))
             for i in range(self.max_concurrent)
@@ -92,7 +91,9 @@ class FileTransferManager:
             progress_callback: Optional[Callable[[int, int], None]] = None
     ) -> str:
         """
-        Queue a file for upload. Returns transfer_id.
+        Queue a file for upload. Returns transfer_id. This works by creating an instance of FileUploader
+        and then queueing this object. The queued FileUploader will then be picked up by a worker to perform
+        the upload.
         """
         uploader = FileUploader(
             send_queue=self.send_queue,
@@ -119,7 +120,8 @@ class FileTransferManager:
             progress_callback: Optional[Callable[[str, int, int], None]] = None
     ) -> list[str]:
         """
-        Upload all files in a directory. Returns list of transfer_ids.
+        Upload all files in a directory. Returns list of transfer_ids. This method walks the directory (or
+        directory tree if recursive=True) and queues each file for upload by calling self.upload_file().
         """
         dir_path = Path(dir_path)
         transfer_ids = []
@@ -127,12 +129,10 @@ class FileTransferManager:
         def get_files():
             # Yields filepaths via recursive or shallow traversal
             if recursive:
-                print(f" in recursive {dir_path}")
                 for root, _, filenames in os.walk(dir_path):
                     for filename in filenames:
                         yield os.path.join(root, filename)
             else:
-                print(f" in not recursive {dir_path}")
                 with os.scandir(dir_path) as d:
                     for entry in d:
                         if entry.is_file():
@@ -147,7 +147,6 @@ class FileTransferManager:
             # Now we want to construct the destination. That will be dest_dir/relative_path. For example.
             destination = Path(dest_dir) / relative_path
 
-            print(f"I would upload {file_path} to dest_dir {destination}")
             transfer_id = await self.upload_file(file_path, project_id, str(destination), chunk_size, progress_callback)
             transfer_ids.append(transfer_id)
 

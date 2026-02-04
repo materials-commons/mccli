@@ -231,7 +231,6 @@ class FileUploader:
                 if not chunk:
                     break
 
-                print(f"Sending chunk {chunk_seq} ({len(chunk)} bytes)")
                 # Build binary frame
                 header = {
                     "transfer_id": self.transfer_id,

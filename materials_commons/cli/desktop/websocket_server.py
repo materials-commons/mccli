@@ -26,8 +26,7 @@ async def cleanup_tasks(receiver_task: Task[None], sender_task: Task[Any]):
         return_when=asyncio.FIRST_COMPLETED
     )
 
-    # If we are here then we need to cancel both done and pending tasks. Then
-    # we can safely restart.
+    # If we are here, then we need to cancel both done and pending tasks.
 
     # First we cancel pending tasks
     for task in pending:
@@ -44,11 +43,6 @@ async def cleanup_tasks(receiver_task: Task[None], sender_task: Task[Any]):
             await task
         except asyncio.CancelledError:
             pass
-
-    # 4. Check for exceptions to log them (optional)
-    for task in done:
-        if task.exception():
-            print(f"Task failed: {task.exception()}")
 
 
 class WebSocketCommandListener:
@@ -72,8 +66,8 @@ class WebSocketCommandListener:
                                                          max_concurrent=max_concurrent)
 
         self.file_download_manager = FileDownloadManager(send_queue=queue, client_id=client_uuid,
-                                                         mcurl = config.default_remote.mcurl,
-                                                         apitoken = config.default_remote.mcapikey,
+                                                         mcurl=config.default_remote.mcurl,
+                                                         apitoken=config.default_remote.mcapikey,
                                                          max_concurrent=max_concurrent)
         self._upload_workers: list[Task] = []
         self._download_workers: list[Task] = []
@@ -148,7 +142,6 @@ class WebSocketCommandListener:
                 if isinstance(msg, dict) and msg.get("_binary_frame"):
                     # Build binary frame by sending a JSON header + newline + binary data
                     header = msg["header"]
-                    print(f"Sending binary frame: {header}")
                     data = msg["data"]
                     header_bytes = (json.dumps(header) + "\n").encode("utf-8")
                     frame = header_bytes + data
