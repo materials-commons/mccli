@@ -98,7 +98,7 @@ async def handle_upload_file(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
         "chunk_size": 1048576 # Optional
     }
     """
-    print(f"[handler] upload_file_request -> {cmd}")
+    # print(f"[handler] upload_file_request -> {cmd}")
     payload = cmd.get("payload") or {}
     project_path = payload.get("project_path")
     file_path = payload.get("file_path")
@@ -127,7 +127,7 @@ async def handle_upload_file(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
             return
         file_path = os.path.join(p["project_dir_path"], project_path.lstrip("/"))
 
-    print(f"Resolved file_path: {file_path}")
+    # print(f"Resolved file_path: {file_path}")
 
     # This will be set by the listener
     file_manager = cmd.get("_file_manager")
@@ -191,10 +191,10 @@ async def handle_upload_directory(queue: asyncio.Queue, cmd: Dict[str, Any]):
         logger.error("File transfer manager not available")
         return
 
-    print(f"Calling upload_directory with recursive={recursive}")
-    print(f"   dest_dir = {mc_project_path}")
-    print(f"   dir_path = {local_directory_path}")
-    print(f"   local_project_root = {p['project_dir_path']}")
+    # print(f"Calling upload_directory with recursive={recursive}")
+    # print(f"   dest_dir = {mc_project_path}")
+    # print(f"   dir_path = {local_directory_path}")
+    # print(f"   local_project_root = {p['project_dir_path']}")
     try:
         await file_manager.upload_directory(
             dest_dir=mc_project_path,
@@ -305,7 +305,7 @@ async def handle_download_file(queue: asyncio.Queue, cmd: Dict[str, Any]) -> Non
         "checksum": "md5-checksum-here" # md5 checksum of file
     }
     """
-    print(f"[handler] download_file -> {cmd}")
+    # print(f"[handler] download_file -> {cmd}")
     payload = cmd.get("payload") or {}
     project_path = payload.get("project_path")
     file_path = payload.get("file_path")
@@ -353,7 +353,7 @@ async def handle_download_file(queue: asyncio.Queue, cmd: Dict[str, Any]) -> Non
         logger.error("File transfer manager not available")
 
     try:
-        print(f"I would download to {file_path} with size {size} and checksum {checksum}, file_id {file_id}")
+        # print(f"I would download to {file_path} with size {size} and checksum {checksum}, file_id {file_id}")
         await file_manager.download_file(project_id, file_id, file_path, size, checksum)
         logger.info(f"Queued download of file: {file_path}")
     except Exception as e:

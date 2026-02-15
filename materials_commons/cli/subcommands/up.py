@@ -65,15 +65,15 @@ def up_subcommand(argv, working_dir):
     parser = make_parser()
     args = parser.parse_args(argv)
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[logging.StreamHandler(sys.stdout)]
-    )
+    showLogs = os.getenv("MC_SHOW_LOGS")
+    if showLogs == "true":
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            handlers=[logging.StreamHandler(sys.stdout)]
+        )
 
-    print("call make_local_project")
     proj = clifuncs.make_local_project(working_dir)
-    print("past make_local_project")
 
     pconfig = clifuncs.read_project_config(proj.local_path)
     remotetree = None
@@ -126,11 +126,9 @@ def up_subcommand(argv, working_dir):
                             file_mc_path = str(Path(mc_path) / relative)
                             file_paths.append(file_path)
                             project_paths.append(file_mc_path)
-                            print(f"I'm upload {file_path} to {file_mc_path}")
                 else:
-                    print("Skipping directory without --recursive option: " + local_path)
+                    print("Skipping directory because --recursive option not specified: " + local_path)
             else:
-                print(f"Uploading {local_path} to {mc_path}")
                 file_paths.append(local_path)
                 project_paths.append(mc_path)
         if not file_paths:

@@ -81,7 +81,6 @@ class FileDownloadManager:
         """
         Queue a file for download. Returns transfer_id.
         """
-        print("Created FileDownloader")
         downloader = FileDownloader(
             send_queue=self.send_queue,
             file_id=file_id,

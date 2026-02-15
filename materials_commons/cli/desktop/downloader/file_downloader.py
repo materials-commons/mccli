@@ -64,10 +64,8 @@ class FileDownloader:
                 logger.info(f"Resuming download from byte {resume_from}")
 
             # Download the file
-            print("calling download with ranges")
             if not await self._download_with_ranges(resume_from):
                 return False
-            print("download complete")
 
             # Verify checksum if provided
             if self.expected_checksum:
