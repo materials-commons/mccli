@@ -82,7 +82,7 @@ async def ws_upload(
                     project_id=project_id,
                     project_path=project_path,
                     chunk_size=chunk_size,
-                    progress_callback=lambda sent, total, fp=file_path: print(f"\r{fp}: {sent}/{total} bytes", end='')
+                    progress_callback=lambda sent, total, fp=file_path: logger.info(f"\r{fp}: {sent}/{total} bytes")
                 )
                 transfer_ids.append(transfer_id)
 
