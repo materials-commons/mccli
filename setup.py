@@ -49,6 +49,7 @@ setup(
     ],
     keywords='materials science mc materials-commons prisms',
     install_requires=[
+        "websockets",
         "globus-cli",
         "globus-sdk",
         "igittigitt==2.1.0",
