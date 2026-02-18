@@ -43,6 +43,7 @@ class FileUploader:
         self.in_flight_chunks = 0
         self.last_acked_chunk = -1
         self._state_lock = asyncio.Lock()
+        self._already_uploaded = False
 
         # Response handling
         self.response_queue: asyncio.Queue = asyncio.Queue()
@@ -59,6 +60,9 @@ class FileUploader:
 
             # Step 2: Wait for acceptance
             if not await self._wait_for_acceptance():
+                if self._already_uploaded:
+                    logger.info(f"File {self.file_path.name} already uploaded")
+                    return True
                 return False
 
             # # Step 3: Send file chunks
@@ -161,7 +165,11 @@ class FileUploader:
 
         elif msg["command"] == "TRANSFER_REJECT":
             reason = msg["payload"].get("reason", "unknown")
-            logger.error(f"Transfer rejected: {reason}")
+            if reason == "file already uploaded":
+                # TODO: This is a hack to prevent uploading the same file twice. We need a better solution.
+                self._already_uploaded = True
+            else:
+                logger.error(f"Transfer rejected: {reason}")
             return False
 
         logger.error(f"Unexpected response: {msg['command']}")
