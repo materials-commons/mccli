@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from io import StringIO
 
 import materials_commons.api as mcapi
-import pkg_resources
+from importlib.metadata import PackageNotFoundError, version as pkg_version
 import requests
 
 import materials_commons.cli.functions as clifuncs
@@ -74,8 +74,12 @@ def make_parser():
         description='Materials Commons command line interface',
         usage=usage_help.getvalue())
     parser.add_argument('command', help='Subcommand to run')
-    parser.add_argument('--version', '-v', action='version',
-                        version=pkg_resources.get_distribution('materials-commons-cli').version)
+    package_name = 'materials-commons-cli'
+    try:
+        installed_version = pkg_version(package_name)
+    except PackageNotFoundError:
+        installed_version = "unknown"
+    parser.add_argument('--version', '-v', action='version', version=installed_version)
 
     return parser
 
@@ -113,7 +117,7 @@ def check_package_version():
 
     package_name = 'materials-commons-cli'
     try:
-        current_version = pkg_resources.get_distribution(package_name).version
+        current_version = pkg_version(package_name)
         response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
         latest_version = response.json()["info"]["version"]
 
