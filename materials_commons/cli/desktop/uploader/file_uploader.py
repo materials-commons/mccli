@@ -54,6 +54,7 @@ class FileUploader:
         Upload the file. Returns True on success, False on failure.
         """
         try:
+            print(f"Uploading {self.file_path}...")
             # Step 1: Initialize the transfer
             if not await self._send_transfer_init():
                 return False
@@ -61,7 +62,8 @@ class FileUploader:
             # Step 2: Wait for acceptance
             if not await self._wait_for_acceptance():
                 if self._already_uploaded:
-                    logger.info(f"File {self.file_path.name} already uploaded")
+                    logger.info(f"File {self.file_path} already uploaded")
+                    print(f"File {self.file_path} already uploaded")
                     return True
                 return False
 
@@ -93,10 +95,12 @@ class FileUploader:
                 return False
 
             logger.info(f"File upload complete for {self.file_path}")
+            print(f"File upload complete for {self.file_path}")
             return True
 
         except Exception as e:
             logger.error(f"Error uploading file {self.file_path}: {e}")
+            print(f"Error uploading file {self.file_path}: {e}")
             return False
 
     async def resume(self, resume_from_byte: int, resume_from_chunk: int) -> bool:
