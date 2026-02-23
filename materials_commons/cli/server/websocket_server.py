@@ -9,9 +9,9 @@ from typing import Dict, Any, Optional, Callable, Awaitable
 
 import websockets
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK, InvalidStatus
-from materials_commons.cli import desktop
-from materials_commons.cli.desktop.uploader.file_transfer_manager import FileTransferManager
-from materials_commons.cli.desktop.downloader.file_download_manager import FileDownloadManager
+from materials_commons.cli import server
+from materials_commons.cli.server.uploader.file_transfer_manager import FileTransferManager
+from materials_commons.cli.server.downloader.file_download_manager import FileDownloadManager
 from materials_commons.cli.user_config import Config
 
 # Type alias for handler functions
@@ -233,7 +233,7 @@ class WebSocketCommandListener:
         headers["MC-Connection-Type"] = "cli"
 
         try:
-            projects = desktop.list_local_projects()
+            projects = server.list_local_projects()
             headers["MC-Client-Projects"] = ",".join([str(p["project_id"]) for p in projects])
         except Exception:
             # Fallback if listing projects fails

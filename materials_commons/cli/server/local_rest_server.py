@@ -5,7 +5,7 @@ import asyncio
 import threading
 from pathlib import Path
 
-from materials_commons.cli import desktop
+from materials_commons.cli import server
 
 
 class LocalRestRequestHandler(BaseHTTPRequestHandler):
@@ -27,7 +27,7 @@ class LocalRestRequestHandler(BaseHTTPRequestHandler):
 
     def _refresh_projects(self):
         try:
-            projects = desktop.list_local_projects()
+            projects = server.list_local_projects()
             project_ids = [str(p["project_id"]) for p in projects]
             payload = {"type": "refresh-projects", "project_ids": project_ids}
 
@@ -54,7 +54,7 @@ class LocalRestRequestHandler(BaseHTTPRequestHandler):
 
 class LocalRestServer:
     """
-    Local REST server for handling requests from the desktop client. Writes to the server.json state file so
+    Local REST server for handling requests from the server client. Writes to the server.json state file so
     the CLI can find the port.
     """
 

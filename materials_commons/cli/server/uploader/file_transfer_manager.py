@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, Optional, Callable
 
-from materials_commons.cli.desktop.uploader.file_uploader import FileUploader, logger
+from materials_commons.cli.server.uploader.file_uploader import FileUploader, logger
 
 
 class FileTransferManager:

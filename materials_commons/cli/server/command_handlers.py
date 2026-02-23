@@ -1,6 +1,6 @@
 import asyncio
 from typing import Dict, Any, Callable, Awaitable
-from materials_commons.cli import desktop
+from materials_commons.cli import server
 import os
 import signal
 import logging
@@ -74,7 +74,7 @@ async def handle_list_directory(queue: asyncio.Queue, cmd: Dict[str, Any]) -> No
 async def handle_list_projects(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] list_projects -> {cmd}")
     payload = cmd.get("payload") or {}
-    projects = desktop.list_local_projects()
+    projects = server.list_local_projects()
     response_payload = {
         "projects": projects,
         "request_id": payload.get("request_id"),
@@ -121,7 +121,7 @@ async def handle_upload_file(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     # To do this, we get the local path for the project, then join project_path and the local project's path
     # to get the full local path. Note that project_path may start with a /, so we strip it off before joining.
     if not file_path:
-        p = desktop.get_local_project_by_id(project_id)
+        p = server.get_local_project_by_id(project_id)
         if not p:
             logger.error(f"Project {project_id} not found in local projects")
             return
@@ -178,7 +178,7 @@ async def handle_upload_directory(queue: asyncio.Queue, cmd: Dict[str, Any]):
         logger.error("Missing required field mc_project_path in UPLOAD_DIRECTORY command")
         return
 
-    p = desktop.get_local_project_by_id(project_id)
+    p = server.get_local_project_by_id(project_id)
     if not p:
         logger.error(f"Project {project_id} not found in local projects")
         return
@@ -341,7 +341,7 @@ async def handle_download_file(queue: asyncio.Queue, cmd: Dict[str, Any]) -> Non
     if project_path:
         # If we have a project path, then we need to translate it to a
         # local file path
-        p = desktop.get_local_project_by_id(project_id)
+        p = server.get_local_project_by_id(project_id)
         if not p:
             logger.error(f"Project {project_id} not found in local projects")
             return

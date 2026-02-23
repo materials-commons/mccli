@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 from typing import Dict, Any, Optional, Callable
 
-from materials_commons.cli.desktop.downloader.file_downloader import FileDownloader, logger
+from materials_commons.cli.server.downloader.file_downloader import FileDownloader, logger
 
 
 class FileDownloadManager:

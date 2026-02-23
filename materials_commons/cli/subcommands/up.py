@@ -8,7 +8,7 @@ import materials_commons.cli.globus as cliglobus
 import materials_commons.cli.tree_functions as treefuncs
 from materials_commons.cli.treedb import LocalTree, RemoteTree
 from materials_commons.cli.subcommands.server import DEFAULT_WS_URL
-from materials_commons.cli.desktop.uploader.api import ws_upload_synchronous
+from materials_commons.cli.server.uploader.api import ws_upload_synchronous
 import os
 from pathlib import Path
 

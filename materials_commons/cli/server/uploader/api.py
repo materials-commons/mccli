@@ -1,8 +1,8 @@
 import asyncio
 import logging
 from typing import List, Optional
-from materials_commons.cli.desktop.websocket_server import WebSocketCommandListener
-from materials_commons.cli.desktop.command_handlers import register_handlers
+from materials_commons.cli.server.websocket_server import WebSocketCommandListener
+from materials_commons.cli.server.command_handlers import register_handlers
 from materials_commons.cli.user_config import Config
 import ssl
 import websockets

@@ -4,10 +4,10 @@ import signal
 import uuid
 from typing import Awaitable, Callable, Dict, Any
 
-from materials_commons.cli.desktop.command_handlers import register_handlers
-from materials_commons.cli.desktop.websocket_server import WebSocketCommandListener
+from materials_commons.cli.server.command_handlers import register_handlers
+from materials_commons.cli.server.websocket_server import WebSocketCommandListener
 from materials_commons.cli.user_config import Config
-from materials_commons.cli.desktop.local_rest_server import LocalRestServer
+from materials_commons.cli.server.local_rest_server import LocalRestServer
 
 CommandHandler = Callable[[Dict[str, Any]], Awaitable[None]]
 

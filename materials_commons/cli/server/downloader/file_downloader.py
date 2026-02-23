@@ -1,4 +1,4 @@
-# materials_commons/cli/desktop/downloader/file_downloader.py
+# materials_commons/cli/server/downloader/file_downloader.py
 import asyncio
 import hashlib
 import json
