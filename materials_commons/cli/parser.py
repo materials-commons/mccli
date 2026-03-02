@@ -30,6 +30,7 @@ from materials_commons.cli.subcommands.remote import remote_subcommand
 from materials_commons.cli.subcommands.rm import rm_subcommand
 from materials_commons.cli.subcommands.up import up_subcommand
 from materials_commons.cli.subcommands.versions import versions_subcommand
+from materials_commons.cli.subcommands.scan import scan_subcommand
 from materials_commons.cli.user_config import Config
 from materials_commons.cli.subcommands.server import server_subcommand
 
@@ -47,6 +48,7 @@ standard_usage = [
     {'name': 'fetch', 'desc': 'Remote data fetching and configuration', 'subcommand': fetch_subcommand},
     {'name': 'up', 'desc': 'Upload files', 'subcommand': up_subcommand},
     {'name': 'down', 'desc': 'Download files', 'subcommand': down_subcommand},
+    {'name': 'scan', 'desc': 'Scan local directory for files to upload', 'subcommand': scan_subcommand},
     {'name': 'globus', 'desc': 'Manage Globus uploads and downloads', 'subcommand': globus_subcommand},
     {'name': 'versions', 'desc': 'List file versions', 'subcommand': versions_subcommand},
     # {'name': 'proc', 'desc': 'List processes', 'subcommand': ProcSubcommand()},

@@ -1,4 +1,3 @@
-# materials_commons/cli/server/downloader/file_downloader.py
 import asyncio
 import hashlib
 import json
@@ -6,7 +5,8 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Callable, Dict, Any
+from typing import Optional, Callable
+
 import requests
 
 logger = logging.getLogger(__name__)

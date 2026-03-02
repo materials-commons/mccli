@@ -106,8 +106,7 @@ def up_subcommand(argv, working_dir):
             proj.local_path, args.paths, working_dir)
 
         # filter, skipping .mc, those specified by .mcignore
-        local_abspaths = treefuncs.filter_local_abspaths(
-            proj.local_path, local_abspaths, working_dir)
+        local_abspaths = treefuncs.filter_local_abspaths(proj.local_path, local_abspaths, working_dir)
 
         mcpaths = treefuncs.clipaths_to_mcpaths(proj.local_path, local_abspaths, working_dir)
 
@@ -118,7 +117,12 @@ def up_subcommand(argv, working_dir):
             if treefuncs.os.path.isdir(local_path):
                 if args.recursive:
                     for root, dirs, files in os.walk(local_path):
+                        current_dir = os.path.basename(root)
+                        if current_dir == ".mc":
+                            continue
                         for filename in files:
+                            if filename == ".DS_Store":
+                                continue
                             file_path = os.path.join(root, filename)
 
                             # Calculate relative path and construct mc_path
@@ -126,6 +130,7 @@ def up_subcommand(argv, working_dir):
                             file_mc_path = str(Path(mc_path) / relative)
                             file_paths.append(file_path)
                             project_paths.append(file_mc_path)
+                            print(f"Indexing {file_mc_path}, {file_path}")
                 else:
                     print("Skipping directory because --recursive option not specified: " + local_path)
             else:

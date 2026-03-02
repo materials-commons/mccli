@@ -346,6 +346,7 @@ def filter_local_abspaths(proj_local_path, local_abspaths, working_dir):
     _local_abspaths = []
     for local_abspath in local_abspaths:
         name = os.path.basename(local_abspath)
+        print(f"name = {name} ")
         if name == ".mc":
             continue
         if ignore_parser.match(pathlib.Path(local_abspath)):
