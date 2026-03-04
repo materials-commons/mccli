@@ -206,7 +206,7 @@ class FileUploader:
         async with aiofiles.open(self.file_path, 'rb') as f:
             # Single seek to start position (for resume)
             if start_chunk > 0:
-                f.seek(start_chunk * self.chunk_size)
+                await f.seek(start_chunk * self.chunk_size)
 
             async with self._state_lock:
                 self.next_chunk_to_send = start_chunk
@@ -241,7 +241,7 @@ class FileUploader:
                     continue
 
                 # Read the next chunk (outside lock - file I/O can be slow)
-                chunk = f.read(self.chunk_size)
+                chunk = await f.read(self.chunk_size)
                 if not chunk:
                     break
 
