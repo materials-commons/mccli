@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Callable, Dict, Any
 
+import aiofiles
+
 logger = logging.getLogger(__name__)
 
 
@@ -201,7 +203,7 @@ class FileUploader:
         """Send file chunks using sliding window (don't wait for each ACK)"""
         total_chunks = (self.file_size + self.chunk_size - 1) // self.chunk_size
 
-        with open(self.file_path, 'rb') as f:
+        async with aiofiles.open(self.file_path, 'rb') as f:
             # Single seek to start position (for resume)
             if start_chunk > 0:
                 f.seek(start_chunk * self.chunk_size)
