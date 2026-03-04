@@ -21,7 +21,7 @@ setup(
         "": ["*.txt"]
     },
     packages=find_namespace_packages(
-        include=['materials_commons.cli', 'materials_commons.cli.subcommands', 'materials_commons.cli.server', 'materials_commons.cli.server.uploader', 'materials_commons.cli.server.downloader']
+        include=['materials_commons.cli', 'materials_commons.cli.subcommands', 'materials_commons.cli.server', 'materials_commons.cli.server.uploader', 'materials_commons.cli.server.downloader', 'materials_commons.cli.server.indexer']
     ),
     entry_points={
         'console_scripts': ['mc=materials_commons.cli.parser:main']
@@ -50,6 +50,7 @@ setup(
     keywords='materials science mc materials-commons prisms',
     install_requires=[
         "websockets",
+        "aiofiles",
         "globus-cli",
         "globus-sdk",
         "igittigitt==2.1.0",
