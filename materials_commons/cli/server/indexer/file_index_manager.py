@@ -1,6 +1,9 @@
 import asyncio
+import os
 
-from materials_commons.cli.filedb import FileIndexDB
+from datetime import datetime
+from materials_commons.cli.filedb import FileIndexDB, FileRecord
+from materials_commons.cli.functions import checksum
 
 
 class FileIndexManager:
@@ -36,18 +39,36 @@ class FileIndexManager:
             try:
                 await self._index(file_path, project_path)
             except Exception as e:
-                pass
+                print(f"Error indexing {file_path}: {e}")
+            finally:
+                self._index_queue.task_done()
 
     async def _index(self, file_path: str, project_path: str):
         """Index a file"""
         print(f"Indexing {file_path} in {project_path}")
+        hash = await asyncio.to_thread(checksum, file_path)
+        finfo = os.stat(file_path)
+        file_record = FileRecord(
+            path = file_path,
+            size = finfo.st_size,
+            mtime_ns = finfo.st_mtime_ns,
+            ctime_ns = finfo.st_ctime_ns,
+            last_seen_ts = int(datetime.now().timestamp()),
+            checksum = hash,
+            status = "indexed",
+        )
+        await self.db_write_queue.put(file_record)
+        print(f"Done indexing {file_path} in {project_path} got Hash: {hash}")
         pass
 
     async def _db_queue_worker(self):
         """Worker that processes db writes from queue"""
         while self._workers_running:
             try:
-                db_entry = await self.db_write_queue.get()
+                db_entry = await asyncio.wait_for(self.db_write_queue.get(), timeout=1.0)
+                print(f"Writing to db: {db_entry}")
+            except asyncio.TimeoutError:
+                continue
             except asyncio.CancelledError:
                 return
 
@@ -55,6 +76,8 @@ class FileIndexManager:
                 self.db.upsert(db_entry)
             except Exception as e:
                 pass
+            finally:
+                self.db_write_queue.task_done()
 
     async def stop_workers(self):
         """Stop background workers"""
