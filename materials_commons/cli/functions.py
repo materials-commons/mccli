@@ -1,4 +1,6 @@
 import datetime
+
+import aiofiles
 import dateutil
 import hashlib
 import json
@@ -148,6 +150,17 @@ def checksum(path, chunk_size=8192):
     with open(path, 'rb') as f:
         while True:
             chunk = f.read(chunk_size)
+            if not chunk:
+                break
+            md5.update(chunk)
+    return md5.hexdigest()
+
+async def checksum_async(path, chunk_size=8192):
+    """Generate MD5 checksum for the file at "path"""
+    md5 = hashlib.md5()
+    async with aiofiles.open(path, 'rb') as f:
+        while True:
+            chunk = await f.read(chunk_size)
             if not chunk:
                 break
             md5.update(chunk)
