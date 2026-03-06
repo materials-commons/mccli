@@ -48,7 +48,7 @@ standard_usage = [
     {'name': 'fetch', 'desc': 'Remote data fetching and configuration', 'subcommand': fetch_subcommand},
     {'name': 'up', 'desc': 'Upload files', 'subcommand': up_subcommand},
     {'name': 'down', 'desc': 'Download files', 'subcommand': down_subcommand},
-    {'name': 'scan', 'desc': 'Scan local directory for files to upload', 'subcommand': scan_subcommand},
+    # {'name': 'scan', 'desc': 'Scan local directory for files to upload', 'subcommand': scan_subcommand},
     {'name': 'globus', 'desc': 'Manage Globus uploads and downloads', 'subcommand': globus_subcommand},
     {'name': 'versions', 'desc': 'List file versions', 'subcommand': versions_subcommand},
     # {'name': 'proc', 'desc': 'List processes', 'subcommand': ProcSubcommand()},
