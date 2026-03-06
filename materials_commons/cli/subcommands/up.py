@@ -2,6 +2,8 @@ import argparse
 import logging
 import sys
 
+import igittigitt
+
 import materials_commons.cli.exceptions as cliexcept
 import materials_commons.cli.functions as clifuncs
 import materials_commons.cli.globus as cliglobus
@@ -110,6 +112,8 @@ def up_subcommand(argv, working_dir):
 
         mcpaths = treefuncs.clipaths_to_mcpaths(proj.local_path, local_abspaths, working_dir)
 
+        ignore_parser = igittigitt.IgnoreParser()
+
         file_paths = []
         project_paths = []
 
@@ -123,6 +127,8 @@ def up_subcommand(argv, working_dir):
                         for filename in files:
                             if filename == ".DS_Store":
                                 continue
+                            # if ignore_parser.match(filename):
+                            #     continue
                             file_path = os.path.join(root, filename)
 
                             # Calculate relative path and construct mc_path
