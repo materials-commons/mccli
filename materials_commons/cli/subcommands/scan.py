@@ -48,7 +48,7 @@ async def scan_subcommand_async(argv, working_dir):
     """Builds and populates the file index database for project scan; skips ignored directories and files"""
     parser = make_parser()
     parser.parse_args(argv)
-    
+
     proj = clifuncs.make_local_project(working_dir)
 
     filedb = FileIndexDB(db_path=Path(proj.local_path) / ".mc" / "mc2.sqlite")

@@ -138,7 +138,7 @@ def up_subcommand(argv, working_dir):
                             file_mc_path = str(Path(mc_path) / relative)
                             file_paths.append(file_path)
                             project_paths.append(file_mc_path)
-                            print(f"Indexing {file_mc_path}, {file_path}")
+                            # print(f"Indexing {file_mc_path}, {file_path}")
                 else:
                     print("Skipping directory because --recursive option not specified: " + local_path)
             else:
