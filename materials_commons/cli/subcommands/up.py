@@ -113,6 +113,8 @@ def up_subcommand(argv, working_dir):
         mcpaths = treefuncs.clipaths_to_mcpaths(proj.local_path, local_abspaths, working_dir)
 
         ignore_parser = igittigitt.IgnoreParser()
+        ignore_parser.parse_rule_files(base_dir=proj.local_path, filename=".mcignore",
+                                       add_default_patterns=False)
 
         file_paths = []
         project_paths = []

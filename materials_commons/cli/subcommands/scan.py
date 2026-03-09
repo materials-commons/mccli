@@ -48,10 +48,15 @@ async def scan_subcommand_async(argv, working_dir):
     """Builds and populates the file index database for project scan; skips ignored directories and files"""
     parser = make_parser()
     parser.parse_args(argv)
-    ignore_parser = igittigitt.IgnoreParser()
-
-    filedb = FileIndexDB(db_path=Path(working_dir) / ".mc" / "mc2.sqlite")
+    
     proj = clifuncs.make_local_project(working_dir)
+
+    filedb = FileIndexDB(db_path=Path(proj.local_path) / ".mc" / "mc2.sqlite")
+
+    ignore_parser = igittigitt.IgnoreParser()
+    ignore_parser.parse_rule_files(base_dir=proj.local_path, filename=".mcignore",
+                                   add_default_patterns=False)
+
     file_index_queue = asyncio.Queue()
     file_index_manager = FileIndexManager(filedb, file_index_queue)
 
