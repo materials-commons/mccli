@@ -1,4 +1,5 @@
 import asyncio
+
 import json
 import os
 import signal
@@ -8,6 +9,7 @@ from _asyncio import Task
 from typing import Dict, Any, Optional, Callable, Awaitable
 
 import websockets
+from datetime import datetime, timezone
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK, InvalidStatus
 from materials_commons.cli import server
 from materials_commons.cli.server.uploader.file_transfer_manager import FileTransferManager
@@ -18,11 +20,11 @@ from materials_commons.cli.user_config import Config
 CommandHandler = Callable[[Any, Dict[str, Any]], Awaitable[None]]
 
 
-async def cleanup_tasks(receiver_task: Task[None], sender_task: Task[Any]):
+async def cleanup_tasks(receiver_task: Task[None], sender_task: Task[Any], heartbeat_task: Task[None]):
     # Wait for either task to finish/fail. This prevents the issue where
     # one of the tasks aborts and the other keeps going.
     done, pending = await asyncio.wait(
-        [sender_task, receiver_task],
+        [sender_task, receiver_task, heartbeat_task],
         return_when=asyncio.FIRST_COMPLETED
     )
 
@@ -100,8 +102,9 @@ class WebSocketCommandListener:
                     # Create the sender and receiver tasks for the websocket
                     sender_task = asyncio.create_task(self._ws_sender_loop(ws))
                     receiver_task = asyncio.create_task(self._ws_receiver_loop(ws))
+                    heartbeat_task = asyncio.create_task(self._ws_heartbeat_loop(ws))
 
-                    await cleanup_tasks(receiver_task, sender_task)
+                    await cleanup_tasks(receiver_task, sender_task, heartbeat_task)
 
             except (ConnectionClosedOK, ConnectionClosedError, InvalidStatus, OSError, asyncio.TimeoutError) as e:
                 print(f"Connection lost: {e}, attemping to reconnect in {self.backoff} seconds")
@@ -148,6 +151,7 @@ class WebSocketCommandListener:
                     await ws.send(frame)
                 else:
                     # Send JSON (text frame) message
+                    print("sending: ", msg, flush=True, end="")
                     await ws.send(json.dumps(msg))
             except Exception as e:
                 # If we are here, then we took a message out of the queue but failed to send it.
@@ -178,6 +182,22 @@ class WebSocketCommandListener:
                 for item in data:
                     if isinstance(item, dict):
                         await self._dispatch(item)
+
+    async def _ws_heartbeat_loop(self, ws):
+        """Periodically sends a heartbeat message to keep the connection alive."""
+        while True:
+            await asyncio.sleep(20)
+            try:
+                heartbeat_msg = {
+                    "command": "HEARTBEAT",
+                    "clientId": self.client_uuid,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+                await self.queue.put(heartbeat_msg)
+            except Exception as e:
+                print(f"heartbeat loop exception: {e}")
+                pass
+        print("heartbeat loop exiting")
 
     async def _dispatch(self, cmd: Dict[str, Any]) -> None:
         kind = cmd.get("type") or cmd.get("command")
