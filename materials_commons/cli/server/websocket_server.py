@@ -151,7 +151,6 @@ class WebSocketCommandListener:
                     await ws.send(frame)
                 else:
                     # Send JSON (text frame) message
-                    print("sending: ", msg, flush=True, end="")
                     await ws.send(json.dumps(msg))
             except Exception as e:
                 # If we are here, then we took a message out of the queue but failed to send it.
