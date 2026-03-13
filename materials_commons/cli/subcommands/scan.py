@@ -11,11 +11,13 @@ from materials_commons.cli.server.indexer.file_index_manager import FileIndexMan
 
 
 def make_parser():
-    mc_scan_usage = 'mc scan'
+    mc_scan_usage = 'mc scan [--list]'
     parser = argparse.ArgumentParser(
         description='Scan a project and build a database of current files and directories. This speeds uploads by storing state on the file.',
         usage=mc_scan_usage,
         prog='mc scan')
+
+    parser.add_argument('--list', action='store_true', help='List scanned files and directories.')
 
     return parser
 
@@ -46,9 +48,6 @@ async def scan_files_async(local_path, mc_path, file_index_queue, ignore_parser)
 
 async def scan_subcommand_async(argv, working_dir):
     """Builds and populates the file index database for project scan; skips ignored directories and files"""
-    parser = make_parser()
-    parser.parse_args(argv)
-
     proj = clifuncs.make_local_project(working_dir)
 
     filedb = FileIndexDB(db_path=Path(proj.local_path) / ".mc" / "mc2.sqlite")
@@ -71,13 +70,19 @@ async def scan_subcommand_async(argv, working_dir):
     # Wait for all tasks to complete
     await file_index_queue.join()
     await file_index_manager.stop_workers()
-    print("called stop_workers")
     for worker in workers:
         try:
             await worker
         except asyncio.CancelledError:
             pass
+    filedb.close()
 
 def scan_subcommand(argv, working_dir):
     """Runs the scan subcommand asynchronously"""
+    parser = make_parser()
+    args = parser.parse_args(argv)
+    if args.list:
+        print("Not implemented yet")
+        return
+
     asyncio.run(scan_subcommand_async(argv, working_dir))

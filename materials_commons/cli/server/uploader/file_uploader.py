@@ -2,11 +2,16 @@ import asyncio
 import hashlib
 import logging
 import uuid
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Callable, Dict, Any
 
 import aiofiles
+
+from materials_commons.cli.filedb import FileIndexDB
+from materials_commons.cli.server.indexer.file_index_manager import file_has_changed
+
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +21,7 @@ class FileUploader:
 
     def __init__(
             self,
+            db: FileIndexDB,
             send_queue: asyncio.Queue,
             file_path: str,
             project_path: str,
@@ -25,6 +31,7 @@ class FileUploader:
             window_size: int = 10,
             progress_callback: Optional[Callable[[int, int], None]] = None
     ):
+        self.db = db
         self.send_queue = send_queue
         self.file_path = Path(file_path)
         self.project_path = Path(project_path)
@@ -128,6 +135,13 @@ class FileUploader:
 
     async def _send_transfer_init(self) -> bool:
         """Send TRANSFER_INIT message via queue"""
+        finfo = await asyncio.to_thread(os.stat, self.file_path.as_posix())
+        file_record = await asyncio.to_thread(self.db.get_file_by_path, self.project_path.as_posix())
+        if file_has_changed(file_record, finfo) or file_record.checksum is None:
+            csum = await asyncio.to_thread(self._calculate_md5)
+        else:
+            csum = file_record.checksum
+
         msg = {
             "command": "TRANSFER_INIT",
             "id": str(uuid.uuid4()),
@@ -140,7 +154,7 @@ class FileUploader:
                 "project_path": self.project_path.as_posix(),
                 "file_size": self.file_size,
                 "chunk_size": self.chunk_size,
-                "checksum": self._calculate_md5()
+                "checksum": csum
             }
         }
 

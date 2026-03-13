@@ -47,7 +47,7 @@ async def ws_upload(
     )
 
     # Start upload workers
-    upload_workers = await listener.file_transfer_manager.start_workers()
+    upload_workers = await listener.file_upload_manager.start_workers()
 
     # Setup SSL context
     ssl_context = ssl.create_default_context()
@@ -77,7 +77,7 @@ async def ws_upload(
 
             transfer_ids = []
             for file_path, project_path in zip(file_paths, project_paths):
-                transfer_id = await listener.file_transfer_manager.upload_file(
+                transfer_id = await listener.file_upload_manager.upload_file(
                     file_path=file_path,
                     project_id=project_id,
                     project_path=project_path,
@@ -90,7 +90,7 @@ async def ws_upload(
 
             # Wait for all uploads to complete
             logger.info("Waiting for uploads to complete...")
-            await listener.file_transfer_manager.wait_all()
+            await listener.file_upload_manager.wait_all()
 
             # Cancel sender/receiver tasks
             sender_task.cancel()
@@ -106,7 +106,7 @@ async def ws_upload(
 
             # Check results for each upload
             for transfer_id in transfer_ids:
-                success = listener.file_transfer_manager.results.get(transfer_id, False)
+                success = listener.file_upload_manager.results.get(transfer_id, False)
                 if not success:
                     # At least one upload failed so return False
                     return False

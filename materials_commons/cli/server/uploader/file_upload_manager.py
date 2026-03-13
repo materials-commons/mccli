@@ -5,16 +5,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, Optional, Callable
 
+from materials_commons.cli.server.project_filedbs import ProjectFileDBs
 from materials_commons.cli.server.uploader.file_uploader import FileUploader, logger
 
 
-class FileTransferManager:
+class FileUploadManager:
     """Manages multiple concurrent file uploads"""
 
     def __init__(self, send_queue: asyncio.Queue, client_id: str, max_concurrent: int = 3):
         self.send_queue = send_queue
         self.client_id = client_id
         self.max_concurrent = max_concurrent
+        self.project_filedbs = ProjectFileDBs()
 
         # Active uploads indexed by transfer_id
         self.active_uploads: Dict[str, FileUploader] = {}
@@ -95,7 +97,9 @@ class FileTransferManager:
         and then queueing this object. The queued FileUploader will then be picked up by a worker to perform
         the upload.
         """
+        filedb = self.project_filedbs.get_filedb(project_id)
         uploader = FileUploader(
+            db=filedb,
             send_queue=self.send_queue,
             file_path=file_path,
             project_path=project_path,
@@ -210,3 +214,6 @@ class FileTransferManager:
     def stop_workers(self):
         """Stop all worker tasks"""
         self._workers_running = False
+
+    def close_dbs(self):
+        self.project_filedbs.close_dbs()

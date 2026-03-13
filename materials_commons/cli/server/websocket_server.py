@@ -1,19 +1,17 @@
 import asyncio
-
 import json
-import os
-import signal
 import socket
 import ssl
 from _asyncio import Task
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional, Callable, Awaitable
 
 import websockets
-from datetime import datetime, timezone
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK, InvalidStatus
+
 from materials_commons.cli import server
-from materials_commons.cli.server.uploader.file_transfer_manager import FileTransferManager
 from materials_commons.cli.server.downloader.file_download_manager import FileDownloadManager
+from materials_commons.cli.server.uploader.file_upload_manager import FileUploadManager
 from materials_commons.cli.user_config import Config
 
 # Type alias for handler functions
@@ -64,8 +62,8 @@ class WebSocketCommandListener:
 
         config = Config()
 
-        self.file_transfer_manager = FileTransferManager(send_queue=queue, client_id=client_uuid,
-                                                         max_concurrent=max_concurrent)
+        self.file_upload_manager = FileUploadManager(send_queue=queue, client_id=client_uuid,
+                                                     max_concurrent=max_concurrent)
 
         self.file_download_manager = FileDownloadManager(send_queue=queue, client_id=client_uuid,
                                                          mcurl=config.default_remote.mcurl,
@@ -83,7 +81,7 @@ class WebSocketCommandListener:
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
 
-        self._upload_workers = await self.file_transfer_manager.start_workers()
+        self._upload_workers = await self.file_upload_manager.start_workers()
         self._download_workers = await self.file_download_manager.start_workers()
 
         while True:
@@ -118,7 +116,7 @@ class WebSocketCommandListener:
         """Shutdown the file transfer workers"""
 
         # Stop upload workers
-        self.file_transfer_manager.stop_workers()
+        self.file_upload_manager.stop_workers()
         for worker in self._upload_workers:
             worker.cancel()
             try:
@@ -223,8 +221,8 @@ class WebSocketCommandListener:
         # Route file transfer messages to the FileTransferManager
         if kind in ["TRANSFER_ACCEPT", "TRANSFER_REJECT", "CHUNK_ACK", "CHUNK_ERROR",
                     "TRANSFER_FINALIZE", "UPLOAD_FAILED", "TRANSFER_RESUME_RESPONSE"]:
-            if self.file_transfer_manager:
-                await self.file_transfer_manager.handle_message(cmd)
+            if self.file_upload_manager:
+                await self.file_upload_manager.handle_message(cmd)
                 return
 
         # We have handlers for the other file transfer commands. These handlers need access
@@ -233,7 +231,7 @@ class WebSocketCommandListener:
         # upload and download handlers.
         if kind in ["UPLOAD_FILE", "UPLOAD_DIRECTORY",
                     "CANCEL_UPLOAD", "PAUSE_UPLOAD", "RESUME_UPLOAD"]:
-            cmd["_file_manager"] = self.file_transfer_manager
+            cmd["_file_manager"] = self.file_upload_manager
 
         if kind in ["DOWNLOAD_FILE", "CANCEL_DOWNLOAD", "PAUSE_DOWNLOAD", "RESUME_DOWNLOAD"]:
             cmd["_file_manager"] = self.file_download_manager
