@@ -1,7 +1,7 @@
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 
 @dataclass(frozen=True)
@@ -83,6 +83,9 @@ class FileIndexDB:
             )
         )
         self._write_conn.commit()
+
+    def upsert_many(self, records: List[FileRecord]):
+        pass
 
     def close(self):
         self._write_conn.close()
