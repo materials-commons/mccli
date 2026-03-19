@@ -5,9 +5,10 @@ import uuid
 from typing import Awaitable, Callable, Dict, Any
 
 from materials_commons.cli.server.command_handlers import register_handlers
+from materials_commons.cli.server.local_rest_server import LocalRestServer
+from materials_commons.cli.server.project_filedbs import ProjectFileDBs
 from materials_commons.cli.server.websocket_server import WebSocketCommandListener
 from materials_commons.cli.user_config import Config
-from materials_commons.cli.server.local_rest_server import LocalRestServer
 
 CommandHandler = Callable[[Dict[str, Any]], Awaitable[None]]
 
@@ -46,13 +47,23 @@ def server_subcommand(argv, working_dir=None):
 
     # Runs local REST server and remote command listener
     async def main():
-        queue = asyncio.Queue()
+        send_queue = asyncio.Queue()
+        db_queue = asyncio.Queue()
+        project_dbs = ProjectFileDBs()
         running_loop = asyncio.get_running_loop()
-        local_rest_server = LocalRestServer(loop=running_loop, queue=queue)
+        local_rest_server = LocalRestServer(loop=running_loop, queue=send_queue)
         local_rest_server.start()
 
-        listener = WebSocketCommandListener(args.ws_url, config.default_remote.mcapikey, config.client_uuid,
-                                            register_handlers(), queue)
+        listener = WebSocketCommandListener(
+            ws_url=args.ws_url,
+            token=config.default_remote.mcapikey,
+            client_uuid=config.client_uuid,
+            handlers=register_handlers(),
+            ws_send_queue=send_queue,
+            db_write_queue=db_queue,
+            project_dbs=project_dbs
+        )
+
         try:
             await listener.run()
         finally:

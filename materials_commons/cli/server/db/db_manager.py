@@ -28,17 +28,17 @@ class DBManager:
             except asyncio.TimeoutError:
                 continue
 
-            project_db = self._project_dbs.get_filedb(project_id)
+            project_db = await self._project_dbs.get_filedb(project_id)
             if project_db is None:
                 # Log an error here
                 continue
 
-            # Switch to aiosqlite so we can do await on the upserts
             try:
                 if command == 'single':
-                    await asyncio.to_thread(project_db.upsert, data)
+                    async with project_db.transaction():
+                        await project_db.upsert(data)
                 elif command == 'multi':
-                    await asyncio.to_thread(project_db.upsert_many, data)
+                    await project_db.upsert_many(data)
                 else:
                     print(f"Command {command} not recognized")
             except Exception as e:
@@ -46,5 +46,5 @@ class DBManager:
             finally:
                 self._db_queue.task_done()
 
-    async def stop_workers(self):
+    def stop_workers(self):
         self._workers_running = False

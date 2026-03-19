@@ -9,7 +9,7 @@ from typing import Optional, Callable, Dict, Any
 
 import aiofiles
 
-from materials_commons.cli.filedb import FileIndexDB
+from materials_commons.cli.filedb import FileIndexDB, FileRecord
 from materials_commons.cli.server.indexer.file_index_manager import file_has_changed
 
 
@@ -22,7 +22,8 @@ class FileUploader:
     def __init__(
             self,
             db: FileIndexDB,
-            send_queue: asyncio.Queue,
+            ws_send_queue: asyncio.Queue,
+            db_write_queue: asyncio.Queue,
             file_path: str,
             project_path: str,
             project_id: int,
@@ -32,7 +33,8 @@ class FileUploader:
             progress_callback: Optional[Callable[[int, int], None]] = None
     ):
         self.db = db
-        self.send_queue = send_queue
+        self.ws_send_queue = ws_send_queue
+        self.db_write_queue = db_write_queue
         self.file_path = Path(file_path)
         self.project_path = Path(project_path)
         self.project_id = project_id
@@ -136,9 +138,19 @@ class FileUploader:
     async def _send_transfer_init(self) -> bool:
         """Send TRANSFER_INIT message via queue"""
         finfo = await asyncio.to_thread(os.stat, self.file_path.as_posix())
-        file_record = await asyncio.to_thread(self.db.get_file_by_path, self.project_path.as_posix())
+        file_record = await self.db.get_file_by_path(self.project_path.as_posix())
         if file_has_changed(file_record, finfo) or file_record.checksum is None:
             csum = await asyncio.to_thread(self._calculate_md5)
+            updated_file_record = FileRecord(
+                path=self.project_path.as_posix(),
+                size=finfo.st_size,
+                mtime_ns=finfo.st_mtime_ns,
+                ctime_ns=finfo.st_ctime_ns,
+                last_seen_ts=int(datetime.now().timestamp()),
+                checksum=csum,
+                status="indexed",
+            )
+            await self.db_write_queue.put(("single", self.project_id, updated_file_record))
         else:
             csum = file_record.checksum
 
@@ -158,7 +170,7 @@ class FileUploader:
             }
         }
 
-        await self.send_queue.put(msg)
+        await self.ws_send_queue.put(msg)
         logger.info(f"Sent TRANSFER_INIT for {self.file_path.name} ({self.file_size} bytes)")
         return True
 
@@ -272,7 +284,7 @@ class FileUploader:
                     "data": chunk
                 }
 
-                await self.send_queue.put(binary_frame)
+                await self.ws_send_queue.put(binary_frame)
 
         return True
 
@@ -358,7 +370,7 @@ class FileUploader:
                     "data": chunk
                 }
 
-                await self.send_queue.put(binary_frame)
+                await self.ws_send_queue.put(binary_frame)
 
                 # Wait for ACK
                 self.waiting_for_response = "CHUNK_ACK"
@@ -401,7 +413,7 @@ class FileUploader:
             }
         }
 
-        await self.send_queue.put(msg)
+        await self.ws_send_queue.put(msg)
         logger.info(f"Sent TRANSFER_COMPLETE for {self.file_path.name}")
         return True
 

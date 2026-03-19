@@ -10,7 +10,9 @@ import websockets
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK, InvalidStatus
 
 from materials_commons.cli import server
+from materials_commons.cli.server.db.db_manager import DBManager
 from materials_commons.cli.server.downloader.file_download_manager import FileDownloadManager
+from materials_commons.cli.server.project_filedbs import ProjectFileDBs
 from materials_commons.cli.server.uploader.file_upload_manager import FileUploadManager
 from materials_commons.cli.user_config import Config
 
@@ -50,11 +52,13 @@ class WebSocketCommandListener:
     DEFAULT_RECONNECT_MAX_SEC = 30
 
     def __init__(self, ws_url: str, token: Optional[str], client_uuid: str, handlers: Dict[str, CommandHandler],
-                 queue: asyncio.Queue, max_concurrent: int = 3):
+                 ws_send_queue: asyncio.Queue, db_write_queue: asyncio.Queue, project_dbs: ProjectFileDBs, max_concurrent: int = 3):
         self.ws_url = ws_url
         self.token = token
         self.client_uuid = client_uuid
-        self.queue = queue
+        self.ws_send_queue = ws_send_queue
+        self.db_write_queue = db_write_queue
+        self.project_dbs = project_dbs
         self.backoff = self.DEFAULT_RECONNECT_MIN_SEC
         self.handlers = handlers
         self.user_id: Optional[int] = None
@@ -62,15 +66,18 @@ class WebSocketCommandListener:
 
         config = Config()
 
-        self.file_upload_manager = FileUploadManager(send_queue=queue, client_id=client_uuid,
-                                                     max_concurrent=max_concurrent)
+        self.file_upload_manager = FileUploadManager(send_queue=ws_send_queue, db_write_queue=db_write_queue,
+                                                     client_id=client_uuid, max_concurrent=max_concurrent)
 
-        self.file_download_manager = FileDownloadManager(send_queue=queue, client_id=client_uuid,
+        self.file_download_manager = FileDownloadManager(send_queue=ws_send_queue, client_id=client_uuid,
                                                          mcurl=config.default_remote.mcurl,
                                                          apitoken=config.default_remote.mcapikey,
                                                          max_concurrent=max_concurrent)
+        self.db_manager = DBManager(db_queue=self.db_write_queue, project_dbs=self.project_dbs)
+
         self._upload_workers: list[Task] = []
         self._download_workers: list[Task] = []
+        self._db_workers: list[Task] = []
 
     async def run(self) -> None:
         """
@@ -83,6 +90,7 @@ class WebSocketCommandListener:
 
         self._upload_workers = await self.file_upload_manager.start_workers()
         self._download_workers = await self.file_download_manager.start_workers()
+        self._db_workers = await self.db_manager.start_workers()
 
         while True:
             headers = self.build_headers()
@@ -133,11 +141,20 @@ class WebSocketCommandListener:
             except asyncio.CancelledError:
                 pass
 
+        # Stop db workers
+        self.db_manager.stop_workers()
+        for worker in self._db_workers:
+            worker.cancel()
+            try:
+                await worker
+            except asyncio.CancelledError:
+                pass
+
     async def _ws_sender_loop(self, ws):
         """Reads from the queue and sends to the websocket."""
         while True:
             # wait for an item from the queue. This message is now in flight and not in queue.
-            msg = await self.queue.get()
+            msg = await self.ws_send_queue.get()
             try:
                 # Check if we are sending a binary frame
                 if isinstance(msg, dict) and msg.get("_binary_frame"):
@@ -156,12 +173,12 @@ class WebSocketCommandListener:
                 # there is no message ordering requirement, so we can just re-queue it. This
                 # shouldn't cause us any problems. If the server we connected to is dead then
                 # we just keep trying to reconnect and send the messages when it comes back.
-                await self.queue.put(msg)
+                await self.ws_send_queue.put(msg)
 
                 # We want to exit the loop if we encounter an error, so raise the exception
                 raise e
             finally:
-                self.queue.task_done()
+                self.ws_send_queue.task_done()
 
     async def _ws_receiver_loop(self, ws):
         """Reads from the websocket and puts messages into the queue."""
@@ -190,7 +207,7 @@ class WebSocketCommandListener:
                     "clientId": self.client_uuid,
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
-                await self.queue.put(heartbeat_msg)
+                await self.ws_send_queue.put(heartbeat_msg)
             except Exception as e:
                 print(f"heartbeat loop exception: {e}")
                 pass
@@ -238,7 +255,7 @@ class WebSocketCommandListener:
 
         handler = self.handlers.get(kind)
         if handler:
-            await handler(self.queue, cmd)
+            await handler(self.ws_send_queue, cmd)
 
     def build_headers(self) -> Dict[str, str]:
         headers = {}

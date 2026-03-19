@@ -12,6 +12,7 @@ import materials_commons.cli.functions as clifuncs
 import materials_commons.cli.globus as cliglobus
 import materials_commons.cli.tree_functions as treefuncs
 import materials_commons.cli.file_functions as filefuncs
+from materials_commons.cli.models import RemoteFileEntry, RemoteDirectory
 from materials_commons.cli.server.downloader.file_download_manager import FileDownloadManager
 from materials_commons.cli.treedb import LocalTree, RemoteTree
 from materials_commons.cli.user_config import Config
@@ -534,6 +535,7 @@ async def download_async(proj, paths, working_dir, force=False, output=None, rec
             except asyncio.CancelledError:
                 pass
 
+
 async def download_async_v2(proj, paths, db, recursive=False):
     config = Config()
     queue = asyncio.Queue()
@@ -547,25 +549,26 @@ async def download_async_v2(proj, paths, db, recursive=False):
     all_plan_items = []
 
     try:
-        async for batch in walk_remote_tree_async(proj.remote,paths, recursvie):
-            local_entries = await scan_local_directory_async(to_local_dir(proj.local_path, batch.directory_path))
-            db_records = await asyncio.to_thread(db.get_files_by_parent_dir, batch.directory_path)
-            plan = await build_download_plan_for_directory(batch, local_entries, db_records)
-            all_plan_items.extend(plan)
-
-            await asyncio.to_thread(db.upsert_many, [item.updated_record for item in plan])
-            for item in plan:
-                if item.action == 'download':
-                    await file_download_manager.download_file(item)
-                    await file_download_manager.download_file(
-                        project_id = proj.id,
-                        file_id = item.file_id,
-                        file_path = item.local_path,
-                        expected_size = item.file_size,
-                        expected_checksum = item.checksum
-                    )
+        async for batch in walk_remote_tree_async(proj.remote, proj.id, paths, recursive):
+            print(batch)
+            # local_entries = await scan_local_directory_async(to_local_dir(proj.local_path, batch.directory_path))
+            # db_records = await asyncio.to_thread(db.get_files_by_parent_dir, batch.directory_path)
+            # plan = await build_download_plan_for_directory(batch, local_entries, db_records)
+            # all_plan_items.extend(plan)
+            #
+            # await asyncio.to_thread(db.upsert_many, [item.updated_record for item in plan])
+            # for item in plan:
+            #     if item.action == 'download':
+            #         await file_download_manager.download_file(item)
+            #         await file_download_manager.download_file(
+            #             project_id = proj.id,
+            #             file_id = item.file_id,
+            #             file_path = item.local_path,
+            #             expected_size = item.file_size,
+            #             expected_checksum = item.checksum
+            #         )
         await file_download_manager.wait_all()
-        await finalize_download_results(all_plan_items, file_download_manager, db)
+        # await finalize_download_results(all_plan_items, file_download_manager, db)
 
     finally:
         file_download_manager.stop_workers()
@@ -574,6 +577,52 @@ async def download_async_v2(proj, paths, db, recursive=False):
                 await worker
             except asyncio.CancelledError:
                 pass
+
+
+async def walk_remote_tree_async(client: mcapi.Client, project_id: int, paths: list[str], recursive: bool = False):
+    """Walk the remote directory tree, yielding batches of files and directories to evaluate"""
+    pending_paths = list(paths)
+    seen_paths = set()
+
+    # Traverses the remote directory tree (optionally recursively); yields normalized directory batches
+    while pending_paths:
+        path = pending_paths.pop(0)
+        if path in seen_paths:
+            continue
+        seen_paths.add(path)
+
+        path_entries = await asyncio.to_thread(client.list_directory_by_path, project_id, path)
+        if not path_entries:
+            continue
+
+        files = []
+        dirs = []
+
+        for path_entry in path_entries:
+            if path_entry.mime_type == 'directory':
+                dirs.append(path_entry.path)
+            else:
+                files.append(
+                    RemoteFileEntry(
+                        path=path_entry.path,
+                        parent_dir=path,
+                        name=path_entry.name,
+                        remote_file_id=path_entry.id,
+                        remote_ctime_ns=path_entry.ctime_ns * 1000,
+                        remote_checksum=path_entry.checksum,
+                        remote_size=path_entry.size,
+                    )
+                )
+
+        yield RemoteDirectory(
+            directory_path=path,
+            files=files,
+            subdirs=dirs,
+        )
+
+        if recursive:
+            pending_paths.extend(dirs)
+
 
 async def finalize_download_results(plan_items, file_download_manager, db, now_ts: int):
     finalized_records = []
@@ -604,6 +653,7 @@ async def finalize_download_results(plan_items, file_download_manager, db, now_t
 
     await asyncio.to_thread(db.upsert_many, finalized_records)
 
+
 def finalize_record_as_clean(old_record, size, mtime_ns, ctime_ns, checksum, now_ts: int):
     return {
         "id": old_record.id,
@@ -615,6 +665,7 @@ def finalize_record_as_clean(old_record, size, mtime_ns, ctime_ns, checksum, now
         "ctime_ns": ctime_ns,
         "checksum": checksum,
     }
+
 
 def finalize_record_as_failed(old_record, now_ts: int):
     return {

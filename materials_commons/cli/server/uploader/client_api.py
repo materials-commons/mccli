@@ -1,12 +1,15 @@
 import asyncio
 import logging
-from typing import List, Optional
-from materials_commons.cli.server.websocket_server import WebSocketCommandListener
-from materials_commons.cli.server.command_handlers import register_handlers
-from materials_commons.cli.user_config import Config
 import ssl
+from typing import List
+
 import websockets
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK, InvalidStatus
+
+from materials_commons.cli.server.command_handlers import register_handlers
+from materials_commons.cli.server.project_filedbs import ProjectFileDBs
+from materials_commons.cli.server.websocket_server import WebSocketCommandListener
+from materials_commons.cli.user_config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +37,9 @@ async def ws_upload(
             True if all uploads succeeded, False otherwise
     """
     config = Config()
-    queue = asyncio.Queue()
+    send_queue = asyncio.Queue()
+    db_write_queue = asyncio.Queue()
+    project_dbs = ProjectFileDBs()
 
     # Create websocket listener
     listener = WebSocketCommandListener(
@@ -42,12 +47,15 @@ async def ws_upload(
         token=config.default_remote.mcapikey,
         client_uuid=config.client_uuid,
         handlers=register_handlers(),
-        queue=queue,
+        ws_send_queue=send_queue,
+        db_write_queue=db_write_queue,
+        project_dbs=project_dbs,
         max_concurrent=max_concurrent
     )
 
     # Start upload workers
     upload_workers = await listener.file_upload_manager.start_workers()
+    db_workers = await listener.db_manager.start_workers()
 
     # Setup SSL context
     ssl_context = ssl.create_default_context()
@@ -72,6 +80,8 @@ async def ws_upload(
             sender_task = asyncio.create_task(listener._ws_sender_loop(ws))
             receiver_task = asyncio.create_task(listener._ws_receiver_loop(ws))
 
+            # TODO: Should we start _ws_heartbeat_loop here?
+
             # Now that connection is established, and sender/receiver are running, queue uploads
             logger.info("Connection established, queueing uploads...")
 
@@ -94,11 +104,13 @@ async def ws_upload(
 
             # Cancel sender/receiver tasks
             sender_task.cancel()
-            receiver_task.cancel()
+
             try:
                 await sender_task
             except asyncio.CancelledError:
                 pass
+
+            receiver_task.cancel()
             try:
                 await receiver_task
             except asyncio.CancelledError:
@@ -122,17 +134,25 @@ async def ws_upload(
         # Shutdown gracefully
         logger.info("Shutting down websocket infrastructure...")
 
-        # Stop listening on websocket
+        # Shutdown the websocket listener
         await listener.shutdown()
 
-        # Stop upload workers
-        for worker in upload_workers:
-            worker.cancel()
-            try:
-                await worker
-            except asyncio.CancelledError:
-                # Ignore errors from canceled workers. We are exiting anyway.
-                pass
+        # # Stop upload workers
+        # for worker in upload_workers:
+        #     worker.cancel()
+        #     try:
+        #         await worker
+        #     except asyncio.CancelledError:
+        #         # Ignore errors from canceled workers. We are exiting anyway.
+        #         pass
+        #
+        # await db_manager.stop_workers()
+        # for worker in db_workers:
+        #     worker.cancel()
+        #     try:
+        #         await worker
+        #     except asyncio.CancelledError:
+        #         pass
 
 
 def ws_upload_synchronous(

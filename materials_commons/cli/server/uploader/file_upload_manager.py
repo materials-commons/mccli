@@ -12,11 +12,13 @@ from materials_commons.cli.server.uploader.file_uploader import FileUploader, lo
 class FileUploadManager:
     """Manages multiple concurrent file uploads"""
 
-    def __init__(self, send_queue: asyncio.Queue, client_id: str, max_concurrent: int = 3):
+    def __init__(self, send_queue: asyncio.Queue, db_write_queue: asyncio.Queue, project_dbs: ProjectFileDBs,
+                 client_id: str, max_concurrent: int = 3):
         self.send_queue = send_queue
+        self.db_write_queue = db_write_queue
         self.client_id = client_id
         self.max_concurrent = max_concurrent
-        self.project_filedbs = ProjectFileDBs()
+        self.project_filedbs = project_dbs
 
         # Active uploads indexed by transfer_id
         self.active_uploads: Dict[str, FileUploader] = {}
@@ -97,10 +99,11 @@ class FileUploadManager:
         and then queueing this object. The queued FileUploader will then be picked up by a worker to perform
         the upload.
         """
-        filedb = self.project_filedbs.get_filedb(project_id)
+        filedb = await self.project_filedbs.get_filedb(project_id)
         uploader = FileUploader(
             db=filedb,
-            send_queue=self.send_queue,
+            ws_send_queue=self.send_queue,
+            db_write_queue=self.db_write_queue,
             file_path=file_path,
             project_path=project_path,
             project_id=project_id,

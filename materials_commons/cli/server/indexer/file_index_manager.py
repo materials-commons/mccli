@@ -2,8 +2,9 @@ import asyncio
 import os
 
 from datetime import datetime
-from materials_commons.cli.filedb import FileIndexDB, FileRecord
+from materials_commons.cli.filedb import FileRecord
 from materials_commons.cli.functions import checksum
+from materials_commons.cli.server.project_filedbs import ProjectFileDBs
 
 
 def file_has_changed(file_record: FileRecord, finfo: os.stat_result) -> bool:
@@ -20,14 +21,12 @@ def file_has_changed(file_record: FileRecord, finfo: os.stat_result) -> bool:
 class FileIndexManager:
     """Manages multiple concurrent file indexers"""
 
-    def __init__(self, db: FileIndexDB, queue: asyncio.Queue, max_concurrent: int = 3):
-        self._db = db
-        self._index_queue = queue
+    def __init__(self, project_file_dbs: ProjectFileDBs, db_queue: asyncio.Queue, index_queue: asyncio.Queue, max_concurrent: int = 3):
+        self._project_file_dbs = project_file_dbs
+        self._db_queue = db_queue
+        self._index_queue = index_queue
         self._workers_running = False
         self._max_concurrent = max_concurrent
-
-        # TODO: db_write_queue should be passed in so it can be shared by other parts of the system that need to write to the db.
-        self._db_write_queue = asyncio.Queue()
 
     async def start_workers(self):
         """Start background workers to process the index queue"""
@@ -36,29 +35,34 @@ class FileIndexManager:
             asyncio.create_task(self._index_file_worker())
             for i in range(self._max_concurrent)
         ]
-        db_queue_worker = asyncio.create_task(self._db_queue_worker())
-        workers.append(db_queue_worker)
         return workers
 
     async def _index_file_worker(self):
         """Worker that processes index requests from queue"""
         while self._workers_running:
             try:
-                (file_path, project_path) = await asyncio.wait_for(self._index_queue.get(), timeout=1.0)
+                (file_path, project_path, project_id) = await asyncio.wait_for(self._index_queue.get(), timeout=1.0)
             except asyncio.TimeoutError:
                 continue
 
             try:
-                await self._index(file_path, project_path)
+                await self._index(file_path, project_path, project_id)
             except Exception as e:
                 print(f"Error indexing {file_path}: {e}")
+                raise e
             finally:
                 self._index_queue.task_done()
 
-    async def _index(self, file_path: str, project_path: str):
+    async def _index(self, file_path: str, project_path: str, project_id: int):
         """Index a file. Checks if the file has changed since the last index."""
         finfo = await asyncio.to_thread(os.stat, file_path)
-        file_record = await asyncio.to_thread(self._db.get_file_by_path, project_path)
+        db = await self._project_file_dbs.get_filedb(project_id)
+
+        if db is None:
+            raise Exception(
+                f"Project {project_id} not found in filedb."
+            )
+        file_record = await db.get_file_by_path(project_path)
 
         if not file_has_changed(file_record, finfo):
             print(f"Skipping {file_path} in {project_path} as it hasn't changed")
@@ -76,26 +80,8 @@ class FileIndexManager:
             checksum=csum,
             status="indexed",
         )
-        await self._db_write_queue.put(file_record)
+        await self._db_queue.put(("single", project_id, file_record))
         # print(f"Done indexing {file_path} in {project_path} got Hash: {csum}")
-
-    async def _db_queue_worker(self):
-        """Worker that processes db writes from queue"""
-        while self._workers_running:
-            try:
-                db_entry = await asyncio.wait_for(self._db_write_queue.get(), timeout=1.0)
-                # print(f"Writing to db: {db_entry}")
-            except asyncio.TimeoutError:
-                continue
-            except asyncio.CancelledError:
-                return
-
-            try:
-                await asyncio.to_thread(self._db.upsert, db_entry)
-            except Exception as e:
-                print(f"Error writing to db: {e}")
-            finally:
-                self._db_write_queue.task_done()
 
     async def stop_workers(self):
         """Stop background workers"""

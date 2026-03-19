@@ -27,7 +27,7 @@ class FileRecord:
 
 
 @dataclass
-class RemoteEntry:
+class RemoteFileEntry:
     path: str
     parent_dir: str
     name: str
@@ -35,6 +35,12 @@ class RemoteEntry:
     remote_size: Optional[int] = None
     remote_ctime_ns: Optional[int] = None
     remote_checksum: Optional[str] = None
+
+@dataclass
+class RemoteDirectory:
+    directory_path: str
+    files: list[RemoteFileEntry]
+    subdirs: list[str]
 
 
 @dataclass
