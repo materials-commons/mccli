@@ -2,6 +2,9 @@ import argparse
 import asyncio
 import io
 import os
+from pathlib import Path
+
+import aiofiles.os
 import requests
 import sys
 import time
@@ -395,6 +398,8 @@ def make_parser():
                         help='Download directory contents recursively')
     parser.add_argument('--parallel', action="store_true", default=False,
                         help='Download files in parallel (not supported with Globus)')
+    parser.add_argument('--v2', action="store_true", default=False,
+                        help='Download files using download_async_v2')
     parser.add_argument('-f', '--force', action="store_true", default=False,
                         help='Force overwrite of existing files')
     parser.add_argument('-p', '--print', action="store_true", default=False,
@@ -486,7 +491,8 @@ def down_subcommand(argv, working_dir):
 
     elif args.print:
         print_file(proj, paths[0], working_dir)
-
+    elif args.v2:
+        asyncio.run(download_async_v2(proj, paths, db=None, recursive=args.recursive))
     else:
         output = None
         if args.output:
@@ -539,18 +545,31 @@ async def download_async(proj, paths, working_dir, force=False, output=None, rec
 async def download_async_v2(proj, paths, db, recursive=False):
     config = Config()
     queue = asyncio.Queue()
-    file_download_manager = FileDownloadManager(send_queue=queue,
-                                                client_id=config.client_uuid,
-                                                mcurl=config.default_remote.mcurl,
-                                                apitoken=config.default_remote.mcapikey,
-                                                max_concurrent=3)
-    download_workers = await file_download_manager.start_workers()
+    # file_download_manager = FileDownloadManager(send_queue=queue,
+    #                                             client_id=config.client_uuid,
+    #                                             mcurl=config.default_remote.mcurl,
+    #                                             apitoken=config.default_remote.mcapikey,
+    #                                             max_concurrent=3)
+    # download_workers = await file_download_manager.start_workers()
 
     all_plan_items = []
 
+    print(f"paths = {paths} recursive = {recursive}")
+    proj.remote.raise_exception = False
+
+    print(f"proj.local_path = {proj.local_path}")
+
     try:
         async for batch in walk_remote_tree_async(proj.remote, proj.id, paths, recursive):
-            print(batch)
+            print("\n========")
+            print(f"directory {batch.directory_path}")
+            local_path = Path(proj.local_path) / batch.directory_path.lstrip('/')
+            print(f"local path: {local_path}")
+            local_entries = await scan_local_directory_async(local_path.as_posix(), proj.local_path)
+            for entry_path, entry_stat in local_entries.items():
+                print(f"local entry: {entry_path}")
+            # for f in batch.files:
+            #     print(f.path)
             # local_entries = await scan_local_directory_async(to_local_dir(proj.local_path, batch.directory_path))
             # db_records = await asyncio.to_thread(db.get_files_by_parent_dir, batch.directory_path)
             # plan = await build_download_plan_for_directory(batch, local_entries, db_records)
@@ -567,16 +586,17 @@ async def download_async_v2(proj, paths, db, recursive=False):
             #             expected_size = item.file_size,
             #             expected_checksum = item.checksum
             #         )
-        await file_download_manager.wait_all()
+        # await file_download_manager.wait_all()
         # await finalize_download_results(all_plan_items, file_download_manager, db)
 
     finally:
-        file_download_manager.stop_workers()
-        for worker in download_workers:
-            try:
-                await worker
-            except asyncio.CancelledError:
-                pass
+        pass
+        # file_download_manager.stop_workers()
+        # for worker in download_workers:
+        #     try:
+        #         await worker
+        #     except asyncio.CancelledError:
+        #         pass
 
 
 async def walk_remote_tree_async(client: mcapi.Client, project_id: int, paths: list[str], recursive: bool = False):
@@ -608,7 +628,7 @@ async def walk_remote_tree_async(client: mcapi.Client, project_id: int, paths: l
                         parent_dir=path,
                         name=path_entry.name,
                         remote_file_id=path_entry.id,
-                        remote_ctime_ns=path_entry.ctime_ns * 1000,
+                        # remote_ctime_ns=path_entry.ctime * 1000,
                         remote_checksum=path_entry.checksum,
                         remote_size=path_entry.size,
                     )
@@ -623,58 +643,68 @@ async def walk_remote_tree_async(client: mcapi.Client, project_id: int, paths: l
         if recursive:
             pending_paths.extend(dirs)
 
-
-async def finalize_download_results(plan_items, file_download_manager, db, now_ts: int):
-    finalized_records = []
-
-    for item in plan_items:
-        if item.action != "download":
-            continue
-
-        transfer_id = item.updated_record.transfer_id
-        success = file_download_manager.results.get(transfer_id, False)
-
-        if success:
-            stat = await asyncio.to_thread(os.stat, item.local_path)
-            checksum = await clifuncs.checksum_async(item.local_path)
-
-            finalized = finalize_record_as_clean(
-                old_record=item.updated_record,
-                size=stat.st_size,
-                mtime_ns=stat.st_mtime_ns,
-                ctime_ns=stat.st_ctime_ns,
-                checksum=checksum,
-                now_ts=now_ts,
-            )
-        else:
-            finalized = finalize_record_as_failed(item.updated_record, now_ts)
-
-        finalized_records.append(finalized)
-
-    await asyncio.to_thread(db.upsert_many, finalized_records)
+async def scan_local_directory_async(path: str, proj_path: str):
+    results = {}
+    project_path = Path(proj_path)
+    entries = await aiofiles.os.scandir(path)
+    for entry in entries:
+        p = Path(entry.path)
+        st = await aiofiles.os.stat(entry.path)
+        results["/" + p.relative_to(project_path).as_posix()] = st
+    return results
 
 
-def finalize_record_as_clean(old_record, size, mtime_ns, ctime_ns, checksum, now_ts: int):
-    return {
-        "id": old_record.id,
-        "project_id": old_record.project_id,
-        "parent_dir": old_record.parent_dir,
-        "name": old_record.name,
-        "size": size,
-        "mtime_ns": mtime_ns,
-        "ctime_ns": ctime_ns,
-        "checksum": checksum,
-    }
-
-
-def finalize_record_as_failed(old_record, now_ts: int):
-    return {
-        "id": old_record.id,
-        "project_id": old_record.project_id,
-        "parent_dir": old_record.parent_dir,
-        "name": old_record.name,
-        "size": old_record.size,
-        "mtime_ns": old_record.mtime_ns,
-        "ctime_ns": old_record.ctime_ns,
-        "checksum": old_record.checksum,
-    }
+# async def finalize_download_results(plan_items, file_download_manager, db, now_ts: int):
+#     finalized_records = []
+#
+#     for item in plan_items:
+#         if item.action != "download":
+#             continue
+#
+#         transfer_id = item.updated_record.transfer_id
+#         success = file_download_manager.results.get(transfer_id, False)
+#
+#         if success:
+#             stat = await asyncio.to_thread(os.stat, item.local_path)
+#             checksum = await clifuncs.checksum_async(item.local_path)
+#
+#             finalized = finalize_record_as_clean(
+#                 old_record=item.updated_record,
+#                 size=stat.st_size,
+#                 mtime_ns=stat.st_mtime_ns,
+#                 ctime_ns=stat.st_ctime_ns,
+#                 checksum=checksum,
+#                 now_ts=now_ts,
+#             )
+#         else:
+#             finalized = finalize_record_as_failed(item.updated_record, now_ts)
+#
+#         finalized_records.append(finalized)
+#
+#     await asyncio.to_thread(db.upsert_many, finalized_records)
+#
+#
+# def finalize_record_as_clean(old_record, size, mtime_ns, ctime_ns, checksum, now_ts: int):
+#     return {
+#         "id": old_record.id,
+#         "project_id": old_record.project_id,
+#         "parent_dir": old_record.parent_dir,
+#         "name": old_record.name,
+#         "size": size,
+#         "mtime_ns": mtime_ns,
+#         "ctime_ns": ctime_ns,
+#         "checksum": checksum,
+#     }
+#
+#
+# def finalize_record_as_failed(old_record, now_ts: int):
+#     return {
+#         "id": old_record.id,
+#         "project_id": old_record.project_id,
+#         "parent_dir": old_record.parent_dir,
+#         "name": old_record.name,
+#         "size": old_record.size,
+#         "mtime_ns": old_record.mtime_ns,
+#         "ctime_ns": old_record.ctime_ns,
+#         "checksum": old_record.checksum,
+#     }

@@ -1,5 +1,5 @@
 from typing import Optional
-from models import FileRecord, RemoteEntry, FileDecision, LocalObserved, DirectoryDecision
+from models import FileRecord, RemoteFileEntry, FileDecision, LocalObserved, DirectoryDecision
 from os.path import dirname, basename
 from aiofiles import os as aio_os
 
@@ -7,7 +7,7 @@ from materials_commons.cli.functions import checksum_async
 
 async def reconcile_directory(
     directory_path: str,
-    remote_entries: list[RemoteEntry],
+    remote_entries: list[RemoteFileEntry],
     db_records_by_name: dict[str, FileRecord],
     checksum_func,
     now_ts: int,
@@ -35,7 +35,7 @@ async def reconcile_directory(
     return result
 
 async def reconcile_file(
-        remote: RemoteEntry,
+        remote: RemoteFileEntry,
         record: Optional[FileRecord],
         now_ts: int,
 ) -> FileDecision:
@@ -142,7 +142,7 @@ def local_stat_matches_cache(local_obs: LocalObserved, record: Optional[FileReco
         local_obs.local_mtime_ns == record.local_mtime_ns
     )
 
-def remote_matches_cache(remote: RemoteEntry, record: Optional[FileRecord]) -> bool:
+def remote_matches_cache(remote: RemoteFileEntry, record: Optional[FileRecord]) -> bool:
     """Verifies a remote file matches a record using checksum or stat cache"""
     if record is None:
         return False
@@ -158,7 +158,7 @@ def remote_matches_cache(remote: RemoteEntry, record: Optional[FileRecord]) -> b
         remote.remote_ctime_ns == record.remote_ctime_ns
     )
 
-def local_matches_remote(local_obs: LocalObserved, remote: RemoteEntry) -> bool:
+def local_matches_remote(local_obs: LocalObserved, remote: RemoteFileEntry) -> bool:
     """Verifies a local file matches a remote file using checksum"""
     if not local_obs.exists:
         return False
@@ -222,7 +222,7 @@ async def observe_local_file(local_path: str, file_record: Optional[FileRecord])
 def merge_record(
     path: str,
     local_obs: LocalObserved,
-    remote: RemoteEntry,
+    remote: RemoteFileEntry,
     old: Optional[FileRecord],
     now_ts: int,
     is_clean_local_copy: int,
