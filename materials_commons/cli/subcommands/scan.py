@@ -34,15 +34,14 @@ async def scan_files_async(local_path, mc_path, file_index_queue, ignore_parser,
     print(f"local_path: {local_path}")
     def walk_and_enqueue():
         for root, dirs, files in os.walk(local_path):
+            print(f"root: {root}")
+
             current_dir = os.path.basename(root)
             if current_dir == ".mc":
                 continue
-            if root == local_path:
-                remote_dir = "/"
-            else:
-                remote_dir = os.path.join(mc_path, current_dir)
+            remote_dir = projects.local_to_remote_project_path(Path(local_path), Path(root))
             print(f"remote_dir: {remote_dir}")
-            remote_entries = asyncio.run_coroutine_threadsafe(projects.list_remote_project_dir_by_path(proj.remote, proj.id, remote_dir), loop).result()
+            remote_entries = asyncio.run_coroutine_threadsafe(projects.list_remote_project_dir_by_path(proj.remote, proj.id, remote_dir.as_posix()), loop).result()
             for filename in files:
                 if filename == ".DS_Store":
                     continue
