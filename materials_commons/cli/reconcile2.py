@@ -14,7 +14,7 @@ class FileDecision:
     updated_record: FileRecord
 
 
-def reconcile_remote_file(
+def reconcile_file(
         remote_entry: mcmodel.File,
         local_record: Optional[FileRecord],
         local_observed: LocalObserved,
