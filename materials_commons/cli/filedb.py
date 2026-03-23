@@ -1,20 +1,22 @@
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, List
+from materials_commons.cli.models import FileRecord
 
 import aiosqlite
 
-@dataclass(frozen=True)
-class FileRecord:
-    path: str
-    size: int
-    mtime_ns: int
-    ctime_ns: int
-    last_seen_ts: int
-    checksum: Optional[str] = None
-    status: Optional[str] = None
-    remote_file_id: Optional[int] = None
-    transfer_id: Optional[str] = None
+
+# @dataclass(frozen=True)
+# class FileRecord:
+#     path: str
+#     size: int
+#     mtime_ns: int
+#     ctime_ns: int
+#     last_seen_ts: int
+#     checksum: Optional[str] = None
+#     status: Optional[str] = None
+#     remote_file_id: Optional[int] = None
+#     transfer_id: Optional[str] = None
 
 
 class FileIndexDB:
@@ -33,23 +35,34 @@ class FileIndexDB:
     async def _init_db(conn: aiosqlite.Connection):
         await conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS files (
-                path TEXT PRIMARY KEY,
-                size INTEGER NOT NULL,
-                mtime_ns INTEGER NOT NULL,
-                ctime_ns INTEGER NOT NULL,
-                last_seen_ts INTEGER NOT NULL,
-                checksum TEXT,
-                status TEXT,
-                remote_file_id INTEGER,
-                transfer_id TEXT
+            CREATE TABLE IF NOT EXISTS files
+            (
+                path                TEXT PRIMARY KEY,
+                dir                 TEXT    NOT NULL,
+                name                TEXT    NOT NULL,
+                is_clean_local_copy INTEGER NOT NULL DEFAULT 0,
+
+                local_size          INTEGER NOT NULL,
+                local_mtime_ns      INTEGER NOT NULL,
+                local_ctime_ns      INTEGER NOT NULL,
+                local_last_seen_ts  INTEGER NOT NULL,
+                local_checksum      TEXT,
+
+                remote_file_id      INTEGER,
+                remote_size         INTEGER,
+                remote_ctime_ns     INTEGER,
+                remote_checksum     TEXT,
+                remote_last_seen_ts INTEGER,
+
+                status              TEXT,
+                origin              TEXT,
+                transfer_id         TEXT
             ) STRICT;
             """
         )
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_files_status ON files(status);")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_files_last_seen ON files(last_seen_ts);")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_files_last_seen ON files(local_last_seen_ts);")
         await conn.commit()
-
 
     async def _write_connect(self) -> aiosqlite.Connection:
         conn = await aiosqlite.connect(self.db_path, timeout=30.0, check_same_thread=False)
@@ -99,34 +112,56 @@ class FileIndexDB:
             else:
                 await self._conn.execute("ROLLBACK;")
 
-
     def transaction(self) -> '_Transaction':
         return self._Transaction(self._write_conn)
 
     async def upsert(self, record: FileRecord):
         await self._write_conn.execute(
             """
-            INSERT INTO files(path, size, mtime_ns, ctime_ns, last_seen_ts, checksum, status, remote_file_id, transfer_id) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(path) DO UPDATE SET
-                size = excluded.size,
-                mtime_ns = excluded.mtime_ns,
-                ctime_ns = excluded.ctime_ns,
-                last_seen_ts = excluded.last_seen_ts,
-                checksum = COALESCE(excluded.checksum, files.checksum),
-                status = COALESCE(excluded.status, files.status),
-                remote_file_id = COALESCE(excluded.remote_file_id, files.remote_file_id),
-                transfer_id = COALESCE(excluded.transfer_id, files.transfer_id)
+            INSERT INTO files(path, dir, name, is_clean_local_copy, local_size, local_mtime_ns, local_ctime_ns,
+                              local_last_seen_ts, local_checksum, remote_file_id, remote_size, remote_ctime_ns,
+                              remote_checksum, remote_last_seen_ts, status, origin, transfer_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(path) DO UPDATE SET dir                 = excluded.dir,
+                                            name                = excluded.name,
+                                            is_clean_local_copy = excluded.is_clean_local_copy,
+
+                                            local_size          = excluded.local_size,
+                                            local_mtime_ns      = excluded.local_mtime_ns,
+                                            local_ctime_ns      = excluded.local_ctime_ns,
+                                            local_last_seen_ts  = excluded.local_last_seen_ts,
+                                            local_checksum      = COALESCE(excluded.local_checksum, files.local_checksum),
+
+                                            remote_file_id      = COALESCE(excluded.remote_file_id, files.remote_file_id),
+                                            remote_size         = COALESCE(excluded.remote_size, files.remote_size),
+                                            remote_ctime_ns     = COALESCE(excluded.remote_ctime_ns, files.remote_ctime_ns),
+                                            remote_checksum     = COALESCE(excluded.remote_checksum, files.remote_checksum),
+                                            remote_last_seen_ts = COALESCE(excluded.remote_last_seen_ts, files.remote_last_seen_ts),
+
+                                            status              = COALESCE(excluded.status, files.status),
+                                            origin              = COALESCE(excluded.origin, files.origin),
+                                            transfer_id         = COALESCE(excluded.transfer_id, files.transfer_id)
             """,
             (
                 record.path,
-                record.size,
-                record.mtime_ns,
-                record.ctime_ns,
-                record.last_seen_ts,
-                record.checksum,
-                record.status,
+                record.dir,
+                record.name,
+                record.is_clean_local_copy,
+
+                record.local_size,
+                record.local_mtime_ns,
+                record.local_ctime_ns,
+                record.local_last_seen_ts,
+                record.local_checksum,
+
                 record.remote_file_id,
+                record.remote_size,
+                record.remote_ctime_ns,
+                record.remote_checksum,
+                record.remote_last_seen_ts,
+
+                record.status,
+                record.origin,
                 record.transfer_id,
             )
         )
@@ -137,13 +172,24 @@ class FileIndexDB:
         params = [
             (
                 r.path,
-                r.size,
-                r.mtime_ns,
-                r.ctime_ns,
-                r.last_seen_ts,
-                r.checksum,
-                r.status,
+                r.dir,
+                r.name,
+                r.is_clean_local_copy,
+
+                r.local_size,
+                r.local_mtime_ns,
+                r.local_ctime_ns,
+                r.local_last_seen_ts,
+                r.local_checksum,
+
                 r.remote_file_id,
+                r.remote_size,
+                r.remote_ctime_ns,
+                r.remote_checksum,
+                r.remote_last_seen_ts,
+
+                r.status,
+                r.origin,
                 r.transfer_id,
             )
             for r in records
@@ -155,17 +201,29 @@ class FileIndexDB:
         async with self.transaction():
             await conn.executemany(
                 """
-                INSERT INTO files(path, size, mtime_ns, ctime_ns, last_seen_ts, checksum, status, remote_file_id,
-                                  transfer_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(path) DO UPDATE SET size           = excluded.size,
-                                                mtime_ns       = excluded.mtime_ns,
-                                                ctime_ns       = excluded.ctime_ns,
-                                                last_seen_ts   = excluded.last_seen_ts,
-                                                checksum       = COALESCE(excluded.checksum, files.checksum),
-                                                status         = COALESCE(excluded.status, files.status),
-                                                remote_file_id = COALESCE(excluded.remote_file_id, files.remote_file_id),
-                                                transfer_id    = COALESCE(excluded.transfer_id, files.transfer_id)
+                INSERT INTO files(path, dir, name, is_clean_local_copy, local_size, local_mtime_ns,
+                                  local_ctime_ns, local_last_seen_ts, local_checksum, remote_file_id, remote_size,
+                                  remote_ctime_ns, remote_checksum, remote_last_seen_ts, status, origin, transfer_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(path) DO UPDATE SET dir                 = excluded.dir,
+                                                name                = excluded.name,
+                                                is_clean_local_copy = excluded.is_clean_local_copy,
+
+                                                local_size          = excluded.local_size,
+                                                local_mtime_ns      = excluded.local_mtime_ns,
+                                                local_ctime_ns      = excluded.local_ctime_ns,
+                                                local_last_seen_ts  = excluded.local_last_seen_ts,
+                                                local_checksum      = COALESCE(excluded.local_checksum, files.local_checksum),
+
+                                                remote_file_id      = COALESCE(excluded.remote_file_id, files.remote_file_id),
+                                                remote_size         = COALESCE(excluded.remote_size, files.remote_size),
+                                                remote_ctime_ns     = COALESCE(excluded.remote_ctime_ns, files.remote_ctime_ns),
+                                                remote_checksum     = COALESCE(excluded.remote_checksum, files.remote_checksum),
+                                                remote_last_seen_ts = COALESCE(excluded.remote_last_seen_ts, files.remote_last_seen_ts),
+
+                                                status              = COALESCE(excluded.status, files.status),
+                                                origin              = COALESCE(excluded.origin, files.origin),
+                                                transfer_id         = COALESCE(excluded.transfer_id, files.transfer_id)
                 """,
                 params,
             )
@@ -180,6 +238,3 @@ class FileIndexDB:
             return FileRecord(**row)
         finally:
             await conn.close()
-
-
-

@@ -2,7 +2,7 @@ import asyncio
 import os
 
 from datetime import datetime
-from materials_commons.cli.filedb import FileRecord
+from materials_commons.cli.models import FileRecord
 from materials_commons.cli.functions import checksum
 from materials_commons.cli.server.project_filedbs import ProjectFileDBs
 
@@ -13,8 +13,8 @@ def file_has_changed(file_record: FileRecord, finfo: os.stat_result) -> bool:
         return True
 
     return (
-            file_record.size != finfo.st_size or
-            file_record.mtime_ns != finfo.st_mtime_ns
+            file_record.local_size != finfo.st_size or
+            file_record.local_mtime_ns != finfo.st_mtime_ns
     )
 
 
@@ -71,18 +71,23 @@ class FileIndexManager:
         print(f"Indexing {file_path} in {project_path}")
         # Update or create the file record
         csum = await asyncio.to_thread(checksum, file_path)
+        file_name = os.path.basename(project_path)
+        dir = os.path.dirname(project_path)
         file_record = FileRecord(
             path=project_path,
-            size=finfo.st_size,
-            mtime_ns=finfo.st_mtime_ns,
-            ctime_ns=finfo.st_ctime_ns,
-            last_seen_ts=int(datetime.now().timestamp()),
-            checksum=csum,
+            name=file_name,
+            dir=dir,
+            is_clean_local_copy=0,
+            local_size=finfo.st_size,
+            local_mtime_ns=finfo.st_mtime_ns,
+            local_ctime_ns=finfo.st_ctime_ns,
+            local_last_seen_ts=int(datetime.now().timestamp()),
+            local_checksum=csum,
             status="indexed",
         )
         await self._db_queue.put(("single", project_id, file_record))
         # print(f"Done indexing {file_path} in {project_path} got Hash: {csum}")
 
-    async def stop_workers(self):
+    def stop_workers(self):
         """Stop background workers"""
         self._workers_running = False

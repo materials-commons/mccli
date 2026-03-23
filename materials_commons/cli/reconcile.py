@@ -192,7 +192,7 @@ async def observe_local_file(local_path: str, file_record: Optional[FileRecord])
     if not exists:
         return LocalObserved(
             path=local_path,
-            parent_dir=dirname(local_path),
+            dir=dirname(local_path),
             name=basename(local_path),
             exists=False,
             local_size=None,
@@ -203,7 +203,7 @@ async def observe_local_file(local_path: str, file_record: Optional[FileRecord])
     sinfo = await aio_os.stat(local_path)
     local_observed = LocalObserved(
         path=local_path,
-        parent_dir=dirname(local_path),
+        dir=dirname(local_path),
         name=basename(local_path),
         exists=True,
         local_size=sinfo.st_size,
@@ -231,7 +231,7 @@ def merge_record(
 ) -> FileRecord:
     return FileRecord(
         path=path,
-        parent_dir=remote.parent_dir,
+        dir=remote.dir,
         name=remote.name,
 
         local_size=local_obs.local_size,

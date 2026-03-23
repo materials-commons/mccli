@@ -1,5 +1,11 @@
+import asyncio
 import os
 import json
+from pathlib import Path
+from typing import Optional
+
+import materials_commons.api as mcapi
+from materials_commons.api import models
 
 # Cache list of projects
 _projects = None
@@ -86,3 +92,54 @@ def get_local_project_by_id(project_id, reload=False):
         if project["project_id"] == project_id:
             return project
     return None
+
+def local_to_remote_project_path(proj_base: Path, full_path: Path) -> Path:
+    """
+    Converts a local project path to its corresponding remote path. For example,
+    if the proj_base is "/home/user/projects" and the full_path is "/home/user/projects/my_project/data.txt",
+    the function will return "/my_project/data.txt".
+
+    Args:
+        proj_base (Path): The base directory of the local project.
+        full_path (Path): The full local path to be converted.
+
+    Returns:
+        Path: The remote path corresponding to the local path.
+    """
+    # remote_path will be the relative path from proj_base to full_path, i.e., it
+    # won't start with a slash, so we need to add one to get the correct path.
+    if full_path.as_posix() == proj_base.as_posix():
+        return Path("/")
+    remote_path = full_path.relative_to(proj_base)
+    return Path("/" + remote_path.as_posix())
+
+def remote_to_local_project_path(proj_base: Path, remote_path: Path) -> Path:
+    """
+    Converts a remote project path to its corresponding local path. For example,
+    if the proj_base is "/home/user/projects" and the remote_path is "/my_project/data.txt",
+    the function will return "/home/user/projects/my_project/data.txt".
+
+    Args:
+        proj_base (Path): The base directory of the local project.
+        remote_path (Path): The remote path to be converted.
+
+    Returns:
+        Path: The local path corresponding to the remote path.
+    """
+
+    # To get the full path, we need to remove the leading slash from the remote path
+    return proj_base / remote_path.as_posix().lstrip("/")
+
+async def list_remote_project_dir_by_path(c: mcapi.Client, project_id: int, project_path: str) -> Optional[dict[str, models.File]]:
+    """List the contents of a directory in a remote project. Builds a dict of directory entries by path."""
+    path_entries = await asyncio.to_thread(c.list_directory_by_path, project_id, project_path)
+    if not path_entries:
+        return {}
+
+    entries = {}
+    for entry in path_entries:
+        if entry.directory is None:
+            continue
+        entries[os.path.join(entry.directory.path, entry.name)] = entry
+    return entries
+

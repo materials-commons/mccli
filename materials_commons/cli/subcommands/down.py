@@ -625,7 +625,7 @@ async def walk_remote_tree_async(client: mcapi.Client, project_id: int, paths: l
                 files.append(
                     RemoteFileEntry(
                         path=path_entry.path,
-                        parent_dir=path,
+                        dir=path,
                         name=path_entry.name,
                         remote_file_id=path_entry.id,
                         # remote_ctime_ns=path_entry.ctime * 1000,
@@ -688,7 +688,7 @@ async def scan_local_directory_async(path: str, proj_path: str):
 #     return {
 #         "id": old_record.id,
 #         "project_id": old_record.project_id,
-#         "parent_dir": old_record.parent_dir,
+#         "dir": old_record.dir,
 #         "name": old_record.name,
 #         "size": size,
 #         "mtime_ns": mtime_ns,
@@ -701,7 +701,7 @@ async def scan_local_directory_async(path: str, proj_path: str):
 #     return {
 #         "id": old_record.id,
 #         "project_id": old_record.project_id,
-#         "parent_dir": old_record.parent_dir,
+#         "dir": old_record.dir,
 #         "name": old_record.name,
 #         "size": old_record.size,
 #         "mtime_ns": old_record.mtime_ns,

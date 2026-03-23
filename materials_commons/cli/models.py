@@ -5,9 +5,9 @@ from typing import Literal, Optional
 @dataclass(frozen=True)
 class FileRecord:
     path: str
-    parent_dir: str
     name: str
     is_clean_local_copy: int
+    dir: Optional[str] = None
 
     local_size: Optional[int] = None
     local_mtime_ns: Optional[int] = None
@@ -29,7 +29,7 @@ class FileRecord:
 @dataclass
 class RemoteFileEntry:
     path: str
-    parent_dir: str
+    dir: str
     name: str
     remote_file_id: Optional[int] = None
     remote_size: Optional[int] = None
@@ -46,7 +46,7 @@ class RemoteDirectory:
 @dataclass
 class LocalObserved:
     path: str
-    parent_dir: str
+    dir: str
     name: str
     exists: bool
     local_size: Optional[int]
