@@ -186,7 +186,7 @@ def local_is_still_clean(local_obs: LocalObserved, record: Optional[FileRecord])
 
     return False
 
-async def observe_local_file(local_path: str, file_record: Optional[FileRecord]) -> LocalObserved:
+async def observe_local_file(local_path: str, file_record: Optional[FileRecord], recompute_checksum: bool = True) -> LocalObserved:
     """Attempts to stat a local file and return a LocalObserved object"""
     exists = await aio_os.path.exists(local_path)
     if not exists:
@@ -214,6 +214,10 @@ async def observe_local_file(local_path: str, file_record: Optional[FileRecord])
 
     if local_stat_matches_cache(local_observed, file_record):
         local_observed.local_checksum = file_record.local_checksum
+        return local_observed
+
+    if not recompute_checksum:
+        local_observed.checksum_outdated = True
         return local_observed
 
     local_observed.local_checksum = await checksum_async(local_path)
