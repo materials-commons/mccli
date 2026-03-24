@@ -64,26 +64,30 @@ async def handle_list_project_directory(queue: asyncio.Queue, cmd: Dict[str, any
     project_id = payload.get("project_id")
     proj = projects.get_local_project_by_id(project_id)
     if not proj or not project_path:
+        print("not proj or project_path")
         await queue.put({"command": "LIST_PROJECT_DIRECTORY", "payload": response_payload})
         return
 
     project_dir_path = Path(proj["project_dir_path"])
     local_project_path = projects.remote_to_local_project_path(project_dir_path, Path(project_path))
+    print(f"[handler] list_project_directory local_project_path = {local_project_path}")
     files = []
     try:
         for entry in local_project_path.iterdir():
             try:
                 stat = entry.stat()
+                remote_proj_path = projects.local_to_remote_project_path(project_dir_path, Path(entry.as_posix()))
+                print(f"Appending to files: {remote_proj_path.as_posix()} {stat.st_size}")
                 files.append({
                     "name": entry.name,
-                    "path": projects.local_to_remote_project_path(project_dir_path, Path(entry.as_posix())),
+                    "path": remote_proj_path.as_posix(),
                     "type": "directory" if entry.is_dir() else "file",
                     "size": stat.st_size,
                 })
             except (OSError, PermissionError) as e:
                 logger.warning(f"Could not stat {entry}: {e}")
-    except FileNotFoundError:
-        logger.warning(f"Directory not found: {local_project_path}")
+    except Exception as e:
+        logger.warning(f"Directory not found: {local_project_path} ({e})")
     response_payload["files"] = files
     await queue.put({"command": "LIST_PROJECT_DIRECTORY", "payload": response_payload})
 
@@ -110,8 +114,8 @@ async def handle_list_directory(queue: asyncio.Queue, cmd: Dict[str, Any]) -> No
                     })
                 except (OSError, PermissionError) as e:
                     logger.warning(f"Could not stat {entry}: {e}")
-        except FileNotFoundError:
-            logger.warning(f"Directory not found: {dir_path}")
+        except Exception as e:
+            logger.warning(f"Directory not found: {dir_path} ({e})")
         response_payload["files"] = files
     await queue.put({"command": "LIST_DIRECTORY", "payload": response_payload})
 

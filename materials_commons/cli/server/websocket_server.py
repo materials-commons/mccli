@@ -52,7 +52,8 @@ class WebSocketCommandListener:
     DEFAULT_RECONNECT_MAX_SEC = 30
 
     def __init__(self, ws_url: str, token: Optional[str], client_uuid: str, handlers: Dict[str, CommandHandler],
-                 ws_send_queue: asyncio.Queue, db_write_queue: asyncio.Queue, project_dbs: ProjectFileDBs, max_concurrent: int = 3):
+                 ws_send_queue: asyncio.Queue, db_write_queue: asyncio.Queue, project_dbs: ProjectFileDBs,
+                 max_concurrent: int = 3):
         self.ws_url = ws_url
         self.token = token
         self.client_uuid = client_uuid
@@ -67,7 +68,8 @@ class WebSocketCommandListener:
         config = Config()
 
         self.file_upload_manager = FileUploadManager(send_queue=ws_send_queue, db_write_queue=db_write_queue,
-                                                     client_id=client_uuid, max_concurrent=max_concurrent)
+                                                     project_dbs=project_dbs, client_id=client_uuid,
+                                                     max_concurrent=max_concurrent)
 
         self.file_download_manager = FileDownloadManager(send_queue=ws_send_queue, client_id=client_uuid,
                                                          mcurl=config.default_remote.mcurl,
