@@ -7,6 +7,8 @@ import logging
 from pathlib import Path
 from datetime import datetime
 
+from materials_commons.cli.server import projects
+
 logger = logging.getLogger(__name__)
 
 CommandHandler = Callable[[Any, Dict[str, Any]], Awaitable[None]]
@@ -17,8 +19,11 @@ def register_handlers() -> Dict[str, CommandHandler]:
         "sync": handle_sync,
         "refresh_cache": handle_refresh_cache,
         "SHUTDOWN": handle_shutdown,
+
+        # List commands
         "LIST_DIRECTORY": handle_list_directory,
         "LIST_PROJECTS": handle_list_projects,
+        "LIST_PROJECT_DIRECTORY": handle_list_project_directory,
 
         # Upload commands
         "UPLOAD_FILE": handle_upload_file,
@@ -34,6 +39,7 @@ def register_handlers() -> Dict[str, CommandHandler]:
         "CANCEL_DOWNLOAD": handle_cancel_download,
     }
 
+
 async def handle_sync(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] sync -> {cmd}")
 
@@ -47,6 +53,41 @@ async def handle_shutdown(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     os.kill(os.getpid(), signal.SIGINT)
 
 
+async def handle_list_project_directory(queue: asyncio.Queue, cmd: Dict[str, any]) -> None:
+    print(f"[handler] list_project_directory -> {cmd}")
+    payload = cmd.get("payload") or {}
+
+    request_id = payload.get("request_id")
+    response_payload = {"files": [], "request_id": request_id}
+
+    project_path = payload.get("project_path")
+    project_id = payload.get("project_id")
+    proj = projects.get_local_project_by_id(project_id)
+    if not proj or not project_path:
+        await queue.put({"command": "LIST_PROJECT_DIRECTORY", "payload": response_payload})
+        return
+
+    project_dir_path = Path(proj["project_dir_path"])
+    local_project_path = projects.remote_to_local_project_path(project_dir_path, Path(project_path))
+    files = []
+    try:
+        for entry in local_project_path.iterdir():
+            try:
+                stat = entry.stat()
+                files.append({
+                    "name": entry.name,
+                    "path": projects.local_to_remote_project_path(project_dir_path, Path(entry.as_posix())),
+                    "type": "directory" if entry.is_dir() else "file",
+                    "size": stat.st_size,
+                })
+            except (OSError, PermissionError) as e:
+                logger.warning(f"Could not stat {entry}: {e}")
+    except FileNotFoundError:
+        logger.warning(f"Directory not found: {local_project_path}")
+    response_payload["files"] = files
+    await queue.put({"command": "LIST_PROJECT_DIRECTORY", "payload": response_payload})
+
+
 async def handle_list_directory(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] list_directory -> {cmd}")
     payload = cmd.get("payload") or {}
@@ -55,28 +96,32 @@ async def handle_list_directory(queue: asyncio.Queue, cmd: Dict[str, Any]) -> No
     response_payload = {"files": [], "request_id": request_id}
     if dir_path:
         files = []
-        for entry in Path(dir_path).iterdir():
-            try:
-                stat = entry.stat()
-                files.append({
-                    "name": entry.name,
-                    "path": entry.as_posix(),
-                    "type": "directory" if entry.is_dir() else "file",
-                    "size": stat.st_size,
-                    "mtime": datetime.fromtimestamp(stat.st_mtime).isoformat() + "Z",
-                    "ctime": datetime.fromtimestamp(stat.st_ctime).isoformat() + "Z"
-                })
-            except (OSError, PermissionError) as e:
-                logger.warning(f"Could not stat {entry}: {e}")
+        try:
+            for entry in Path(dir_path).iterdir():
+                try:
+                    stat = entry.stat()
+                    files.append({
+                        "name": entry.name,
+                        "path": entry.as_posix(),
+                        "type": "directory" if entry.is_dir() else "file",
+                        "size": stat.st_size,
+                        "mtime": datetime.fromtimestamp(stat.st_mtime).isoformat() + "Z",
+                        "ctime": datetime.fromtimestamp(stat.st_ctime).isoformat() + "Z"
+                    })
+                except (OSError, PermissionError) as e:
+                    logger.warning(f"Could not stat {entry}: {e}")
+        except FileNotFoundError:
+            logger.warning(f"Directory not found: {dir_path}")
         response_payload["files"] = files
     await queue.put({"command": "LIST_DIRECTORY", "payload": response_payload})
+
 
 async def handle_list_projects(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] list_projects -> {cmd}")
     payload = cmd.get("payload") or {}
-    projects = server.list_local_projects()
+    local_projects = server.list_local_projects()
     response_payload = {
-        "projects": projects,
+        "projects": local_projects,
         "request_id": payload.get("request_id"),
     }
     print(f"[handler] list_projects returning -> {response_payload}")
@@ -291,6 +336,7 @@ async def handle_resume_upload(queue: asyncio.Queue, cmd: Dict[str, Any]):
     logger.info(f"Received resume request for transfer: {transfer_id}")
     file_manager.resume_upload(transfer_id)
 
+
 async def handle_download_file(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     """
     Handler for DOWNLOAD_FILE command from the server.
@@ -359,11 +405,14 @@ async def handle_download_file(queue: asyncio.Queue, cmd: Dict[str, Any]) -> Non
     except Exception as e:
         logger.error(f"Failed to queue download of file: {e}")
 
+
 async def handle_pause_download(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] pause_download -> {cmd}")
 
+
 async def handle_resume_download(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] resume_download -> {cmd}")
+
 
 async def handle_cancel_download(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] cancel_download -> {cmd}")
