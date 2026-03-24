@@ -53,6 +53,7 @@ class LocalObserved:
     local_mtime_ns: Optional[int]
     local_ctime_ns: Optional[int]
     local_checksum: Optional[str] = None
+    checksum_outdated: bool = False
 
 
 @dataclass
