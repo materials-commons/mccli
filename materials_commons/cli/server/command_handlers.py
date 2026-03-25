@@ -83,6 +83,10 @@ async def handle_list_project_directory(queue: asyncio.Queue, cmd: Dict[str, any
                     "path": remote_proj_path.as_posix(),
                     "type": "directory" if entry.is_dir() else "file",
                     "size": stat.st_size,
+                    "mtime": datetime.fromtimestamp(stat.st_mtime).isoformat() + "Z",
+                    "ctime": datetime.fromtimestamp(stat.st_ctime).isoformat() + "Z",
+                    "status": "ok",
+                    "reason": "A reason",
                 })
             except (OSError, PermissionError) as e:
                 logger.warning(f"Could not stat {entry}: {e}")
