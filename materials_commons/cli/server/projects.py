@@ -96,8 +96,8 @@ def get_local_project_by_id(project_id, reload=False):
 def local_to_remote_project_path(proj_base: Path, full_path: Path) -> Path:
     """
     Converts a local project path to its corresponding remote path. For example,
-    if the proj_base is "/home/user/projects" and the full_path is "/home/user/projects/my_project/data.txt",
-    the function will return "/my_project/data.txt".
+    if the proj_base is "/home/user/myproject" and the full_path is "/home/user/myproject/dir/data.txt",
+    the function will return "/dir/data.txt".
 
     Args:
         proj_base (Path): The base directory of the local project.
@@ -116,8 +116,8 @@ def local_to_remote_project_path(proj_base: Path, full_path: Path) -> Path:
 def remote_to_local_project_path(proj_base: Path, remote_path: Path) -> Path:
     """
     Converts a remote project path to its corresponding local path. For example,
-    if the proj_base is "/home/user/projects" and the remote_path is "/my_project/data.txt",
-    the function will return "/home/user/projects/my_project/data.txt".
+    if the proj_base is "/home/user/myproject" and the remote_path is "/dir/data.txt",
+    the function will return "/home/user/myproject/dir/data.txt".
 
     Args:
         proj_base (Path): The base directory of the local project.
