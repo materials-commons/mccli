@@ -12,7 +12,6 @@ class DirEntryInfo:
     is_dir: bool
     is_file: bool
     is_symlink: bool
-    finfo: os.stat_result
 
 
 IgnoreFunc = Callable[[Path, bool], bool]
@@ -40,7 +39,6 @@ async def async_listdir(path: str | Path) -> list[DirEntryInfo]:
                         is_dir=entry.is_dir(follow_symlinks=False),
                         is_file=entry.is_file(follow_symlinks=False),
                         is_symlink=entry.is_symlink(),
-                        finfo=entry.stat()
                     )
                 )
         return items

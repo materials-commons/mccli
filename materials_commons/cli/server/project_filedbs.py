@@ -16,8 +16,10 @@ class ProjectFileDBs:
                 # We are not running in server mode, so look for the project dir a different way.
                 cwd = Path.cwd()
                 proj_path = project_path(cwd)
+                print(f"Creating new filedb instance for {project_id}")
                 self._filedbs_for_project[project_id] = await FileIndexDB.create(Path(proj_path) / ".mc" / "mc2.sqlite")
             else:
+                print(f"Creating new filedb instance for {project_id}")
                 self._filedbs_for_project[project_id] = await FileIndexDB.create(Path(p["project_dir_path"]) / ".mc" / "mc2.sqlite")
 
         return self._filedbs_for_project.get(project_id)

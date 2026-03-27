@@ -1,9 +1,13 @@
 import asyncio
 import os
+from datetime import datetime, timezone
+from typing import Optional
 
-from datetime import datetime
+from materials_commons.api import models
+
 from materials_commons.cli.models import FileRecord
-from materials_commons.cli.functions import checksum
+from materials_commons.cli.reconcile import observe_local_file
+from materials_commons.cli.reconcile2 import reconcile_file
 from materials_commons.cli.server.project_filedbs import ProjectFileDBs
 
 
@@ -21,7 +25,8 @@ def file_has_changed(file_record: FileRecord, finfo: os.stat_result) -> bool:
 class FileIndexManager:
     """Manages multiple concurrent file indexers"""
 
-    def __init__(self, project_file_dbs: ProjectFileDBs, db_queue: asyncio.Queue, index_queue: asyncio.Queue, max_concurrent: int = 3):
+    def __init__(self, project_file_dbs: ProjectFileDBs, db_queue: asyncio.Queue, index_queue: asyncio.Queue,
+                 max_concurrent: int = 3):
         self._project_file_dbs = project_file_dbs
         self._db_queue = db_queue
         self._index_queue = index_queue
@@ -41,52 +46,43 @@ class FileIndexManager:
         """Worker that processes index requests from queue"""
         while self._workers_running:
             try:
-                (file_path, project_path, project_id) = await asyncio.wait_for(self._index_queue.get(), timeout=1.0)
+                (file_path, project_path, remote_entry, project_id) = await asyncio.wait_for(self._index_queue.get(),
+                                                                                             timeout=1.0)
             except asyncio.TimeoutError:
                 continue
 
             try:
-                await self._index(file_path, project_path, project_id)
+                await self._index(file_path, project_path, remote_entry, project_id)
             except Exception as e:
                 print(f"Error indexing {file_path}: {e}")
                 raise e
             finally:
                 self._index_queue.task_done()
 
-    async def _index(self, file_path: str, project_path: str, project_id: int):
+    async def _index(self, file_path: str, project_path: str, remote_entry: Optional[models.File], project_id: int):
         """Index a file. Checks if the file has changed since the last index."""
-        finfo = await asyncio.to_thread(os.stat, file_path)
         db = await self._project_file_dbs.get_filedb(project_id)
-
         if db is None:
             raise Exception(
                 f"Project {project_id} not found in filedb."
             )
         file_record = await db.get_file_by_path(project_path)
+        local_observed = await observe_local_file(local_path=file_path,
+                                                  file_record=file_record,
+                                                  project_path=project_path,
+                                                  recompute_checksum=True)
 
-        if not file_has_changed(file_record, finfo):
+        file_decision = reconcile_file(remote_entry=remote_entry,
+                                       local_record=file_record,
+                                       local_observed=local_observed,
+                                       now_ts=int(datetime.now(timezone.utc).timestamp()))
+
+        if not file_decision.updated_record:
             print(f"Skipping {file_path} in {project_path} as it hasn't changed")
             return
 
-        print(f"Indexing {file_path} in {project_path}")
-        # Update or create the file record
-        csum = await asyncio.to_thread(checksum, file_path)
-        file_name = os.path.basename(project_path)
-        dir = os.path.dirname(project_path)
-        file_record = FileRecord(
-            path=project_path,
-            name=file_name,
-            dir=dir,
-            is_clean_local_copy=0,
-            local_size=finfo.st_size,
-            local_mtime_ns=finfo.st_mtime_ns,
-            local_ctime_ns=finfo.st_ctime_ns,
-            local_last_seen_ts=int(datetime.now().timestamp()),
-            local_checksum=csum,
-            status="indexed",
-        )
-        await self._db_queue.put(("single", project_id, file_record))
-        # print(f"Done indexing {file_path} in {project_path} got Hash: {csum}")
+        await self._db_queue.put(("single", project_id, file_decision.updated_record))
+        print(f"Indexed {file_path} in {project_path}")
 
     def stop_workers(self):
         """Stop background workers"""

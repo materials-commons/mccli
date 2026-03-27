@@ -1,16 +1,19 @@
+import asyncio
+import os
 from typing import Optional
-from models import FileRecord, RemoteFileEntry, FileDecision, LocalObserved, DirectoryDecision
+from materials_commons.cli.models import FileRecord, RemoteFileEntry, FileDecision, LocalObserved, DirectoryDecision
 from os.path import dirname, basename
 from aiofiles import os as aio_os
 
-from materials_commons.cli.functions import checksum_async
+from materials_commons.cli.functions import checksum_async, checksum
+
 
 async def reconcile_directory(
-    directory_path: str,
-    remote_entries: list[RemoteFileEntry],
-    db_records_by_name: dict[str, FileRecord],
-    checksum_func,
-    now_ts: int,
+        directory_path: str,
+        remote_entries: list[RemoteFileEntry],
+        db_records_by_name: dict[str, FileRecord],
+        checksum_func,
+        now_ts: int,
 ) -> DirectoryDecision:
     result = DirectoryDecision(
         to_download=[],
@@ -34,12 +37,12 @@ async def reconcile_directory(
 
     return result
 
+
 async def reconcile_file(
         remote: RemoteFileEntry,
         record: Optional[FileRecord],
         now_ts: int,
 ) -> FileDecision:
-
     local_obs = await observe_local_file(remote.path, record)
 
     # 1. Local file missing -> download
@@ -130,6 +133,7 @@ async def reconcile_file(
         updated_record=updated,
     )
 
+
 def local_stat_matches_cache(local_obs: LocalObserved, record: Optional[FileRecord]) -> bool:
     """Verifies a local file matches a record using stat cache"""
     if record is None:
@@ -138,9 +142,10 @@ def local_stat_matches_cache(local_obs: LocalObserved, record: Optional[FileReco
         return False
 
     return (
-        local_obs.local_size == record.local_size and
-        local_obs.local_mtime_ns == record.local_mtime_ns
+            local_obs.local_size == record.local_size and
+            local_obs.local_mtime_ns == record.local_mtime_ns
     )
+
 
 def remote_matches_cache(remote: RemoteFileEntry, record: Optional[FileRecord]) -> bool:
     """Verifies a remote file matches a record using checksum or stat cache"""
@@ -153,10 +158,11 @@ def remote_matches_cache(remote: RemoteFileEntry, record: Optional[FileRecord]) 
     # Use ctime for remote rather than mtime, since ctime changes everytime the file changes
     # (because we create new versions of the file)
     return (
-        remote.remote_file_id == record.remote_file_id and
-        remote.remote_size == record.remote_size and
-        remote.remote_ctime_ns == record.remote_ctime_ns
+            remote.remote_file_id == record.remote_file_id and
+            remote.remote_size == record.remote_size and
+            remote.remote_ctime_ns == record.remote_ctime_ns
     )
+
 
 def local_matches_remote(local_obs: LocalObserved, remote: RemoteFileEntry) -> bool:
     """Verifies a local file matches a remote file using checksum"""
@@ -168,6 +174,7 @@ def local_matches_remote(local_obs: LocalObserved, remote: RemoteFileEntry) -> b
         return False
 
     return local_obs.local_checksum == remote.remote_checksum
+
 
 def local_is_still_clean(local_obs: LocalObserved, record: Optional[FileRecord]) -> bool:
     """Verifies a local file remains clean against the record using stat cache or checksum"""
@@ -186,12 +193,51 @@ def local_is_still_clean(local_obs: LocalObserved, record: Optional[FileRecord])
 
     return False
 
-async def observe_local_file(local_path: str, file_record: Optional[FileRecord], recompute_checksum: bool = True) -> LocalObserved:
-    """Attempts to stat a local file and return a LocalObserved object"""
-    exists = await aio_os.path.exists(local_path)
-    if not exists:
+
+# TODO: Return LocalObserved?
+async def safe_stat(path: str) -> Optional[os.stat_result]:
+    """
+    Retrieve the status of a given file or directory.
+
+    Attempts to retrieve the status of a file or directory at the specified path
+    asynchronously. If the operation encounters an error such as the file not
+    being found, a permission exception, or other OS-related errors, the function
+    will return None.
+
+    Parameters:
+    path (str): The path to the file or directory whose status is to be retrieved.
+
+    Returns:
+    Optional[os.stat_result]: An os.stat_result object containing metadata about
+    the file or directory if retrieval is successful. Returns None if an exception
+    occurs during the retrieval process.
+    """
+    try:
+        return await aio_os.stat(path)
+    except FileNotFoundError:
+        return None
+    except PermissionError:
+        return None
+    except NotADirectoryError:
+        return None
+    except OSError:
+        return None
+    except Exception:
+        return None
+
+
+async def observe_local_file(
+        local_path: str,
+        file_record: Optional[FileRecord],
+        project_path: str,
+        recompute_checksum: bool = True
+) -> LocalObserved:
+    """Observe the local file at the given path, optionally recomputing checksum if needed"""
+    sinfo = await safe_stat(local_path)
+    if not sinfo:
         return LocalObserved(
             path=local_path,
+            project_path=project_path,
             dir=dirname(local_path),
             name=basename(local_path),
             exists=False,
@@ -200,9 +246,10 @@ async def observe_local_file(local_path: str, file_record: Optional[FileRecord],
             local_ctime_ns=None,
             local_checksum=None
         )
-    sinfo = await aio_os.stat(local_path)
+
     local_observed = LocalObserved(
         path=local_path,
+        project_path=project_path,
         dir=dirname(local_path),
         name=basename(local_path),
         exists=True,
@@ -223,15 +270,16 @@ async def observe_local_file(local_path: str, file_record: Optional[FileRecord],
     local_observed.local_checksum = await checksum_async(local_path)
     return local_observed
 
+
 def merge_record(
-    path: str,
-    local_obs: LocalObserved,
-    remote: RemoteFileEntry,
-    old: Optional[FileRecord],
-    now_ts: int,
-    is_clean_local_copy: int,
-    origin: Optional[str] = None,
-    status: Optional[str] = None,
+        path: str,
+        local_obs: LocalObserved,
+        remote: RemoteFileEntry,
+        old: Optional[FileRecord],
+        now_ts: int,
+        is_clean_local_copy: int,
+        origin: Optional[str] = None,
+        status: Optional[str] = None,
 ) -> FileRecord:
     return FileRecord(
         path=path,

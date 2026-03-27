@@ -49,6 +49,7 @@ class LocalObserved:
     dir: str
     name: str
     exists: bool
+    project_path: str
     local_size: Optional[int]
     local_mtime_ns: Optional[int]
     local_ctime_ns: Optional[int]
