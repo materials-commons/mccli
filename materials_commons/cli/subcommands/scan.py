@@ -38,6 +38,8 @@ def make_parser():
 
 async def scan_subcommand_async(argv, working_dir):
     """Builds and populates the file index database for project scan; skips ignored directories and files"""
+
+    ## Setup for the run
     proj = clifuncs.make_local_project(working_dir)
     proj.remote.raise_exception = False
 
@@ -56,9 +58,10 @@ async def scan_subcommand_async(argv, working_dir):
     db_manager = DBManager(db_queue, project_file_dbs)
     db_workers = await db_manager.start_workers()
 
+    ## Run the scan
     await scan_files_async(proj.local_path, proj.local_path, file_index_queue, ignore_parser, proj)
 
-    # Wait for all tasks to complete
+    ## Shutdown all tasks
     await stop_workers(file_index_queue, file_index_workers, file_index_manager)
     await stop_workers(db_queue, db_workers, db_manager)
     await project_file_dbs.close_dbs()
