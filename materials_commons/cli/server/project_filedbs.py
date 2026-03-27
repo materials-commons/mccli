@@ -1,29 +1,50 @@
+import asyncio
 from pathlib import Path
 
+from materials_commons.cli.filedb import FileIndexDB
 from materials_commons.cli.functions import project_path
 from materials_commons.cli.server import projects
 
-from materials_commons.cli.filedb import FileIndexDB
 
 class ProjectFileDBs:
     def __init__(self):
         self._filedbs_for_project: dict[int, FileIndexDB] = {}
+        self._locks_for_project: dict[int, asyncio.Lock] = {}
+        self._locks_guard = asyncio.Lock()
+
+    async def _get_lock(self, project_id: int) -> asyncio.Lock:
+        async with self._locks_guard:
+            lock = self._locks_for_project.get(project_id)
+            if lock is None:
+                lock = asyncio.Lock()
+                self._locks_for_project[project_id] = lock
+            return lock
 
     async def get_filedb(self, project_id: int) -> FileIndexDB:
-        if project_id not in self._filedbs_for_project:
+        lock = await self._get_lock(project_id)
+        async with lock:
+            db = self._filedbs_for_project.get(project_id)
+            if db is not None:
+                return db
+
             p = projects.get_local_project_by_id(str(project_id))
             if not p:
-                # We are not running in server mode, so look for the project dir a different way.
                 cwd = Path.cwd()
-                proj_path = project_path(cwd)
-                print(f"Creating new filedb instance for {project_id}")
-                self._filedbs_for_project[project_id] = await FileIndexDB.create(Path(proj_path) / ".mc" / "mc2.sqlite")
+                proj_path = await asyncio.to_thread(project_path, cwd)
+                db_path = Path(proj_path) / ".mc" / "mc2.sqlite"
             else:
-                print(f"Creating new filedb instance for {project_id}")
-                self._filedbs_for_project[project_id] = await FileIndexDB.create(Path(p["project_dir_path"]) / ".mc" / "mc2.sqlite")
+                db_path = Path(p["project_dir_path"]) / ".mc" / "mc2.sqlite"
 
-        return self._filedbs_for_project.get(project_id)
+            print(f"Creating new filedb instance for {project_id}")
+            db = await FileIndexDB.create(db_path)
+            self._filedbs_for_project[project_id] = db
+            return db
 
     async def close_dbs(self):
-        for db in self._filedbs_for_project.values():
+        async with self._locks_guard:
+            dbs = list(self._filedbs_for_project.values())
+            self._filedbs_for_project.clear()
+            self._locks_for_project.clear()
+
+        for db in dbs:
             await db.close()

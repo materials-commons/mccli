@@ -6,9 +6,53 @@ from typing import Optional
 
 import materials_commons.api as mcapi
 from materials_commons.api import models
+import threading
 
 # Cache list of projects
 _projects = None
+_projects_lock = threading.Lock()
+
+def _scan_local_projects():
+    projects = []
+    current_directory = os.getcwd()
+
+    for entry in os.listdir(current_directory):
+        project_dir = os.path.join(current_directory, entry)
+
+        if not os.path.isdir(project_dir):
+            continue
+
+        config_path = os.path.join(project_dir, ".mc", "config.json")
+        if not os.path.exists(config_path):
+            continue
+
+        try:
+            with open(config_path, "r") as f:
+                data = json.load(f)
+
+                if "project_id" in data:
+                    projects.append({
+                        "directory": entry,
+                        "project_dir_path": project_dir,
+                        "project_id": data["project_id"]
+                    })
+        except (json.JSONDecodeError, IOError):
+            continue
+
+    return projects
+
+def _get_cached_or_scanned_projects(reload=False):
+    global _projects
+
+    with _projects_lock:
+        if _projects is not None and not reload:
+            return _projects
+
+    projects = _scan_local_projects()
+
+    with _projects_lock:
+        _projects = projects
+        return _projects
 
 def list_local_projects(reload=False):
     """
@@ -29,47 +73,7 @@ def list_local_projects(reload=False):
     JSONDecodeError: If a configuration file is not a valid JSON.
     IOError: If there is an issue reading the configuration file, such as missing file permissions.
     """
-    global _projects
-
-    # if _projects are not None, and we haven't been asked to reload the _projects,
-    # then return the cached list. A user might ask for a reload when they think
-    # the list has changed.
-    if _projects is not None:
-        if not reload:
-            return _projects
-    _projects = []
-    current_directory = os.getcwd()
-
-    # Iterate over all entries in the current directory
-    for entry in os.listdir(current_directory):
-        project_dir = os.path.join(current_directory, entry)
-        # print(f"project_dir: {project_dir}")
-
-        # We only care about directories
-        if not os.path.isdir(project_dir):
-            continue
-
-        # Check for the existence of .mc/config.json
-        config_path = os.path.join(project_dir, ".mc", "config.json")
-        if not os.path.exists(config_path):
-            continue
-
-        try:
-            with open(config_path, 'r') as f:
-                data = json.load(f)
-
-                # Check if project_id exists in the JSON data
-                if "project_id" in data:
-                    _projects.append({
-                        "directory": entry,
-                        "project_dir_path": project_dir,
-                        "project_id": data["project_id"]
-                    })
-        except (json.JSONDecodeError, IOError):
-            # Skip files that aren't valid JSON or can't be read
-            continue
-
-    return _projects
+    return _get_cached_or_scanned_projects(reload)
 
 def get_local_project_by_id(project_id, reload=False):
     """
@@ -87,7 +91,17 @@ def get_local_project_by_id(project_id, reload=False):
     Returns:
         dict | None: The project details as a dictionary if found, otherwise None.
     """
-    projects = list_local_projects(reload)
+    projects = _get_cached_or_scanned_projects(reload)
+    for project in projects:
+        if project["project_id"] == project_id:
+            return project
+    return None
+
+async def async_list_local_projects(reload=False):
+    return await asyncio.to_thread(list_local_projects, reload)
+
+async def async_get_local_project_by_id(project_id, reload=False):
+    projects = await async_list_local_projects(reload)
     for project in projects:
         if project["project_id"] == project_id:
             return project
