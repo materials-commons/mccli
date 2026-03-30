@@ -218,5 +218,5 @@ class FileUploadManager:
         """Stop all worker tasks"""
         self._workers_running = False
 
-    def close_dbs(self):
-        self.project_filedbs.close_dbs()
+    async def close_dbs(self):
+        await self.project_filedbs.close_dbs()

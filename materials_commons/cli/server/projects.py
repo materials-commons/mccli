@@ -8,6 +8,8 @@ import materials_commons.api as mcapi
 from materials_commons.api import models
 import threading
 
+from materials_commons.cli.functions import read_project_config, make_local_project
+
 # Cache list of projects
 _projects = None
 _projects_lock = threading.Lock()
@@ -156,4 +158,21 @@ async def list_remote_project_dir_by_path(c: mcapi.Client, project_id: int, proj
             continue
         entries[os.path.join(entry.directory.path, entry.name)] = entry
     return entries
+
+def project_config_dir_path(path: str):
+    curr = path
+    while True:
+        dot_mc_dir = os.path.join(curr, '.mc')
+        if os.path.isdir(dot_mc_dir):
+            # Found .mc directory, return path
+            return curr
+        elif curr == os.path.dirname(curr):
+            # Reached root (/) directory, no .mc directory found
+            return None
+        else:
+            # Move up one level
+            curr = os.path.dirname(curr)
+
+async def get_local_project(path: str):
+    return await asyncio.to_thread(make_local_project, path)
 

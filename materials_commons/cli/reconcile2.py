@@ -1,10 +1,15 @@
 import os
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Optional, Literal
 
 import materials_commons.api.models as mcmodel
+from materials_commons.api import models
+
+from materials_commons.cli.filedb import FileIndexDB
 
 from materials_commons.cli.models import FileRecord, LocalObserved
+from materials_commons.cli.reconcile import observe_local_file
 
 Action = Literal["skip", "download", "conflict", "adopt", "db_update"]
 
@@ -246,3 +251,19 @@ def build_updated_record(
         status=status if status is not None else (record.status if record else None),
         transfer_id=record.transfer_id if record else None,
     )
+
+
+async def observe_and_reconcile(db: FileIndexDB,
+                                project_path: str,
+                                file_path: str,
+                                remote_entry: Optional[models.File],
+                                recompute_checksum: bool = True) -> FileDecision:
+    file_record = await db.get_file_by_path(project_path)
+    local_observed = await observe_local_file(local_path=file_path,
+                                              file_record=file_record,
+                                              project_path=project_path,
+                                              recompute_checksum=recompute_checksum)
+    return reconcile_file(remote_entry=remote_entry,
+                          local_record=await db.get_file_by_path(project_path),
+                          local_observed=local_observed,
+                          now_ts=int(datetime.now(timezone.utc).timestamp()))

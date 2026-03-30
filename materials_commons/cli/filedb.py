@@ -6,17 +6,8 @@ from materials_commons.cli.models import FileRecord
 import aiosqlite
 
 
-# @dataclass(frozen=True)
-# class FileRecord:
-#     path: str
-#     size: int
-#     mtime_ns: int
-#     ctime_ns: int
-#     last_seen_ts: int
-#     checksum: Optional[str] = None
-#     status: Optional[str] = None
-#     remote_file_id: Optional[int] = None
-#     transfer_id: Optional[str] = None
+def to_project_db_path(project_root: Path | str) -> Path:
+    return Path(project_root) / ".mc" / "mc2.sqlite"
 
 
 class FileIndexDB:
@@ -236,5 +227,14 @@ class FileIndexDB:
             if row is None:
                 return None
             return FileRecord(**row)
+        finally:
+            await conn.close()
+
+    async def get_files_by_dir(self, files_dir: str) -> List[FileRecord]:
+        conn = await self._read_connect()
+        try:
+            cursor = await conn.execute("SELECT * FROM files WHERE dir=?", (files_dir,))
+            rows = await cursor.fetchall()
+            return [FileRecord(**row) for row in rows]
         finally:
             await conn.close()
