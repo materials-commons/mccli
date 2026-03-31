@@ -267,3 +267,18 @@ async def observe_and_reconcile(db: FileIndexDB,
                           local_record=await db.get_file_by_path(project_path),
                           local_observed=local_observed,
                           now_ts=int(datetime.now(timezone.utc).timestamp()))
+
+
+async def observe_and_reconcile2(file_record: Optional[FileRecord],
+                                 project_path: str,
+                                 file_path: str,
+                                 remote_entry: Optional[models.File],
+                                 recompute_checksum: bool = True) -> FileDecision:
+    local_observed = await observe_local_file(local_path=file_path,
+                                              file_record=file_record,
+                                              project_path=project_path,
+                                              recompute_checksum=recompute_checksum)
+    return reconcile_file(remote_entry=remote_entry,
+                          local_record=file_record,
+                          local_observed=local_observed,
+                          now_ts=int(datetime.now(timezone.utc).timestamp()))
