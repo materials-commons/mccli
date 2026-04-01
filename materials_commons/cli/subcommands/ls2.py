@@ -128,12 +128,12 @@ class LSTable:
 def make_parser():
     parser = argparse.ArgumentParser(
         description='List local and remote files and directories',
-        usage="mc ls2 [--checksum] [<pathspec>...]",
+        usage="mc ls2 [--checksum] [--action][<pathspec>...]",
         prog='mc ls2'
     )
     parser.add_argument('paths', nargs='*', default=[os.getcwd()], help='Files or directories')
     parser.add_argument('--checksum', action="store_true", default=False, help='Calculate MD5 checksum for local files')
-    parser.add_argument('--action', action="store_true", default=False, help='Include reason for file decision')
+    parser.add_argument('--action', action="store_true", default=False, help='Show action and reason for file decision')
     return parser
 
 
@@ -197,6 +197,7 @@ async def ls2_subcommand_async(args, working_dir):
         # 1. Both remote and local entries exist
         # 2. Only remote entry exists
         # 3. Only local entry exists
+
         if args.action:
             for entry_name in sorted(path_entries):
                 entry = path_entries[entry_name]
