@@ -1,6 +1,7 @@
 import asyncio
 import os
 import json
+import stat
 from pathlib import Path
 from typing import Optional
 
@@ -8,7 +9,10 @@ import materials_commons.api as mcapi
 from materials_commons.api import models
 import threading
 
+from materials_commons.cli.filedb import FileIndexDB
+
 from materials_commons.cli.functions import read_project_config, make_local_project
+from materials_commons.cli.reconcile import safe_stat
 
 # Cache list of projects
 _projects = None
@@ -175,4 +179,28 @@ def project_config_dir_path(path: str):
 
 async def get_local_project(path: str):
     return await asyncio.to_thread(make_local_project, path)
+
+async def is_dir(db: FileIndexDB, proj: models.Project, path: str) -> bool:
+    # First check if the path exists locally
+    sinfo = await safe_stat(path)
+    if sinfo is not None:
+        return stat.S_ISDIR(sinfo.st_mode)
+
+    # Next, check if the path exists in the database
+    remote_entry = await db.get_file_by_path(path)
+    if remote_entry is not None:
+        # Only files are tracked in the database, so if the entry was found
+        # then the path is not a directory.
+        return False
+
+    # Finally, check if the entry is a directory on the server
+    proj_path = local_to_remote_project_path(proj.local_path, Path(path))
+    try:
+        f = await asyncio.to_thread(proj.remote.get_file_by_path, proj.id, proj_path)
+        if f is None:
+            return False
+        return f.mime_type == "directory"
+    except Exception:
+        return False
+
 

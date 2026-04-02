@@ -1,13 +1,16 @@
 import asyncio
-import hashlib
 import json
 import logging
 import uuid
 from datetime import datetime, timezone
+from os.path import dirname
 from pathlib import Path
 from typing import Optional, Callable
 
+import aiofiles.os as aio_os
 import requests
+
+from materials_commons.cli.functions import checksum
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +60,9 @@ class FileDownloader:
         Download the file with resume support. Returns True on success.
         """
         try:
+            # Make sure the destination directory exists
+            await aio_os.makedirs(dirname(self.file_path), exist_ok=True)
+
             # Check if we can resume
             resume_from = 0
             if await self._can_resume():
@@ -73,7 +79,7 @@ class FileDownloader:
                     logger.error("Checksum verification failed")
                     return False
 
-            # Move .part file to final destination
+            # Move .part file to the final destination
             self.part_file.rename(self.file_path)
 
             # Clean up metadata
@@ -107,7 +113,7 @@ class FileDownloader:
                 # Different transfer, can't resume
                 return False
 
-            # Get current size of partial file
+            # Get the current size of the partial file
             partial_size = self.part_file.stat().st_size
             bytes_downloaded = metadata.get('bytes_downloaded', 0)
 
@@ -123,7 +129,7 @@ class FileDownloader:
             return False
 
     async def _download_with_ranges(self, resume_from: int = 0) -> bool:
-        """Download file using HTTP Range requests with streaming"""
+        """Download the file using HTTP Range requests with streaming"""
         headers = {
             'Authorization': f'Bearer {self.apitoken}',
         }
@@ -134,19 +140,10 @@ class FileDownloader:
 
         try:
             # Use asyncio to run requests in thread pool (requests is blocking)
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None,
-                lambda: requests.get(
-                    self.download_url,
-                    verify=False,
-                    headers=headers,
-                    stream=True,
-                    timeout=30
-                )
-            )
+            response = await asyncio.to_thread(requests.get, self.download_url, verify=False, headers=headers,
+                                               stream=True, timeout=30)
 
-            # Check if server supports range requests
+            # Check if the server supports range requests
             if resume_from > 0 and response.status_code != 206:
                 logger.warning("Server doesn't support range requests, starting from beginning")
                 resume_from = 0
@@ -164,7 +161,7 @@ class FileDownloader:
                 else:
                     self.expected_size = content_length
 
-            # Open file in append mode if resuming, write mode otherwise
+            # Open the file in append mode if resuming, write mode otherwise
             mode = 'ab' if resume_from > 0 else 'wb'
 
             with open(self.part_file, mode) as f:
@@ -180,7 +177,7 @@ class FileDownloader:
 
                     if chunk:
                         # Write chunk (blocking I/O)
-                        await loop.run_in_executor(None, f.write, chunk)
+                        await asyncio.to_thread(f.write, chunk)
                         self.bytes_received += len(chunk)
 
                         # Progress callback
@@ -222,9 +219,8 @@ class FileDownloader:
             logger.error(f"Failed to save metadata: {e}")
 
     async def _verify_checksum(self) -> bool:
-        """Verify MD5 checksum of downloaded file"""
-        loop = asyncio.get_event_loop()
-        actual_checksum = await loop.run_in_executor(None, self._calculate_md5, self.part_file)
+        """Verify MD5 checksum of the downloaded file"""
+        actual_checksum = asyncio.to_thread(checksum, self.part_file.as_posix())
 
         if actual_checksum != self.expected_checksum:
             logger.error(f"Checksum mismatch: expected {self.expected_checksum}, got {actual_checksum}")
@@ -232,17 +228,6 @@ class FileDownloader:
 
         logger.info("Checksum verification passed")
         return True
-
-    def _calculate_md5(self, file_path: Path, chunk_size=8192) -> str:
-        """Calculate MD5 hash of file"""
-        md5_hash = hashlib.md5()
-        with open(file_path, "rb") as f:
-            while True:
-                chunk = f.read(chunk_size)
-                if not chunk:
-                    break
-                md5_hash.update(chunk)
-        return md5_hash.hexdigest()
 
     async def _send_completion_message(self, success: bool, error: str = None):
         """Send download completion message via websocket"""

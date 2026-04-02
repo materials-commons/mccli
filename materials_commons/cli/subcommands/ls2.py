@@ -2,7 +2,6 @@ import argparse
 import asyncio
 import os
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Optional
 
 from materials_commons.api import models
@@ -10,9 +9,9 @@ from tabulate import tabulate
 
 from materials_commons.cli.filedb import FileIndexDB, to_project_db_path
 from materials_commons.cli.functions import humanize, format_time
-from materials_commons.cli.reconcile2 import observe_and_reconcile, FileDecision
+from materials_commons.cli.reconcile2 import FileDecision, AsyncReconciler
 from materials_commons.cli.server import projects
-from materials_commons.cli.walk import async_walk, DirEntryInfo
+from materials_commons.cli.walk import DirEntryInfo
 
 
 @dataclass
@@ -148,63 +147,17 @@ async def ls2_subcommand_async(args, working_dir):
     db = await FileIndexDB.create(to_project_db_path(proj.local_path))
     lstable = LSTable()
 
+    async_reconciler = AsyncReconciler(db=db, proj=proj, recompute_checksum=args.checksum)
     for path in args.paths:
-        path_entries = {}
-        async for current_path, entries in async_walk(path=path, recursive=False, ignore_fn=None):
-            remote_dir = projects.local_to_remote_project_path(Path(proj.local_path), Path(current_path))
-            remote_entries = await projects.list_remote_project_dir_by_path(proj.remote, proj.id, remote_dir.as_posix())
+        async for current_path, path_entries in async_reconciler.walk(path=path, recursive=False, ignore_fn=None):
+            if args.action:
+                for entry_name in sorted(path_entries):
+                    entry = path_entries[entry_name]
+                    lstable.add_action_row(entry)
+                lstable.print_action_table()
+            else:
+                for entry_name in sorted(path_entries):
+                    entry = path_entries[entry_name]
+                    lstable.add_full_row(entry)
+                lstable.print_full_table()
 
-            # First, we go through all the remote entries and add them to the path_entries dict
-            for remote_entry in remote_entries.values():
-                path_entries[remote_entry.name] = FileEntry(remote_entry=remote_entry, local_entry=None,
-                                                            file_decision=None)
-
-            # Next, we go through all the local entries. If that local entry exists, then the remote and the
-            # local entries are linked. Otherwise, we have a local only entry.
-            for entry in entries:
-                # TODO: Optimize so we look up all database entries in one query. For now just do individual queries
-                found_remote_entry = path_entries.get(entry.name, None)
-                remote_entry = found_remote_entry.remote_entry if found_remote_entry else None
-                project_path = projects.local_to_remote_project_path(Path(proj.local_path), entry.path)
-                file_decision = await observe_and_reconcile(db=db,
-                                                            project_path=project_path.as_posix(),
-                                                            file_path=entry.path.as_posix(),
-                                                            remote_entry=remote_entry,
-                                                            recompute_checksum=args.checksum)
-                if found_remote_entry:
-                    found_remote_entry.local_entry = entry
-                    found_remote_entry.file_decision = file_decision
-                else:
-                    path_entries[entry.name] = FileEntry(local_entry=entry, remote_entry=None,
-                                                         file_decision=file_decision)
-
-            # We've run observe_and_reconcile on all local entries. Now we need to do that on all
-            # remote only entries.
-            for entry_name in path_entries:
-                entry = path_entries[entry_name]
-                if not entry.file_decision:
-                    remote_path = Path(entry.remote_entry.directory.path) / entry.remote_entry.name
-                    file_path = projects.remote_to_local_project_path(proj_base=Path(proj.local_path),
-                                                                      remote_path=remote_path)
-                    file_decision = await observe_and_reconcile(db=db,
-                                                                project_path=entry.remote_entry.directory.path,
-                                                                file_path=file_path.as_posix(),
-                                                                remote_entry=entry.remote_entry,
-                                                                recompute_checksum=args.checksum)
-                    entry.file_decision = file_decision
-
-        # At this point path_entries contains entries in one of 3 states:
-        # 1. Both remote and local entries exist
-        # 2. Only remote entry exists
-        # 3. Only local entry exists
-
-        if args.action:
-            for entry_name in sorted(path_entries):
-                entry = path_entries[entry_name]
-                lstable.add_action_row(entry)
-            lstable.print_action_table()
-        else:
-            for entry_name in sorted(path_entries):
-                entry = path_entries[entry_name]
-                lstable.add_full_row(entry)
-            lstable.print_full_table()

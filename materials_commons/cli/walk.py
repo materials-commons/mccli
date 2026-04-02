@@ -1,8 +1,8 @@
+import asyncio
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import AsyncIterator, Callable, Optional, Awaitable
-import asyncio
-import os
 
 
 @dataclass
@@ -16,7 +16,6 @@ class DirEntryInfo:
 
 IgnoreFunc = Callable[[Path, bool], bool]
 VisitorFunc = Callable[[Path, list[DirEntryInfo]], Awaitable[None]]
-
 
 async def async_listdir(path: str | Path) -> list[DirEntryInfo]:
     """Asynchronously list the contents of a directory.
@@ -92,9 +91,9 @@ async def async_walk(
 
 
 async def async_walk_visit(
-        root: str | Path, 
-        visitor_fn: VisitorFunc, 
-        recursive: bool = True, 
+        root: str | Path,
+        visitor_fn: VisitorFunc,
+        recursive: bool = True,
         ignore_fn: Optional[IgnoreFunc] = None
 ) -> None:
     """Visit directories and files asynchronously using async_walk and a visitor function.
@@ -108,9 +107,11 @@ async def async_walk_visit(
     async for path, entries in async_walk(root, recursive, ignore_fn):
         await visitor_fn(path, entries)
 
+
 def _default_files_to_ignore(path: Path) -> bool:
     name = path.name
     return name == ".DS_Store" or name == ".mc"
+
 
 def make_ignore_func(ignore_parser, root: Path) -> IgnoreFunc:
     def _ignore_func(path: Path, is_dir: bool) -> bool:

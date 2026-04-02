@@ -1,6 +1,9 @@
 from dataclasses import dataclass
 from typing import Literal, Optional
 
+from materials_commons.api import models
+from materials_commons.api import client as mcapi
+
 
 @dataclass(frozen=True)
 class FileRecord:
@@ -36,6 +39,7 @@ class RemoteFileEntry:
     remote_ctime_ns: Optional[int] = None
     remote_checksum: Optional[str] = None
 
+
 @dataclass
 class RemoteDirectory:
     directory_path: str
@@ -70,3 +74,10 @@ class DirectoryDecision:
     to_skip: list[FileDecision]
     to_conflict: list[FileDecision]
     to_db_update_only: list[FileDecision]
+
+
+class LocalProject(models.Project):
+    def __init__(self, remote: Optional[mcapi.Client] = None, local_path: Optional[str] = None, data={}):
+        super().__init__(data)
+        self.remote = remote
+        self.local_path = local_path
