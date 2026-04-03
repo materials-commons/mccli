@@ -1,5 +1,6 @@
 import asyncio
 import os
+from _asyncio import Task
 from typing import Optional
 
 from materials_commons.api import models
@@ -31,7 +32,7 @@ class FileIndexManager:
         self._workers_running = False
         self._max_concurrent = max_concurrent
 
-    async def start_workers(self):
+    async def start_workers(self) -> list[Task[None]]:
         """Start background workers to process the index queue"""
         self._workers_running = True
         workers = [

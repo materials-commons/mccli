@@ -1,46 +1,20 @@
 import asyncio
 import os
-from dataclasses import dataclass
+import stat
 from datetime import datetime, timezone
 from os.path import dirname, basename
 from pathlib import Path
-from typing import Optional, Literal, Callable, Awaitable, AsyncIterator
+from typing import Optional, AsyncIterator
 
 import materials_commons.api.models as mcmodel
+from aiofiles import os as aio_os
 from materials_commons.api import models
 
-from materials_commons.cli.functions import checksum_async
-from materials_commons.cli.server import projects
-
 from materials_commons.cli.filedb import FileIndexDB
-
-from materials_commons.cli.models import FileRecord, LocalObserved, LocalProject
-from materials_commons.cli.walk import DirEntryInfo, async_walk, IgnoreFunc
-from aiofiles import os as aio_os
-
-Action = Literal["skip", "download", "conflict", "adopt", "db_update"]
-
-
-@dataclass(frozen=True)
-class FileDecision:
-    action: Action
-    reason: str
-    updated: bool
-    updated_record: FileRecord
-
-
-@dataclass
-class FileEntry:
-    # name: str
-    # local_path: Path
-    local_entry: Optional[DirEntryInfo]
-    remote_entry: Optional[models.File]
-    file_record: Optional[FileRecord]
-    file_decision: Optional[FileDecision]
-    exception: Optional[Exception] = None
-
-
-VisitorFunc2 = Callable[[dict[str, FileEntry]], Awaitable[None]]
+from materials_commons.cli.functions import checksum_async
+from materials_commons.cli.models import FileRecord, LocalObserved, LocalProject, FileEntry, FileDecision
+from materials_commons.cli.server import projects
+from materials_commons.cli.walk import async_walk, IgnoreFunc, DirEntryInfo
 
 
 def reconcile_file(
@@ -125,10 +99,10 @@ def reconcile_file(
     # determine this checking the local_exists flag). When that happens checksums_match
     # will automatically be False.
     checksums_match = (
-            local_exists # Does the local file exist?
-            and local_observed.local_checksum is not None # Does the local file have a checksum?
-            and remote_entry.checksum is not None # Does the remote file have a checksum?
-            and local_observed.local_checksum == remote_entry.checksum # Do the checksums match?
+            local_exists  # Does the local file exist?
+            and local_observed.local_checksum is not None  # Does the local file have a checksum?
+            and remote_entry.checksum is not None  # Does the remote file have a checksum?
+            and local_observed.local_checksum == remote_entry.checksum  # Do the checksums match?
     )
 
     # Check if the local file is still clean by comparing the file system observed file
@@ -404,11 +378,17 @@ async def observe_local_file(
             local_checksum=None
         )
 
+    is_dir = stat.S_ISDIR(sinfo.st_mode)
+    is_symlink = stat.S_ISLNK(sinfo.st_mode)
+    is_file = not is_dir and not is_symlink
     local_observed = LocalObserved(
         path=local_path,
         project_path=project_path,
         dir=dirname(local_path),
         name=basename(local_path),
+        is_dir=is_dir,
+        is_symlink=is_symlink,
+        is_file=is_file,
         exists=True,
         local_size=sinfo.st_size,
         local_mtime_ns=sinfo.st_mtime_ns,
@@ -457,6 +437,45 @@ async def safe_stat(path: str) -> Optional[os.stat_result]:
         return None
     except Exception:
         return None
+
+
+async def observe_and_reconcile_to_file_entry(db: FileIndexDB,
+                                              proj: LocalProject,
+                                              file_path: str,
+                                              recompute_checksum: bool = True) -> FileEntry:
+
+    project_path = projects.local_to_remote_project_path(Path(proj.local_path), Path(file_path))
+
+    remote_entry = await projects.get_remote_file_by_path(proj.remote, proj.id, project_path.as_posix())
+
+    file_record = await db.get_file_by_path(project_path.as_posix())
+
+    local_observed = await observe_local_file(local_path=file_path,
+                                              file_record=file_record,
+                                              project_path=project_path.as_posix(),
+                                              recompute_checksum=recompute_checksum)
+
+    decision = reconcile_file(remote_entry=remote_entry,
+                              local_record=file_record,
+                              local_observed=local_observed,
+                              now_ts=int(datetime.now(timezone.utc).timestamp()))
+
+    local_entry = DirEntryInfo(
+        path=Path(file_path),
+        name=basename(file_path),
+        is_dir=local_observed.is_dir,
+        is_symlink=local_observed.is_symlink,
+        is_file=local_observed.is_file
+    )
+
+    file_entry = FileEntry(
+        remote_entry=remote_entry,
+        local_entry=local_entry,
+        file_decision=decision,
+        file_record=file_record
+    )
+
+    return file_entry
 
 
 class AsyncReconciler:

@@ -17,6 +17,7 @@ from materials_commons.cli.reconcile2 import safe_stat
 _projects = None
 _projects_lock = threading.Lock()
 
+
 def _scan_local_projects():
     projects = []
     current_directory = os.getcwd()
@@ -46,6 +47,7 @@ def _scan_local_projects():
 
     return projects
 
+
 def _get_cached_or_scanned_projects(reload=False):
     global _projects
 
@@ -58,6 +60,7 @@ def _get_cached_or_scanned_projects(reload=False):
     with _projects_lock:
         _projects = projects
         return _projects
+
 
 def list_local_projects(reload=False):
     """
@@ -79,6 +82,7 @@ def list_local_projects(reload=False):
     IOError: If there is an issue reading the configuration file, such as missing file permissions.
     """
     return _get_cached_or_scanned_projects(reload)
+
 
 def get_local_project_by_id(project_id, reload=False):
     """
@@ -102,8 +106,10 @@ def get_local_project_by_id(project_id, reload=False):
             return project
     return None
 
+
 async def async_list_local_projects(reload=False):
     return await asyncio.to_thread(list_local_projects, reload)
+
 
 async def async_get_local_project_by_id(project_id, reload=False):
     projects = await async_list_local_projects(reload)
@@ -111,6 +117,7 @@ async def async_get_local_project_by_id(project_id, reload=False):
         if project["project_id"] == project_id:
             return project
     return None
+
 
 def local_to_remote_project_path(proj_base: Path, full_path: Path) -> Path:
     """
@@ -132,6 +139,7 @@ def local_to_remote_project_path(proj_base: Path, full_path: Path) -> Path:
     remote_path = full_path.relative_to(proj_base)
     return Path("/" + remote_path.as_posix())
 
+
 def remote_to_local_project_path(proj_base: Path, remote_path: Path) -> Path:
     """
     Converts a remote project path to its corresponding local path. For example,
@@ -149,7 +157,9 @@ def remote_to_local_project_path(proj_base: Path, remote_path: Path) -> Path:
     # To get the full path, we need to remove the leading slash from the remote path
     return proj_base / remote_path.as_posix().lstrip("/")
 
-async def list_remote_project_dir_by_path(c: mcapi.Client, project_id: int, project_path: str) -> Optional[dict[str, models.File]]:
+
+async def list_remote_project_dir_by_path(c: mcapi.Client, project_id: int, project_path: str) -> Optional[
+    dict[str, models.File]]:
     """List the contents of a directory in a remote project. Builds a dict of directory entries by path."""
     path_entries = await asyncio.to_thread(c.list_directory_by_path, project_id, project_path)
     if not path_entries:
@@ -161,6 +171,15 @@ async def list_remote_project_dir_by_path(c: mcapi.Client, project_id: int, proj
             continue
         entries[os.path.join(entry.directory.path, entry.name)] = entry
     return entries
+
+
+async def get_remote_file_by_path(c: mcapi.Client, project_id: int, project_path: str) -> Optional[models.File]:
+    """Get a file from a remote project by its path."""
+    try:
+        return await asyncio.to_thread(c.get_file_by_path, project_id, project_path)
+    except Exception:
+        return None
+
 
 def project_config_dir_path(path: str):
     curr = path
@@ -176,8 +195,10 @@ def project_config_dir_path(path: str):
             # Move up one level
             curr = os.path.dirname(curr)
 
+
 async def get_local_project(path: str):
     return await asyncio.to_thread(make_local_project, path)
+
 
 async def is_dir(db: FileIndexDB, proj: models.Project, path: str) -> bool:
     # First check if the path exists locally
@@ -201,5 +222,3 @@ async def is_dir(db: FileIndexDB, proj: models.Project, path: str) -> bool:
         return f.mime_type == "directory"
     except Exception:
         return False
-
-

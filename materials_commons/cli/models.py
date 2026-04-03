@@ -4,6 +4,8 @@ from typing import Literal, Optional
 from materials_commons.api import models
 from materials_commons.api import client as mcapi
 
+from materials_commons.cli.walk import DirEntryInfo
+
 
 @dataclass(frozen=True)
 class FileRecord:
@@ -59,6 +61,9 @@ class LocalObserved:
     local_ctime_ns: Optional[int]
     local_checksum: Optional[str] = None
     checksum_outdated: bool = False
+    is_dir: bool = False
+    is_symlink: bool = False
+    is_file: bool = False
 
 
 @dataclass
@@ -74,6 +79,28 @@ class DirectoryDecision:
     to_skip: list[FileDecision]
     to_conflict: list[FileDecision]
     to_db_update_only: list[FileDecision]
+
+
+Action = Literal["skip", "download", "conflict", "adopt", "db_update"]
+
+
+@dataclass(frozen=True)
+class FileDecision:
+    action: Action
+    reason: str
+    updated: bool
+    updated_record: FileRecord
+
+
+@dataclass
+class FileEntry:
+    # name: str
+    # local_path: Path
+    local_entry: Optional[DirEntryInfo]
+    remote_entry: Optional[models.File]
+    file_record: Optional[FileRecord]
+    file_decision: Optional[FileDecision]
+    exception: Optional[Exception] = None
 
 
 class LocalProject(models.Project):
