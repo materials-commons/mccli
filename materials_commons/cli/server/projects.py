@@ -1,18 +1,17 @@
 import asyncio
-import os
 import json
+import os
 import stat
+import threading
 from pathlib import Path
 from typing import Optional
 
 import materials_commons.api as mcapi
 from materials_commons.api import models
-import threading
 
 from materials_commons.cli.filedb import FileIndexDB
-
-from materials_commons.cli.functions import read_project_config, make_local_project
-from materials_commons.cli.reconcile import safe_stat
+from materials_commons.cli.functions import make_local_project
+from materials_commons.cli.reconcile2 import safe_stat
 
 # Cache list of projects
 _projects = None

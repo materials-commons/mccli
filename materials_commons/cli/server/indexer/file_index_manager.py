@@ -1,13 +1,11 @@
 import asyncio
 import os
-from datetime import datetime, timezone
 from typing import Optional
 
 from materials_commons.api import models
 
 from materials_commons.cli.models import FileRecord
-from materials_commons.cli.reconcile import observe_local_file
-from materials_commons.cli.reconcile2 import reconcile_file, observe_and_reconcile
+from materials_commons.cli.reconcile2 import observe_and_reconcile
 from materials_commons.cli.server.project_filedbs import ProjectFileDBs
 
 
@@ -71,16 +69,6 @@ class FileIndexManager:
                                                     file_path=file_path,
                                                     remote_entry=remote_entry,
                                                     recompute_checksum=True)
-        # file_record = await db.get_file_by_path(project_path)
-        # local_observed = await observe_local_file(local_path=file_path,
-        #                                           file_record=file_record,
-        #                                           project_path=project_path,
-        #                                           recompute_checksum=True)
-        #
-        # file_decision = reconcile_file(remote_entry=remote_entry,
-        #                                local_record=file_record,
-        #                                local_observed=local_observed,
-        #                                now_ts=int(datetime.now(timezone.utc).timestamp()))
 
         if not file_decision.updated_record:
             print(f"Skipping {file_path} in {project_path} as it hasn't changed")

@@ -195,80 +195,10 @@ def local_is_still_clean(local_obs: LocalObserved, record: Optional[FileRecord])
 
 
 # TODO: Return LocalObserved?
-async def safe_stat(path: str) -> Optional[os.stat_result]:
-    """
-    Retrieve the status of a given file or directory.
-
-    Attempts to retrieve the status of a file or directory at the specified path
-    asynchronously. If the operation encounters an error such as the file not
-    being found, a permission exception, or other OS-related errors, the function
-    will return None.
-
-    Parameters:
-    path (str): The path to the file or directory whose status is to be retrieved.
-
-    Returns:
-    Optional[os.stat_result]: An os.stat_result object containing metadata about
-    the file or directory if retrieval is successful. Returns None if an exception
-    occurs during the retrieval process.
-    """
-    try:
-        return await aio_os.stat(path)
-    except FileNotFoundError:
-        return None
-    except PermissionError:
-        return None
-    except NotADirectoryError:
-        return None
-    except OSError:
-        return None
-    except Exception:
-        return None
 
 
-async def observe_local_file(
-        local_path: str,
-        file_record: Optional[FileRecord],
-        project_path: str,
-        recompute_checksum: bool = True
-) -> LocalObserved:
-    """Observe the local file at the given path, optionally recomputing checksum if needed"""
-    sinfo = await safe_stat(local_path)
-    if not sinfo:
-        return LocalObserved(
-            path=local_path,
-            project_path=project_path,
-            dir=dirname(local_path),
-            name=basename(local_path),
-            exists=False,
-            local_size=None,
-            local_mtime_ns=None,
-            local_ctime_ns=None,
-            local_checksum=None
-        )
 
-    local_observed = LocalObserved(
-        path=local_path,
-        project_path=project_path,
-        dir=dirname(local_path),
-        name=basename(local_path),
-        exists=True,
-        local_size=sinfo.st_size,
-        local_mtime_ns=sinfo.st_mtime_ns,
-        local_ctime_ns=sinfo.st_ctime_ns,
-        local_checksum=None
-    )
 
-    if local_stat_matches_cache(local_observed, file_record):
-        local_observed.local_checksum = file_record.local_checksum
-        return local_observed
-
-    if not recompute_checksum:
-        local_observed.checksum_outdated = True
-        return local_observed
-
-    local_observed.local_checksum = await checksum_async(local_path)
-    return local_observed
 
 
 def merge_record(
