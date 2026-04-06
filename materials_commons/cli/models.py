@@ -1,10 +1,8 @@
 from dataclasses import dataclass
 from typing import Literal, Optional
 
-from materials_commons.api import models
 from materials_commons.api import client as mcapi
-
-from materials_commons.cli.walk import DirEntryInfo
+from materials_commons.api import models
 
 
 @dataclass(frozen=True)
@@ -96,7 +94,7 @@ class FileDecision:
 class FileEntry:
     # name: str
     # local_path: Path
-    local_entry: Optional[DirEntryInfo]
+    local_entry: Optional[LocalObserved]
     remote_entry: Optional[models.File]
     file_record: Optional[FileRecord]
     file_decision: Optional[FileDecision]
