@@ -1,5 +1,5 @@
 import asyncio
-from typing import Dict, Any, Callable, Awaitable
+from typing import Dict, Any, Callable, Awaitable, Optional
 from materials_commons.cli import server
 import os
 import signal
@@ -39,9 +39,13 @@ def register_handlers() -> Dict[str, CommandHandler]:
         "RESUME_DOWNLOAD": handle_resume_download,
         "CANCEL_DOWNLOAD": handle_cancel_download,
 
-        # Search and Find commands
+        # Search commands
         "SEARCH_FILES": handle_search_files,
+        "SEARCH_FILES_AT_PATH": handle_search_files_at_path,
+
+        # Find commands
         "FIND_FILES": handle_find_files,
+        "FIND_FILES_AT_PATH": handle_find_files_at_path,
     }
 
 
@@ -435,28 +439,40 @@ async def handle_search_files(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None
     payload = cmd.get("payload") or {}
     await _handle_run_query_command(queue=queue, cmd="rg", args="-i", resp_cmd="SEARCH_FILES", payload=payload)
 
+async def handle_search_files_at_path(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
+    print(f"[handler] search_files_at_path -> {cmd}")
+    payload = cmd.get("payload") or {}
+    await _handle_run_query_command(queue=queue, cmd="rg", args="-i", resp_cmd="SEARCH_FILES_AT_PATH", payload=payload)
+
 async def handle_find_files(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] find_files -> {cmd}")
     payload = cmd.get("payload") or {}
     await _handle_run_query_command(queue=queue, cmd="fd", args="-i", resp_cmd="FIND_FILES", payload=payload)
+
+async def handle_find_files_at_path(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
+    print(f"[handler] find_files_at_path -> {cmd}")
+    payload = cmd.get("payload") or {}
+    await _handle_run_query_command(queue=queue, cmd="fd", args="-i", resp_cmd="FIND_FILES_AT_PATH", payload=payload)
 
 async def _handle_run_query_command(queue: asyncio.Queue, cmd: str, args: str, resp_cmd: str, payload: Dict[Any, Any]) -> None:
     request_id = payload.get("request_id")
     project_id = payload.get("project_id")
     query = payload.get("query")
     response_payload = {"matches": [], "request_id": request_id}
-
-    proj = projects.get_local_project_by_id(project_id)
-    if not proj:
-        await queue.put({"command": resp_cmd, "payload": response_payload})
-        return
+    path = _get_path_for_cmd(project_id, payload)
 
     matches = []
-    print(f"[handler] Running {cmd} query: {query} in project: {proj['project_dir_path']}")
-    async for event in run_command_stream(cmd, args, query, proj["project_dir_path"]):
+    async for event in run_command_stream(cmd, args, query, path):
         if isinstance(event, CommandOutputLine):
             print(event.line)
             matches.append(event.line)
     response_payload["matches"] = matches
     print(f"[handler] {resp_cmd} response: {response_payload}")
     await queue.put({"command": resp_cmd, "payload": response_payload})
+
+def _get_path_for_cmd(project_id: Optional[str], payload: Dict[str, Any]) -> str:
+    if project_id:
+        proj = projects.get_local_project_by_id(project_id)
+        if proj:
+            return proj["project_dir_path"]
+    return payload.get("path", None)
