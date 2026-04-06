@@ -1,52 +1,115 @@
 import asyncio
 import os
 from dataclasses import dataclass
+from datetime import timezone
 from pathlib import Path
-from typing import AsyncIterator, Callable, Optional, Awaitable
+from typing import AsyncIterator, Callable, Optional, Awaitable, Protocol
+
+from materials_commons.api import models
+from materials_commons.cli.server import projects
+
+from materials_commons.cli.models import LocalProject
 
 
-@dataclass
-class DirEntryInfo:
-    path: Path
-    name: str
-    is_dir: bool
-    is_file: bool
-    is_symlink: bool
+@dataclass(frozen=True)
+class EntryStatInfo:
+    size: int
+    mtime_ns: int
+    ctime_ns: int
+
+
+class DirEntryInfo(Protocol):
+    @property
+    def path(self) -> Path: ...
+
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def is_dir(self) -> bool: ...
+
+    @property
+    def is_file(self) -> bool: ...
+
+    @property
+    def is_symlink(self) -> bool: ...
+
+    def stat(self) -> EntryStatInfo: ...
 
 
 IgnoreFunc = Callable[[Path, bool], bool]
 VisitorFunc = Callable[[Path, list[DirEntryInfo]], Awaitable[None]]
+ListDirFunc = Callable[[Path], Awaitable[list[DirEntryInfo]]]
 
-async def async_listdir(path: str | Path) -> list[DirEntryInfo]:
-    """Asynchronously list the contents of a directory.
 
-    Args:
-        path: The directory path to create a list of entries of.
-    """
+@dataclass
+class LocalDirEntryInfo:
+    entry: os.DirEntry
 
-    # scan encapsulates os.scandir() which is not async. We need a function to wrap it that we can
-    # call asyncio.to_thread on to run it.
-    def _scan():
-        items = []
-        with os.scandir(path) as entries:
-            for entry in entries:
-                entry.is_dir()
-                items.append(
-                    DirEntryInfo(
-                        path=Path(entry.path),
-                        name=entry.name,
-                        is_dir=entry.is_dir(follow_symlinks=False),
-                        is_file=entry.is_file(follow_symlinks=False),
-                        is_symlink=entry.is_symlink(),
-                    )
-                )
-        return items
+    @property
+    def path(self) -> Path:
+        return Path(self.entry.path)
 
-    return await asyncio.to_thread(_scan)
+    @property
+    def name(self) -> str:
+        return self.entry.name
+
+    @property
+    def is_dir(self) -> bool:
+        return self.entry.is_dir(follow_symlinks=False)
+
+    @property
+    def is_file(self) -> bool:
+        return self.entry.is_file(follow_symlinks=False)
+
+    @property
+    def is_symlink(self) -> bool:
+        return self.entry.is_symlink()
+
+    def stat(self) -> EntryStatInfo:
+        sinfo = self.entry.stat()
+        return EntryStatInfo(
+            size=sinfo.st_size,
+            mtime_ns=sinfo.st_mtime_ns,
+            ctime_ns=sinfo.st_ctime_ns,
+        )
+
+
+@dataclass
+class RemoteDirEntryInfo:
+    remote_file: models.File
+
+    @property
+    def path(self) -> Path:
+        return Path(self.remote_file.directory.path) / self.remote_file.name
+
+    @property
+    def name(self) -> str:
+        return self.remote_file.name
+
+    @property
+    def is_dir(self) -> bool:
+        return self.remote_file.mime_type == "directory"
+
+    @property
+    def is_file(self) -> bool:
+        return self.remote_file.mime_type != "directory"
+
+    @property
+    def is_symlink(self) -> bool:
+        return False
+
+    def stat(self) -> EntryStatInfo:
+        return EntryStatInfo(
+            size=self.remote_file.size,
+            ctime_ns=int(self.remote_file.created_at.replace(tzinfo=timezone.utc).timestamp() * 1_000_000_000),
+            mtime_ns=int(self.remote_file.updated_at.replace(tzinfo=timezone.utc).timestamp() * 1_000_000_000),
+        )
 
 
 async def async_walk(
         path: str | Path,
+        listdir_fn: ListDirFunc,
         recursive: bool = True,
         ignore_fn: Optional[IgnoreFunc] = None,
 ) -> AsyncIterator[tuple[Path, list[DirEntryInfo]]]:
@@ -54,6 +117,7 @@ async def async_walk(
 
     Args:
         path: The root directory to start the walk from.
+        listdir_fn: A function to list the contents of a directory.
         recursive: Whether to recursively visit subdirectories.
         ignore_fn: An optional function to ignore directories or files.
 
@@ -71,7 +135,8 @@ async def async_walk(
         if ignore_fn and ignore_fn(current, True):
             continue
 
-        entries = await async_listdir(current)
+        entries = await listdir_fn(current)
+
         filtered: list[DirEntryInfo] = []
         for entry in entries:
             if _default_files_to_ignore(entry.path):
@@ -90,22 +155,91 @@ async def async_walk(
             stack.extend(entry.path for entry in reversed(filtered) if entry.is_dir)
 
 
-async def async_walk_visit(
-        root: str | Path,
-        visitor_fn: VisitorFunc,
-        recursive: bool = True,
-        ignore_fn: Optional[IgnoreFunc] = None
-) -> None:
-    """Visit directories and files asynchronously using async_walk and a visitor function.
-    
+async def async_listdir(path: str | Path) -> list[DirEntryInfo]:
+    """Asynchronously list the contents of a directory.
+
     Args:
-        root: The root directory to start the walk from.
-        visitor_fn: The visitor function to call for each directory and its entries.
-        recursive: Whether to recursively visit subdirectories.
-        ignore_fn: An optional function to ignore directories or files.
+        path: The directory path to create a list of entries of.
     """
-    async for path, entries in async_walk(root, recursive, ignore_fn):
-        await visitor_fn(path, entries)
+
+    # scan encapsulates os.scandir() which is not async. We need a function to wrap it that we can
+    # call asyncio.to_thread on to run it.
+    def _scan():
+        items = []
+        with os.scandir(path) as entries:
+            for entry in entries:
+                items.append(LocalDirEntryInfo(entry))
+        return items
+
+    return await asyncio.to_thread(_scan)
+
+
+async def remote_listdir(project_path: str | Path, proj: LocalProject) -> list[DirEntryInfo]:
+    """Asynchronously list the contents of a remote directory.
+
+    Args:
+        project_path: The path within the project to list directory contents of.
+        proj: The local project object representing the remote project.
+    """
+    entries = await asyncio.to_thread(proj.remote.list_directory_by_path, proj.id, project_path)
+    return [RemoteDirEntryInfo(entry) for entry in entries]
+
+
+def make_remote_listdir_func(proj: LocalProject) -> ListDirFunc:
+    """
+    Create an asynchronous directory listing function for a remote project.
+
+    Args:
+        proj: The local project object representing the remote project.
+
+    Returns:
+        An asynchronous function that lists directory contents of a remote project.
+    """
+
+    async def _remote_listdir(path: Path) -> list[DirEntryInfo]:
+        return await remote_listdir(path, proj)
+
+    return _remote_listdir
+
+
+async def merged_local_remote_listdir(
+        local_listdir_fn: Callable[[Path], Awaitable[list[DirEntryInfo]]],
+        remote_listdir_fn: Callable[[Path], Awaitable[list[DirEntryInfo]]],
+        proj: LocalProject,
+        path: Path,
+) -> list[DirEntryInfo]:
+    """
+    Merge local and remote directory listings, prioritizing local entries.
+    """
+    local_entries = await local_listdir_fn(path)
+    project_path = projects.local_to_remote_project_path(Path(proj.local_path), path)
+    remote_entries = await remote_listdir_fn(project_path)
+
+    seen = {entry.name for entry in local_entries}
+
+    merged = list(local_entries)
+    for entry in remote_entries:
+        key = entry.name
+        if key not in seen:
+            merged.append(entry)
+            seen.add(key)
+
+    return sorted(merged, key=lambda entry: entry.name.lower())
+
+
+def make_merged_listdir_func(proj: LocalProject) -> ListDirFunc:
+    """
+    Create a merged listdir function for a given project.
+    """
+    remote_listdir_fn = make_remote_listdir_func(proj)
+
+    async def _merged_listdir(path: Path) -> list[DirEntryInfo]:
+        return await merged_listdir(local_listdir_fn=async_listdir,
+                                    remote_listdir_fn=remote_listdir_fn,
+                                    proj=proj,
+                                    path=path)
+
+    return _merged_listdir
 
 
 def _default_files_to_ignore(path: Path) -> bool:

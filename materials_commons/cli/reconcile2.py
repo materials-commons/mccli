@@ -14,7 +14,7 @@ from materials_commons.cli.filedb import FileIndexDB
 from materials_commons.cli.functions import checksum_async
 from materials_commons.cli.models import FileRecord, LocalObserved, LocalProject, FileEntry, FileDecision
 from materials_commons.cli.server import projects
-from materials_commons.cli.walk import async_walk, IgnoreFunc, DirEntryInfo
+from materials_commons.cli.walk import async_walk, IgnoreFunc, DirEntryInfo, ListDirFunc
 
 
 def reconcile_file(
@@ -443,7 +443,6 @@ async def observe_and_reconcile_to_file_entry(db: FileIndexDB,
                                               proj: LocalProject,
                                               file_path: str,
                                               recompute_checksum: bool = True) -> FileEntry:
-
     project_path = projects.local_to_remote_project_path(Path(proj.local_path), Path(file_path))
 
     remote_entry = await projects.get_remote_file_by_path(proj.remote, proj.id, project_path.as_posix())
@@ -460,17 +459,9 @@ async def observe_and_reconcile_to_file_entry(db: FileIndexDB,
                               local_observed=local_observed,
                               now_ts=int(datetime.now(timezone.utc).timestamp()))
 
-    local_entry = DirEntryInfo(
-        path=Path(file_path),
-        name=basename(file_path),
-        is_dir=local_observed.is_dir,
-        is_symlink=local_observed.is_symlink,
-        is_file=local_observed.is_file
-    )
-
     file_entry = FileEntry(
         remote_entry=remote_entry,
-        local_entry=local_entry,
+        local_entry=local_observed if local_observed.exists else None,
         file_decision=decision,
         file_record=file_record
     )
@@ -482,34 +473,37 @@ class AsyncReconciler:
     def __init__(self,
                  proj: LocalProject,
                  db: FileIndexDB,
+                 listdir_fn: ListDirFunc,
                  recompute_checksum: bool = True,
                  max_concurrent: int = 10):
         self.proj = proj
         self.db = db
         self.recompute_checksum = recompute_checksum
         self.max_concurrent = max_concurrent
+        self.listdir_fn = listdir_fn
 
     async def walk(self, path: str | Path, recursive: bool = False, ignore_fn: Optional[IgnoreFunc] = None) -> \
             AsyncIterator[tuple[Path, dict[str, FileEntry]]]:
         sem = asyncio.Semaphore(self.max_concurrent)
 
-        async def single_entry_reconcile(entry: FileEntry) -> FileDecision:
+        async def single_entry_reconcile(e: FileEntry) -> FileDecision:
             async with sem:
-                if entry.local_entry is not None:
-                    file_path = entry.local_entry.path
+                if e.local_entry is not None:
+                    file_path = e.local_entry.path
                 else:
-                    remote_path = Path(entry.remote_entry.directory.path) / entry.remote_entry.name
+                    remote_path = Path(e.remote_entry.directory.path) / e.remote_entry.name
                     file_path = projects.remote_to_local_project_path(proj_base=Path(self.proj.local_path),
                                                                       remote_path=remote_path)
 
                 project_path = projects.local_to_remote_project_path(Path(self.proj.local_path), Path(file_path))
-                return await observe_and_reconcile2(file_record=entry.file_record,
+                return await observe_and_reconcile2(file_record=e.file_record,
                                                     project_path=project_path.as_posix(),
                                                     file_path=file_path.as_posix(),
-                                                    remote_entry=entry.remote_entry,
+                                                    remote_entry=e.remote_entry,
                                                     recompute_checksum=self.recompute_checksum)
 
-        async for current_path, entries in async_walk(path, recursive=recursive, ignore_fn=ignore_fn):
+        async for current_path, entries in async_walk(path, recursive=recursive, listdir_fn=self.listdir_fn,
+                                                      ignore_fn=ignore_fn):
             path_entries: dict[str, FileEntry] = {}
             remote_dir = projects.local_to_remote_project_path(Path(self.proj.local_path), Path(current_path))
             remote_entries = await projects.list_remote_project_dir_by_path(self.proj.remote, self.proj.id,
