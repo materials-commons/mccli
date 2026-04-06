@@ -1,9 +1,9 @@
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, List
-from materials_commons.cli.models import FileRecord
 
 import aiosqlite
+
+from materials_commons.cli.models import FileRecord
 
 
 def to_project_db_path(project_root: Path | str) -> Path:
