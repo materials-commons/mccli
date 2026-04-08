@@ -9,6 +9,7 @@ from materials_commons.cli.reconcile2 import AsyncReconciler, FileEntry, observe
 from materials_commons.cli.server import projects
 from materials_commons.cli.server.downloader.file_download_manager import FileDownloadManager
 from materials_commons.cli.user_config import Config
+from materials_commons.cli.walk import async_listdir
 
 
 class Downloader:
@@ -22,7 +23,7 @@ class Downloader:
                                                          mcurl=self.config.default_remote.mcurl,
                                                          apitoken=self.config.default_remote.mcapikey,
                                                          max_concurrent=3)
-        self.async_reconciler = AsyncReconciler(db=db, proj=proj, recompute_checksum=True)
+        self.async_reconciler = AsyncReconciler(db=db, proj=proj, recompute_checksum=True, listdir_fn=async_listdir)
         self.tasks: list[Task[None]] = []
 
     async def start_workers(self):

@@ -106,3 +106,136 @@ class LocalProject(models.Project):
         super().__init__(data)
         self.remote = remote
         self.local_path = local_path
+
+
+@dataclass
+class LSEntry:
+    name: str
+    l_updated_at: Optional[float] = None
+    l_size: Optional[int] = None
+    l_type: Optional[str] = None
+    l_id: Optional[int] = None
+    r_updated_at: Optional[int] = None
+    r_size: Optional[int] = None
+    r_type: Optional[str] = None
+    r_id: Optional[int] = None
+    eq: Optional[str] = None
+
+    @classmethod
+    def from_file_entry(cls, entry: FileEntry) -> 'LSEntry':
+        if entry.local_entry and entry.remote_entry:
+            return cls.local_and_remote_entry(entry)
+        elif entry.local_entry:
+            return cls.local_only_entry(entry)
+        elif entry.remote_entry:
+            return cls.remote_only_entry(entry)
+        else:
+            raise ValueError("FileEntry must have either local or remote entry")
+
+    @classmethod
+    def local_and_remote_entry(cls, entry: FileEntry) -> 'LSEntry':
+        checksums_equal = entry.file_decision.updated_record.local_checksum == entry.remote_entry.checksum
+        mtime = entry.file_decision.updated_record.local_mtime_ns / 1_000_000_000
+        return cls(
+            name=entry.local_entry.name,
+            l_updated_at=mtime,
+            l_size=entry.file_decision.updated_record.local_size,
+            l_type="D" if entry.local_entry.is_dir else "F",
+            l_id=entry.file_decision.updated_record.remote_file_id,
+            r_updated_at=entry.remote_entry.updated_at,
+            r_size=entry.remote_entry.size,
+            r_type="D" if entry.remote_entry.mime_type == "directory" else "F",
+            r_id=entry.remote_entry.id,
+            eq="eq" if checksums_equal else None
+        )
+
+    @classmethod
+    def local_only_entry(cls, entry: FileEntry) -> 'LSEntry':
+        local_id: Optional[int] = None
+        if entry.file_decision.updated_record.remote_file_id is not None:
+            local_id = entry.file_decision.updated_record.remote_file_id
+        mtime = entry.file_decision.updated_record.local_mtime_ns / 1_000_000_000
+        return cls(
+            name=entry.local_entry.name,
+            l_updated_at=mtime,
+            l_size=entry.file_decision.updated_record.local_size,
+            l_type="D" if entry.local_entry.is_dir else "F",
+            l_id=local_id,
+            r_updated_at=None,
+            r_size=None,
+            r_type=None,
+            r_id=None,
+            eq=None
+        )
+
+    @classmethod
+    def remote_only_entry(cls, entry: FileEntry) -> 'LSEntry':
+        r_type = "D" if entry.remote_entry.mime_type == "directory" else "F"
+        return cls(
+            name=entry.remote_entry.name,
+            l_updated_at=None,
+            l_size=None,
+            l_type=None,
+            l_id=None,
+            r_updated_at=entry.remote_entry.updated_at,
+            r_size=entry.remote_entry.size,
+            r_type=r_type,
+            r_id=entry.remote_entry.id,
+            eq=None
+        )
+
+
+@dataclass
+class LSAction:
+    name: str
+    local_remote: str
+    action: str
+    reason: str
+    l_type: str
+    r_type: str
+
+    @classmethod
+    def from_file_entry(cls, entry: FileEntry) -> 'LSAction':
+        action = entry.file_decision.action
+        if action == "db_update":
+            action = "preserve"
+        reason = entry.file_decision.reason
+
+        if entry.local_entry and entry.remote_entry:
+            l_type = "D" if entry.local_entry.is_dir else "F"
+            r_type = "D" if entry.remote_entry.mime_type == "directory" else "F"
+            if r_type == "D" and l_type == "D":
+                reason = "local and remote directories exist"
+                action = "skip"
+            return cls(
+                name=entry.local_entry.name,
+                local_remote='L/R',
+                action=action,
+                reason=reason,
+                l_type=l_type,
+                r_type=r_type,
+            )
+        elif entry.local_entry:
+            l_type = "D" if entry.local_entry.is_dir else "F"
+            r_type = "-"
+            if l_type == "F":
+                action = "upload"
+            return cls(
+                name=entry.local_entry.name,
+                local_remote='L',
+                action=action,
+                reason=reason,
+                l_type=l_type,
+                r_type=r_type,
+            )
+        else:
+            l_type = "-"
+            r_type = "D" if entry.remote_entry.mime_type == "directory" else "F"
+            return cls(
+                name=entry.remote_entry.name,
+                local_remote='R',
+                action=action,
+                reason=reason,
+                l_type=l_type,
+                r_type=r_type,
+            )

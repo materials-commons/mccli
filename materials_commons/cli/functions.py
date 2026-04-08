@@ -103,7 +103,7 @@ def epoch_time(time_value):
         return str(type(time_value))
 
 
-def format_time(time_value, fmt="%Y %b %d %H:%M:%S"):
+def format_time(time_value, fmt="%Y %b %d %H:%M:%S") -> str:
     """Attempts to put various time representations into specified format for printing
 
     Args:
@@ -482,7 +482,9 @@ def make_local_project(path, data=None):
         checktime = time.time()
         try:
             if data is None:
+                print("call get_project 2")
                 proj = client.get_project(project_config.project_id)
+                print("call get_project done 2")
             else:
                 proj = models.Project(data=data)
         except requests.exceptions.ConnectionError as e:

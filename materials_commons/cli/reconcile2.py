@@ -14,7 +14,7 @@ from materials_commons.cli.filedb import FileIndexDB
 from materials_commons.cli.functions import checksum_async
 from materials_commons.cli.models import FileRecord, LocalObserved, LocalProject, FileEntry, FileDecision
 from materials_commons.cli.server import projects
-from materials_commons.cli.walk import async_walk, IgnoreFunc, DirEntryInfo, ListDirFunc
+from materials_commons.cli.walk import async_walk, IgnoreFunc, ListDirFunc
 
 
 def reconcile_file(

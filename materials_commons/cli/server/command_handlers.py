@@ -1,5 +1,13 @@
 import asyncio
+import threading
+import time
+from dataclasses import asdict
 from typing import Dict, Any, Callable, Awaitable, Optional
+
+import requests
+
+from materials_commons.cli.filedb import FileIndexDB, to_project_db_path
+
 from materials_commons.cli import server
 import os
 import signal
@@ -7,8 +15,14 @@ import logging
 from pathlib import Path
 from datetime import datetime
 
+import materials_commons.api as mcapi
+
+from materials_commons.cli.functions import make_local_project_client
+from materials_commons.cli.models import LSAction, FileEntry
+from materials_commons.cli.reconcile2 import AsyncReconciler
 from materials_commons.cli.run import run_command_stream, CommandOutputLine
 from materials_commons.cli.server import projects
+from materials_commons.cli.walk import async_listdir
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +39,7 @@ def register_handlers() -> Dict[str, CommandHandler]:
         "LIST_DIRECTORY": handle_list_directory,
         "LIST_PROJECTS": handle_list_projects,
         "LIST_PROJECT_DIRECTORY": handle_list_project_directory,
+        "LIST_PROJECT_DIRECTORY_ACTIONS": handle_list_project_directory_actions,
 
         # Upload commands
         "UPLOAD_FILE": handle_upload_file,
@@ -61,16 +76,73 @@ async def handle_shutdown(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] shutdown -> {cmd}")
     os.kill(os.getpid(), signal.SIGINT)
 
+def do_get_project():
+    client = mcapi.Client(apikey="tDhjlsXtqzlvXKXG87v7SaXf8Ei1rMq04JfoxDE57ZuGggNQvJvbRH5uaFPO", base_url="https://spelljammer/api")
+    # client.set_debug_on()
+    start = time.perf_counter()
+    print(f"thread entered: {threading.current_thread().name} @ {start}")
+    print("before get_project 438")
+    resp = requests.get("https://spelljammer/api/projects/438",
+                        stream=True,
+                        verify=False,
+                        headers={"Authorization": "Bearer tDhjlsXtqzlvXKXG87v7SaXf8Ei1rMq04JfoxDE57ZuGggNQvJvbRH5uaFPO"})
+    print("headers in", time.perf_counter() - start)
+    start = time.perf_counter()
+    body = resp.content
+    print("body in", time.perf_counter() - start)
+    # client.get_project(438)
+    print("past get_project 438")
+
+
+async def handle_list_project_directory_actions(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
+    print(f"[handler] list_project_directory_actions -> {cmd}")
+    payload = cmd.get("payload") or {}
+    request_id = payload.get("request_id")
+    project_path = payload.get("project_path")
+    project_id = payload.get("project_id")
+
+    proj = projects.get_local_project_by_id(project_id)
+    if not proj or not project_path:
+        await queue.put({
+            "command": "LIST_PROJECT_DIRECTORY_ACTIONS",
+            "payload": {"request_id": request_id, "files": []}
+        })
+        return
+    response_payload = {"files": [], "request_id": request_id}
+
+    project_dir_path = Path(proj["project_dir_path"])
+    local_project_path = projects.remote_to_local_project_path(project_dir_path, Path(project_path))
+    proj = await projects.get_local_project(local_project_path.as_posix())
+    db = await FileIndexDB.create(to_project_db_path(proj.local_path))
+    def build_files(file_entries: dict[str, FileEntry]) -> list[dict]:
+        """
+        Build a list of file entries as dictionaries for the response payload. Because this can
+        be expensive to run on the event loop, it is offloaded to a thread.
+        """
+        files_list = []
+        for entry_name in sorted(file_entries):
+            entry = file_entries[entry_name]
+            files_list.append(asdict(LSAction.from_file_entry(entry)))
+        return files_list
+
+    async_reconciler = AsyncReconciler(db=db, proj=proj, recompute_checksum=False, listdir_fn=async_listdir)
+    files = []
+    async for current_path, entries in async_reconciler.walk(path=local_project_path, recursive=False, ignore_fn=None):
+        # run build_files in a thread to avoid blocking the event loop
+        files.extend(await asyncio.to_thread(build_files, entries))
+
+    response_payload["files"] = files
+    await queue.put({"command": "LIST_PROJECT_DIRECTORY_ACTIONS", "payload": response_payload})
+
 
 async def handle_list_project_directory(queue: asyncio.Queue, cmd: Dict[str, any]) -> None:
     print(f"[handler] list_project_directory -> {cmd}")
     payload = cmd.get("payload") or {}
-
     request_id = payload.get("request_id")
     response_payload = {"files": [], "request_id": request_id}
-
     project_path = payload.get("project_path")
     project_id = payload.get("project_id")
+
     proj = projects.get_local_project_by_id(project_id)
     if not proj or not project_path:
         print("not proj or project_path")
@@ -80,6 +152,8 @@ async def handle_list_project_directory(queue: asyncio.Queue, cmd: Dict[str, any
     project_dir_path = Path(proj["project_dir_path"])
     local_project_path = projects.remote_to_local_project_path(project_dir_path, Path(project_path))
     print(f"[handler] list_project_directory local_project_path = {local_project_path}")
+
+    # This should be moved off the event loop. We should also do this in an async_walk.
     files = []
     try:
         for entry in local_project_path.iterdir():
@@ -434,41 +508,51 @@ async def handle_resume_download(queue: asyncio.Queue, cmd: Dict[str, Any]) -> N
 async def handle_cancel_download(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] cancel_download -> {cmd}")
 
+
 async def handle_search_files(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] search_files -> {cmd}")
     payload = cmd.get("payload") or {}
     await _handle_run_query_command(queue=queue, cmd="rg", args="-i", resp_cmd="SEARCH_FILES", payload=payload)
+
 
 async def handle_search_files_at_path(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] search_files_at_path -> {cmd}")
     payload = cmd.get("payload") or {}
     await _handle_run_query_command(queue=queue, cmd="rg", args="-i", resp_cmd="SEARCH_FILES_AT_PATH", payload=payload)
 
+
 async def handle_find_files(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] find_files -> {cmd}")
     payload = cmd.get("payload") or {}
     await _handle_run_query_command(queue=queue, cmd="fd", args="-i", resp_cmd="FIND_FILES", payload=payload)
+
 
 async def handle_find_files_at_path(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] find_files_at_path -> {cmd}")
     payload = cmd.get("payload") or {}
     await _handle_run_query_command(queue=queue, cmd="fd", args="-i", resp_cmd="FIND_FILES_AT_PATH", payload=payload)
 
-async def _handle_run_query_command(queue: asyncio.Queue, cmd: str, args: str, resp_cmd: str, payload: Dict[Any, Any]) -> None:
+
+async def _handle_run_query_command(queue: asyncio.Queue, cmd: str, args: str, resp_cmd: str,
+                                    payload: Dict[Any, Any]) -> None:
     request_id = payload.get("request_id")
     project_id = payload.get("project_id")
     query = payload.get("query")
     response_payload = {"matches": [], "request_id": request_id}
     path = _get_path_for_cmd(project_id, payload)
 
+    if not path:
+        await queue.put({"command": resp_cmd, "payload": response_payload})
+        return
+
     matches = []
     async for event in run_command_stream(cmd, args, query, path):
         if isinstance(event, CommandOutputLine):
-            print(event.line)
             matches.append(event.line)
     response_payload["matches"] = matches
     print(f"[handler] {resp_cmd} response: {response_payload}")
     await queue.put({"command": resp_cmd, "payload": response_payload})
+
 
 def _get_path_for_cmd(project_id: Optional[str], payload: Dict[str, Any]) -> str:
     if project_id:
