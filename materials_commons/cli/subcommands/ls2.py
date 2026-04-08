@@ -33,6 +33,8 @@ class LSTable:
             self._print_full_table()
 
     def _print_full_table(self):
+        # Headers:
+        #   ['l_updated_at', 'l_size', 'l_type', 'l_id', 'r_updated_at', 'r_size', 'r_type', 'r_id', 'eq', 'name']
         rows = [[
             "-" if entry.l_updated_at is None else format_time(entry.l_updated_at, fmt="%b %d  %Y"),
             "-" if entry.l_size is None else humanize(entry.l_size),
@@ -48,11 +50,13 @@ class LSTable:
         print(tabulate(rows, headers=self._full_headers))
 
     def _print_action_table(self):
-        # [entry.local_entry.name, l_type, r_type, "L/R", action, reason]
+        # Headers:
+        #   ['name', 'l_type', 'r_type', 'local/remote', 'action', 'reason']
         rows = [[
             entry.name,
             entry.l_type,
             entry.r_type,
+            entry.local_remote,
             entry.action,
             entry.reason,
         ] for entry in self._action_rows]

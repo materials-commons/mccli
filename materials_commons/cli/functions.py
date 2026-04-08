@@ -482,9 +482,7 @@ def make_local_project(path, data=None):
         checktime = time.time()
         try:
             if data is None:
-                print("call get_project 2")
                 proj = client.get_project(project_config.project_id)
-                print("call get_project done 2")
             else:
                 proj = models.Project(data=data)
         except requests.exceptions.ConnectionError as e:
