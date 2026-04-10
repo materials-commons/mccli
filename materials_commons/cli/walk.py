@@ -1,110 +1,13 @@
 import asyncio
 import os
-from dataclasses import dataclass
-from datetime import timezone
 from pathlib import Path
-from typing import AsyncIterator, Callable, Optional, Awaitable, Protocol
+from typing import AsyncIterator, Callable, Optional, Awaitable
 
-from materials_commons.api import models
+from materials_commons.cli.models import LocalProject, DirEntryInfo, LocalDirEntryInfo, RemoteDirEntryInfo
 from materials_commons.cli.server import projects
 
-from materials_commons.cli.models import LocalProject
-
-
-@dataclass(frozen=True)
-class EntryStatInfo:
-    size: int
-    mtime_ns: int
-    ctime_ns: int
-
-
-class DirEntryInfo(Protocol):
-    @property
-    def path(self) -> Path: ...
-
-    @property
-    def name(self) -> str: ...
-
-    @property
-    def is_dir(self) -> bool: ...
-
-    @property
-    def is_file(self) -> bool: ...
-
-    @property
-    def is_symlink(self) -> bool: ...
-
-    def stat(self) -> EntryStatInfo: ...
-
-
 IgnoreFunc = Callable[[Path, bool], bool]
-VisitorFunc = Callable[[Path, list[DirEntryInfo]], Awaitable[None]]
 ListDirFunc = Callable[[Path], Awaitable[list[DirEntryInfo]]]
-
-
-@dataclass
-class LocalDirEntryInfo:
-    entry: os.DirEntry
-
-    @property
-    def path(self) -> Path:
-        return Path(self.entry.path)
-
-    @property
-    def name(self) -> str:
-        return self.entry.name
-
-    @property
-    def is_dir(self) -> bool:
-        return self.entry.is_dir(follow_symlinks=False)
-
-    @property
-    def is_file(self) -> bool:
-        return self.entry.is_file(follow_symlinks=False)
-
-    @property
-    def is_symlink(self) -> bool:
-        return self.entry.is_symlink()
-
-    def stat(self) -> EntryStatInfo:
-        sinfo = self.entry.stat()
-        return EntryStatInfo(
-            size=sinfo.st_size,
-            mtime_ns=sinfo.st_mtime_ns,
-            ctime_ns=sinfo.st_ctime_ns,
-        )
-
-
-@dataclass
-class RemoteDirEntryInfo:
-    remote_file: models.File
-
-    @property
-    def path(self) -> Path:
-        return Path(self.remote_file.directory.path) / self.remote_file.name
-
-    @property
-    def name(self) -> str:
-        return self.remote_file.name
-
-    @property
-    def is_dir(self) -> bool:
-        return self.remote_file.mime_type == "directory"
-
-    @property
-    def is_file(self) -> bool:
-        return self.remote_file.mime_type != "directory"
-
-    @property
-    def is_symlink(self) -> bool:
-        return False
-
-    def stat(self) -> EntryStatInfo:
-        return EntryStatInfo(
-            size=self.remote_file.size,
-            ctime_ns=int(self.remote_file.created_at.replace(tzinfo=timezone.utc).timestamp() * 1_000_000_000),
-            mtime_ns=int(self.remote_file.updated_at.replace(tzinfo=timezone.utc).timestamp() * 1_000_000_000),
-        )
 
 
 async def async_walk(
