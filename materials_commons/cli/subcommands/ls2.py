@@ -7,7 +7,7 @@ from tabulate import tabulate
 from materials_commons.cli.filedb import FileIndexDB, to_project_db_path
 from materials_commons.cli.functions import humanize, format_time
 from materials_commons.cli.models import LSAction, LSEntry, FileEntry
-from materials_commons.cli.reconcile2 import AsyncReconciler
+from materials_commons.cli.async_reconciler import AsyncReconciler
 from materials_commons.cli.server import projects
 from materials_commons.cli.walk import local_listdir
 

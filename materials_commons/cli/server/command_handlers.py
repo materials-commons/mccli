@@ -19,7 +19,7 @@ import materials_commons.api as mcapi
 
 from materials_commons.cli.functions import make_local_project_client
 from materials_commons.cli.models import LSAction, FileEntry
-from materials_commons.cli.reconcile2 import AsyncReconciler
+from materials_commons.cli.async_reconciler import AsyncReconciler
 from materials_commons.cli.run import run_command_stream, CommandOutputLine
 from materials_commons.cli.server import projects
 from materials_commons.cli.walk import local_listdir

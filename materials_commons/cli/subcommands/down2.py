@@ -5,7 +5,8 @@ from pathlib import Path
 
 from materials_commons.cli.filedb import FileIndexDB, to_project_db_path
 from materials_commons.cli.models import LocalProject
-from materials_commons.cli.reconcile2 import AsyncReconciler, FileEntry, observe_and_reconcile_to_file_entry
+from materials_commons.cli.reconcile2 import FileEntry, observe_and_reconcile_to_file_entry
+from materials_commons.cli.async_reconciler import AsyncReconciler
 from materials_commons.cli.server import projects
 from materials_commons.cli.server.downloader.file_download_manager import FileDownloadManager
 from materials_commons.cli.user_config import Config
