@@ -23,7 +23,7 @@ class Downloader:
                                                          mcurl=self.config.default_remote.mcurl,
                                                          apitoken=self.config.default_remote.mcapikey,
                                                          max_concurrent=3)
-        self.async_reconciler = AsyncReconciler(db=db, proj=proj, recompute_checksum=True, listdir_fn=local_listdir)
+        self.async_reconciler = AsyncReconciler(db=db, proj=proj, recompute_checksum=True)
         self.tasks: list[Task[None]] = []
 
     async def start_workers(self):
@@ -46,8 +46,8 @@ class Downloader:
         await self._download_file_entry(file_entry)
 
     async def download_dir(self, path: str, recursive: bool = False, ignore_fn=None):
-        async for current_path, entries in self.async_reconciler.walk(path=path, recursive=recursive,
-                                                                      ignore_fn=ignore_fn):
+        async for current_path, entries in self.async_reconciler.walk(path=path, listdir_fn=local_listdir,
+                                                                      recursive=recursive, ignore_fn=ignore_fn):
             for entry in entries.values():
                 await self._download_file_entry(entry)
 

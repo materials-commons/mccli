@@ -473,16 +473,15 @@ class AsyncReconciler:
     def __init__(self,
                  proj: LocalProject,
                  db: FileIndexDB,
-                 listdir_fn: ListDirFunc,
                  recompute_checksum: bool = True,
                  max_concurrent: int = 10):
         self.proj = proj
         self.db = db
         self.recompute_checksum = recompute_checksum
         self.max_concurrent = max_concurrent
-        self.listdir_fn = listdir_fn
 
-    async def walk(self, path: str | Path, recursive: bool = False, ignore_fn: Optional[IgnoreFunc] = None) -> \
+    async def walk(self, path: str | Path, listdir_fn: ListDirFunc, recursive: bool = False,
+                   ignore_fn: Optional[IgnoreFunc] = None) -> \
             AsyncIterator[tuple[Path, dict[str, FileEntry]]]:
         sem = asyncio.Semaphore(self.max_concurrent)
 
@@ -502,7 +501,7 @@ class AsyncReconciler:
                                                     remote_entry=e.remote_entry,
                                                     recompute_checksum=self.recompute_checksum)
 
-        async for current_path, entries in async_walk(path, recursive=recursive, listdir_fn=self.listdir_fn,
+        async for current_path, entries in async_walk(path, recursive=recursive, listdir_fn=listdir_fn,
                                                       ignore_fn=ignore_fn):
             path_entries: dict[str, FileEntry] = {}
             remote_dir = projects.local_to_remote_project_path(Path(self.proj.local_path), Path(current_path))

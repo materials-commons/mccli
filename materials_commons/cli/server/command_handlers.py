@@ -76,8 +76,10 @@ async def handle_shutdown(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] shutdown -> {cmd}")
     os.kill(os.getpid(), signal.SIGINT)
 
+
 def do_get_project():
-    client = mcapi.Client(apikey="tDhjlsXtqzlvXKXG87v7SaXf8Ei1rMq04JfoxDE57ZuGggNQvJvbRH5uaFPO", base_url="https://spelljammer/api")
+    client = mcapi.Client(apikey="tDhjlsXtqzlvXKXG87v7SaXf8Ei1rMq04JfoxDE57ZuGggNQvJvbRH5uaFPO",
+                          base_url="https://spelljammer/api")
     # client.set_debug_on()
     start = time.perf_counter()
     print(f"thread entered: {threading.current_thread().name} @ {start}")
@@ -85,7 +87,8 @@ def do_get_project():
     resp = requests.get("https://spelljammer/api/projects/438",
                         stream=True,
                         verify=False,
-                        headers={"Authorization": "Bearer tDhjlsXtqzlvXKXG87v7SaXf8Ei1rMq04JfoxDE57ZuGggNQvJvbRH5uaFPO"})
+                        headers={
+                            "Authorization": "Bearer tDhjlsXtqzlvXKXG87v7SaXf8Ei1rMq04JfoxDE57ZuGggNQvJvbRH5uaFPO"})
     print("headers in", time.perf_counter() - start)
     start = time.perf_counter()
     body = resp.content
@@ -114,6 +117,7 @@ async def handle_list_project_directory_actions(queue: asyncio.Queue, cmd: Dict[
     local_project_path = projects.remote_to_local_project_path(project_dir_path, Path(project_path))
     proj = await projects.get_local_project(local_project_path.as_posix())
     db = await FileIndexDB.create(to_project_db_path(proj.local_path))
+
     def build_files(file_entries: dict[str, FileEntry]) -> list[dict]:
         """
         Build a list of file entries as dictionaries for the response payload. Because this can
@@ -125,9 +129,10 @@ async def handle_list_project_directory_actions(queue: asyncio.Queue, cmd: Dict[
             files_list.append(asdict(LSAction.from_file_entry(entry)))
         return files_list
 
-    async_reconciler = AsyncReconciler(db=db, proj=proj, recompute_checksum=False, listdir_fn=local_listdir)
+    async_reconciler = AsyncReconciler(db=db, proj=proj, recompute_checksum=False)
     files = []
-    async for current_path, entries in async_reconciler.walk(path=local_project_path, recursive=False, ignore_fn=None):
+    async for current_path, entries in async_reconciler.walk(path=local_project_path, listdir_fn=local_listdir,
+                                                             recursive=False, ignore_fn=None):
         # run build_files in a thread to avoid blocking the event loop
         files.extend(await asyncio.to_thread(build_files, entries))
 

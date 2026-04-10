@@ -86,9 +86,10 @@ async def ls2_subcommand_async(args, working_dir):
     db = await FileIndexDB.create(to_project_db_path(proj.local_path))
     lstable = LSTable()
 
-    async_reconciler = AsyncReconciler(db=db, proj=proj, recompute_checksum=args.checksum, listdir_fn=local_listdir)
+    async_reconciler = AsyncReconciler(db=db, proj=proj, recompute_checksum=args.checksum)
     for path in args.paths:
-        async for current_path, path_entries in async_reconciler.walk(path=path, recursive=False, ignore_fn=None):
+        async for current_path, path_entries in async_reconciler.walk(path=path, listdir_fn=local_listdir,
+                                                                      recursive=False, ignore_fn=None):
             if args.action:
                 for entry_name in sorted(path_entries):
                     entry = path_entries[entry_name]
