@@ -155,7 +155,7 @@ async def async_walk(
             stack.extend(entry.path for entry in reversed(filtered) if entry.is_dir)
 
 
-async def async_listdir(path: str | Path) -> list[DirEntryInfo]:
+async def local_listdir(path: str | Path) -> list[DirEntryInfo]:
     """Asynchronously list the contents of a directory.
 
     Args:
@@ -234,10 +234,10 @@ def make_merged_listdir_func(proj: LocalProject) -> ListDirFunc:
     remote_listdir_fn = make_remote_listdir_func(proj)
 
     async def _merged_listdir(path: Path) -> list[DirEntryInfo]:
-        return await merged_listdir(local_listdir_fn=async_listdir,
-                                    remote_listdir_fn=remote_listdir_fn,
-                                    proj=proj,
-                                    path=path)
+        return await merged_local_remote_listdir(local_listdir_fn=local_listdir,
+                                                 remote_listdir_fn=remote_listdir_fn,
+                                                 proj=proj,
+                                                 path=path)
 
     return _merged_listdir
 

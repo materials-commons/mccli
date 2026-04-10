@@ -22,7 +22,7 @@ from materials_commons.cli.models import LSAction, FileEntry
 from materials_commons.cli.reconcile2 import AsyncReconciler
 from materials_commons.cli.run import run_command_stream, CommandOutputLine
 from materials_commons.cli.server import projects
-from materials_commons.cli.walk import async_listdir
+from materials_commons.cli.walk import local_listdir
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +125,7 @@ async def handle_list_project_directory_actions(queue: asyncio.Queue, cmd: Dict[
             files_list.append(asdict(LSAction.from_file_entry(entry)))
         return files_list
 
-    async_reconciler = AsyncReconciler(db=db, proj=proj, recompute_checksum=False, listdir_fn=async_listdir)
+    async_reconciler = AsyncReconciler(db=db, proj=proj, recompute_checksum=False, listdir_fn=local_listdir)
     files = []
     async for current_path, entries in async_reconciler.walk(path=local_project_path, recursive=False, ignore_fn=None):
         # run build_files in a thread to avoid blocking the event loop

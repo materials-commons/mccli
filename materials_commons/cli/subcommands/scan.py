@@ -10,7 +10,7 @@ from materials_commons.cli.server import projects
 from materials_commons.cli.server.db.db_manager import DBManager
 from materials_commons.cli.server.indexer.file_index_manager import FileIndexManager
 from materials_commons.cli.server.project_filedbs import ProjectFileDBs
-from materials_commons.cli.walk import async_walk, make_ignore_func
+from materials_commons.cli.walk import async_walk, make_ignore_func, local_listdir
 
 
 def scan_subcommand(argv, working_dir):
@@ -81,7 +81,8 @@ async def stop_workers(queue: asyncio.Queue, workers: list[Task[None]], manager)
 async def scan_files_async(project_root, mc_path, file_index_queue, ignore_parser, proj):
     """Scan files and directories in a project asynchronously"""
     ignore_fn = make_ignore_func(ignore_parser, project_root)
-    async for path, entries in async_walk(path=project_root, recursive=True, ignore_fn=ignore_fn):
+    async for path, entries in async_walk(path=project_root, recursive=True, ignore_fn=ignore_fn,
+                                          listdir_fn=local_listdir):
         remote_dir = projects.local_to_remote_project_path(Path(project_root), Path(path))
         remote_entries = await projects.list_remote_project_dir_by_path(proj.remote, proj.id, remote_dir.as_posix())
         for entry in entries:

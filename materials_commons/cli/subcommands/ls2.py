@@ -9,7 +9,7 @@ from materials_commons.cli.functions import humanize, format_time
 from materials_commons.cli.models import LSAction, LSEntry, FileEntry
 from materials_commons.cli.reconcile2 import AsyncReconciler
 from materials_commons.cli.server import projects
-from materials_commons.cli.walk import async_listdir
+from materials_commons.cli.walk import local_listdir
 
 
 class LSTable:
@@ -86,7 +86,7 @@ async def ls2_subcommand_async(args, working_dir):
     db = await FileIndexDB.create(to_project_db_path(proj.local_path))
     lstable = LSTable()
 
-    async_reconciler = AsyncReconciler(db=db, proj=proj, recompute_checksum=args.checksum, listdir_fn=async_listdir)
+    async_reconciler = AsyncReconciler(db=db, proj=proj, recompute_checksum=args.checksum, listdir_fn=local_listdir)
     for path in args.paths:
         async for current_path, path_entries in async_reconciler.walk(path=path, recursive=False, ignore_fn=None):
             if args.action:
