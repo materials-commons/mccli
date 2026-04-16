@@ -2,7 +2,7 @@ import os
 from dataclasses import dataclass
 from datetime import timezone
 from pathlib import Path
-from typing import Literal, Optional, Protocol
+from typing import Literal, Optional
 
 from materials_commons.api import client as mcapi
 from materials_commons.api import models
@@ -15,88 +15,40 @@ class EntryStatInfo:
     ctime_ns: int
 
 
-class DirEntryInfo(Protocol):
-    @property
-    def path(self) -> Path: ...
-
-    @property
-    def name(self) -> str: ...
-
-    @property
-    def is_dir(self) -> bool: ...
-
-    @property
-    def is_file(self) -> bool: ...
-
-    @property
-    def is_symlink(self) -> bool: ...
-
-    def stat(self) -> EntryStatInfo: ...
-
-
 @dataclass
-class LocalDirEntryInfo:
-    entry: os.DirEntry
-
-    @property
-    def path(self) -> Path:
-        return Path(self.entry.path)
-
-    @property
-    def name(self) -> str:
-        return self.entry.name
+class FileEntry:
+    path: Path
+    name: str
+    is_remote: bool
+    raw_entry: models.File | os.DirEntry
+    _stat_info: Optional[EntryStatInfo] = None
 
     @property
     def is_dir(self) -> bool:
-        return self.entry.is_dir(follow_symlinks=False)
+        if not self.is_remote:
+            return self.raw_entry.mime_type == "directory"
+        else:
+            return self.raw_entry.is_dir(follow_symlinks=False)
 
-    @property
     def is_file(self) -> bool:
-        return self.entry.is_file(follow_symlinks=False)
-
-    @property
-    def is_symlink(self) -> bool:
-        return self.entry.is_symlink()
+        return not self.is_dir
 
     def stat(self) -> EntryStatInfo:
-        sinfo = self.entry.stat()
-        return EntryStatInfo(
-            size=sinfo.st_size,
-            mtime_ns=sinfo.st_mtime_ns,
-            ctime_ns=sinfo.st_ctime_ns,
-        )
-
-
-@dataclass
-class RemoteDirEntryInfo:
-    remote_file: models.File
-
-    @property
-    def path(self) -> Path:
-        return Path(self.remote_file.directory.path) / self.remote_file.name
-
-    @property
-    def name(self) -> str:
-        return self.remote_file.name
-
-    @property
-    def is_dir(self) -> bool:
-        return self.remote_file.mime_type == "directory"
-
-    @property
-    def is_file(self) -> bool:
-        return self.remote_file.mime_type != "directory"
-
-    @property
-    def is_symlink(self) -> bool:
-        return False
-
-    def stat(self) -> EntryStatInfo:
-        return EntryStatInfo(
-            size=self.remote_file.size,
-            ctime_ns=int(self.remote_file.created_at.replace(tzinfo=timezone.utc).timestamp() * 1_000_000_000),
-            mtime_ns=int(self.remote_file.updated_at.replace(tzinfo=timezone.utc).timestamp() * 1_000_000_000),
-        )
+        if not self._stat_info:
+            if self.is_remote:
+                self._stat_info = EntryStatInfo(
+                    size=self.raw_entry.size,
+                    ctime_ns=int(self.raw_entry.created_at.replace(tzinfo=timezone.utc).timestamp() * 1_000_000_000),
+                    mtime_ns=int(self.raw_entry.updated_at.replace(tzinfo=timezone.utc).timestamp() * 1_000_000_000),
+                )
+            else:
+                sinfo = self.raw_entry.stat()
+                self._stat_info = EntryStatInfo(
+                    size=sinfo.st_size,
+                    ctime_ns=int(sinfo.st_ctime_ns),
+                    mtime_ns=int(sinfo.st_mtime_ns),
+                )
+        return self._stat_info
 
 
 @dataclass(frozen=True)
@@ -123,15 +75,170 @@ class FileRecord:
     transfer_id: Optional[str] = None
 
 
+EntryKind = Literal["file", "dir"]
+
+
 @dataclass
 class RemoteFileEntry:
-    path: str
-    dir: str
+    raw: models.File
+    path: Path
     name: str
+    kind: Optional[EntryKind]
+    size: Optional[int]
+    mtime_ns: Optional[int]
+    ctime_ns: Optional[int]
     remote_file_id: Optional[int] = None
-    remote_size: Optional[int] = None
-    remote_ctime_ns: Optional[int] = None
-    remote_checksum: Optional[str] = None
+    checksum: Optional[str] = None
+
+    @property
+    def is_dir(self) -> bool:
+        return self.kind == "dir"
+
+    @property
+    def is_file(self) -> bool:
+        return self.kind == "file"
+
+
+@dataclass
+class LocalFileEntry:
+    raw: os.DirEntry
+    path: Path
+    name: str
+    kind: Optional[EntryKind]
+    is_symlink: bool
+    size: Optional[int]
+    mtime_ns: Optional[int]
+    ctime_ns: Optional[int]
+
+    @property
+    def is_dir(self) -> bool:
+        return self.kind == "dir"
+
+    @property
+    def is_file(self) -> bool:
+        return self.kind == "file"
+
+
+@dataclass
+class WalkObservation:
+    local_path: Optional[Path] = None
+    remote_path: Optional[Path] = None
+
+    file_record: Optional[FileRecord] = None
+    local_entry: Optional[LocalFileEntry] = None
+    remote_entry: Optional[RemoteFileEntry] = None
+
+    @property
+    def name(self) -> str:
+        if self.local_entry:
+            return self.local_entry.name
+        if self.remote_entry:
+            return self.remote_entry.name
+        if self.file_record:
+            return self.file_record.name
+        raise ValueError("No name source")
+
+    @property
+    def path(self) -> Path:
+        if self.local_entry:
+            return self.local_entry.path
+        if self.remote_entry:
+            return self.remote_entry.path
+        if self.file_record:
+            return Path(self.file_record.path)
+        raise ValueError("No path source")
+
+    def has_local(self) -> bool:
+        return self.local_entry is not None
+
+    def has_remote(self) -> bool:
+        return self.remote_entry is not None
+
+    def has_record(self) -> bool:
+        return self.file_record is not None
+
+    def local_is_symlink(self) -> bool:
+        return self.local_entry is not None and self.local_entry.is_symlink
+
+    @property
+    def is_dir(self) -> bool:
+        if self.local_entry is not None and self.local_entry.kind == "dir":
+            return True
+        if self.remote_entry is not None and self.remote_entry.kind == "dir":
+            return True
+        return False
+
+    def is_file(self) -> bool:
+        if self.local_entry is not None and self.local_entry.kind == "file":
+            return True
+        if self.remote_entry is not None and self.remote_entry.kind == "file":
+            return True
+        return False
+
+    def local_kind(self) -> Optional[EntryKind]:
+        if self.local_entry:
+            return self.local_entry.kind
+        else:
+            return None
+
+    def remote_kind(self) -> Optional[EntryKind]:
+        if self.remote_entry:
+            return self.remote_entry.kind
+        else:
+            return None
+
+    def kinds_match(self) -> bool:
+        if self.local_kind() is None or self.remote_kind() is None:
+            return False
+        if self.local_entry.kind is None:
+            return False
+        return self.local_entry.kind == self.remote_entry.kind
+
+    def has_kind_conflict(self) -> bool:
+        return self.has_local() and self.has_remote() and not self.kinds_match()
+
+    def local_entry_matches_record(self, include_checksum: bool = False) -> bool:
+        if self.local_entry is None or self.file_record is None:
+            return False
+
+        matches = (
+                self.local_entry.size == self.file_record.local_size
+                and self.local_entry.mtime_ns == self.file_record.local_mtime_ns
+                and self.local_entry.ctime_ns == self.file_record.local_ctime_ns
+        )
+
+        if include_checksum:
+            matches = matches and (
+                    self.file_record.local_checksum is not None
+            )
+
+        return matches
+
+    def remote_entry_matches_record(self, include_checksum: bool = False) -> bool:
+        if self.remote_entry is None or self.file_record is None:
+            return False
+
+        matches = (
+                self.remote_entry.size == self.file_record.remote_size
+                and self.remote_entry.ctime_ns == self.file_record.remote_ctime_ns
+        )
+
+        if include_checksum:
+            matches = matches and (
+                    self.remote_entry.checksum is not None
+                    and self.remote_entry.checksum == self.file_record.remote_checksum
+            )
+
+        return matches
+
+    def local_is_stale(self, include_checksum: bool = False) -> bool:
+        return self.has_record() and self.has_local() and not self.local_entry_matches_record(include_checksum)
+
+    def remote_is_stale(self, include_checksum: bool = False) -> bool:
+        return self.has_record() and self.has_remote() and not self.remote_entry_matches_record(include_checksum)
+
+    def record_is_stale(self, include_checksum: bool = False) -> bool:
+        return self.local_is_stale(include_checksum) or self.remote_is_stale(include_checksum)
 
 
 @dataclass
@@ -185,16 +292,16 @@ class FileDecision:
 
 
 @dataclass
-class FileEntry:
-    # name: str
-    # local_path: Path
-    # local_observed: Optional[LocalObserved]
-    # local_entry: Optional[DirEntryInfo]
-    local_entry: Optional[LocalObserved]
-    remote_entry: Optional[models.File]
-    file_record: Optional[FileRecord]
-    file_decision: Optional[FileDecision]
+class FileState:
+    observation: WalkObservation
+    file_decision: Optional[FileDecision] = None
     exception: Optional[Exception] = None
+
+
+@dataclass(frozen=True)
+class DirectorySnapshot:
+    path: Path
+    entries: dict[str, FileState]
 
 
 class LocalProject(models.Project):
@@ -211,51 +318,52 @@ class LSEntry:
     l_size: Optional[int] = None
     l_type: Optional[str] = None
     l_id: Optional[int] = None
-    r_updated_at: Optional[int] = None
+    r_updated_at: Optional[float] = None
     r_size: Optional[int] = None
     r_type: Optional[str] = None
     r_id: Optional[int] = None
     eq: Optional[str] = None
 
     @classmethod
-    def from_file_entry(cls, entry: FileEntry) -> 'LSEntry':
-        if entry.local_entry and entry.remote_entry:
-            return cls.local_and_remote_entry(entry)
-        elif entry.local_entry:
-            return cls.local_only_entry(entry)
-        elif entry.remote_entry:
-            return cls.remote_only_entry(entry)
+    def from_file_state(cls, state: FileState) -> 'LSEntry':
+        if state.observation.local_entry and state.observation.remote_entry:
+            return cls.local_and_remote_entry(state)
+        elif state.observation.local_entry:
+            return cls.local_only_state(state)
+        elif state.observation.remote_entry:
+            return cls.remote_only_state(state)
         else:
             raise ValueError("FileEntry must have either local or remote entry")
 
     @classmethod
-    def local_and_remote_entry(cls, entry: FileEntry) -> 'LSEntry':
-        checksums_equal = entry.file_decision.updated_record.local_checksum == entry.remote_entry.checksum
-        mtime = entry.file_decision.updated_record.local_mtime_ns / 1_000_000_000
+    def local_and_remote_entry(cls, state: FileState) -> 'LSEntry':
+        checksums_equal = state.file_decision.updated_record.local_checksum == state.observation.remote_entry.checksum
+        l_mtime = state.file_decision.updated_record.local_mtime_ns / 1_000_000_000
+        r_mtime = state.observation.remote_entry.mtime_ns / 1_000_000_000
         return cls(
-            name=entry.local_entry.name,
-            l_updated_at=mtime,
-            l_size=entry.file_decision.updated_record.local_size,
-            l_type="D" if entry.local_entry.is_dir else "F",
-            l_id=entry.file_decision.updated_record.remote_file_id,
-            r_updated_at=entry.remote_entry.updated_at,
-            r_size=entry.remote_entry.size,
-            r_type="D" if entry.remote_entry.mime_type == "directory" else "F",
-            r_id=entry.remote_entry.id,
+            name=state.observation.local_entry.name,
+            l_updated_at=l_mtime,
+            l_size=state.file_decision.updated_record.local_size,
+            l_type="D" if state.observation.local_entry.is_dir else "F",
+            l_id=state.file_decision.updated_record.remote_file_id,
+            r_updated_at=r_mtime,
+            r_size=state.observation.remote_entry.size,
+            r_type="D" if state.observation.remote_entry.is_dir else "F",
+            r_id=state.observation.remote_entry.raw.id,
             eq="eq" if checksums_equal else None
         )
 
     @classmethod
-    def local_only_entry(cls, entry: FileEntry) -> 'LSEntry':
+    def local_only_state(cls, state: FileState) -> 'LSEntry':
         local_id: Optional[int] = None
-        if entry.file_decision.updated_record.remote_file_id is not None:
-            local_id = entry.file_decision.updated_record.remote_file_id
-        mtime = entry.file_decision.updated_record.local_mtime_ns / 1_000_000_000
+        if state.file_decision.updated_record.remote_file_id is not None:
+            local_id = state.file_decision.updated_record.remote_file_id
+        mtime = state.file_decision.updated_record.local_mtime_ns / 1_000_000_000
         return cls(
-            name=entry.local_entry.name,
+            name=state.observation.local_entry.name,
             l_updated_at=mtime,
-            l_size=entry.file_decision.updated_record.local_size,
-            l_type="D" if entry.local_entry.is_dir else "F",
+            l_size=state.file_decision.updated_record.local_size,
+            l_type="D" if state.observation.local_entry.is_dir else "F",
             l_id=local_id,
             r_updated_at=None,
             r_size=None,
@@ -265,18 +373,19 @@ class LSEntry:
         )
 
     @classmethod
-    def remote_only_entry(cls, entry: FileEntry) -> 'LSEntry':
-        r_type = "D" if entry.remote_entry.mime_type == "directory" else "F"
+    def remote_only_state(cls, state: FileState) -> 'LSEntry':
+        r_type = "D" if state.observation.remote_entry.is_dir else "F"
+        r_mtime = state.observation.remote_entry.mtime_ns / 1_000_000_000
         return cls(
-            name=entry.remote_entry.name,
+            name=state.observation.remote_entry.name,
             l_updated_at=None,
             l_size=None,
             l_type=None,
             l_id=None,
-            r_updated_at=entry.remote_entry.updated_at,
-            r_size=entry.remote_entry.size,
+            r_updated_at=r_mtime,
+            r_size=state.observation.remote_entry.size,
             r_type=r_type,
-            r_id=entry.remote_entry.id,
+            r_id=state.observation.remote_entry.raw.id,
             eq=None
         )
 
@@ -291,33 +400,35 @@ class LSAction:
     r_type: str
 
     @classmethod
-    def from_file_entry(cls, entry: FileEntry) -> 'LSAction':
-        action = entry.file_decision.action
+    def from_file_state(cls, state: FileState) -> 'LSAction':
+        action = state.file_decision.action
         if action == "db_update":
             action = "preserve"
-        reason = entry.file_decision.reason
+        reason = state.file_decision.reason
 
-        if entry.local_entry and entry.remote_entry:
-            l_type = "D" if entry.local_entry.is_dir else "F"
-            r_type = "D" if entry.remote_entry.mime_type == "directory" else "F"
+        if state.observation.local_entry and state.observation.remote_entry:
+            # Both local and remote exist
+            l_type = "D" if state.observation.local_entry.is_dir else "F"
+            r_type = "D" if state.observation.remote_entry.is_dir else "F"
             if r_type == "D" and l_type == "D":
                 reason = "local and remote directories exist"
                 action = "skip"
             return cls(
-                name=entry.local_entry.name,
+                name=state.observation.local_entry.name,
                 local_remote='L/R',
                 action=action,
                 reason=reason,
                 l_type=l_type,
                 r_type=r_type,
             )
-        elif entry.local_entry:
-            l_type = "D" if entry.local_entry.is_dir else "F"
+        elif state.observation.local_entry:
+            # Only local exists
+            l_type = "D" if state.observation.local_entry.is_dir else "F"
             r_type = "-"
             if l_type == "F":
                 action = "upload"
             return cls(
-                name=entry.local_entry.name,
+                name=state.observation.local_entry.name,
                 local_remote='L',
                 action=action,
                 reason=reason,
@@ -325,10 +436,11 @@ class LSAction:
                 r_type=r_type,
             )
         else:
+            # Only remote exists
             l_type = "-"
-            r_type = "D" if entry.remote_entry.mime_type == "directory" else "F"
+            r_type = "D" if state.observation.remote_entry.is_dir else "F"
             return cls(
-                name=entry.remote_entry.name,
+                name=state.observation.remote_entry.name,
                 local_remote='R',
                 action=action,
                 reason=reason,

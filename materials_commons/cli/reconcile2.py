@@ -11,7 +11,7 @@ from materials_commons.api import models
 
 from materials_commons.cli.filedb import FileIndexDB
 from materials_commons.cli.functions import checksum_async
-from materials_commons.cli.models import FileRecord, LocalObserved, LocalProject, FileEntry, FileDecision
+from materials_commons.cli.models import FileRecord, LocalObserved, LocalProject, FileState, FileDecision
 from materials_commons.cli.server import projects
 
 
@@ -301,7 +301,7 @@ def build_updated_record(
     """
     Placeholder for merging current observations into a new FileRecord.
     """
-    return FileRecord(
+    updated = FileRecord(
         path=path,
         dir=os.path.dirname(path),
         name=os.path.basename(path),
@@ -322,6 +322,8 @@ def build_updated_record(
         status=status if status is not None else (record.status if record else None),
         transfer_id=record.transfer_id if record else None,
     )
+
+    return updated
 
 
 async def observe_and_reconcile(db: FileIndexDB,
@@ -440,7 +442,7 @@ async def safe_stat(path: str) -> Optional[os.stat_result]:
 async def observe_and_reconcile_to_file_entry(db: FileIndexDB,
                                               proj: LocalProject,
                                               file_path: str,
-                                              recompute_checksum: bool = True) -> FileEntry:
+                                              recompute_checksum: bool = True) -> FileState:
     project_path = projects.local_to_remote_project_path(Path(proj.local_path), Path(file_path))
 
     remote_entry = await projects.get_remote_file_by_path(proj.remote, proj.id, project_path.as_posix())
@@ -457,7 +459,7 @@ async def observe_and_reconcile_to_file_entry(db: FileIndexDB,
                               local_observed=local_observed,
                               now_ts=int(datetime.now(timezone.utc).timestamp()))
 
-    file_entry = FileEntry(
+    file_entry = FileState(
         remote_entry=remote_entry,
         local_entry=local_observed if local_observed.exists else None,
         file_decision=decision,
@@ -465,5 +467,3 @@ async def observe_and_reconcile_to_file_entry(db: FileIndexDB,
     )
 
     return file_entry
-
-

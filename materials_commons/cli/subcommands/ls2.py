@@ -6,10 +6,10 @@ from tabulate import tabulate
 
 from materials_commons.cli.filedb import FileIndexDB, to_project_db_path
 from materials_commons.cli.functions import humanize, format_time
-from materials_commons.cli.models import LSAction, LSEntry, FileEntry
+from materials_commons.cli.models import LSAction, LSEntry, FileState
 from materials_commons.cli.async_reconciler import AsyncReconciler
 from materials_commons.cli.server import projects
-from materials_commons.cli.walk import local_listdir
+from materials_commons.cli.walk import local_listdir, make_merged_listdir_func
 
 
 class LSTable:
@@ -20,11 +20,11 @@ class LSTable:
         self._action_rows: list[LSAction] = []
         self._full_rows: list[LSEntry] = []
 
-    def add_action_row(self, entry: FileEntry):
-        self._action_rows.append(LSAction.from_file_entry(entry))
-
-    def add_full_row(self, entry: FileEntry):
-        self._full_rows.append(LSEntry.from_file_entry(entry))
+    def add_row(self, entry: LSAction | LSEntry):
+        if isinstance(entry, LSAction):
+            self._action_rows.append(entry)
+        else:
+            self._full_rows.append(entry)
 
     def print_table(self):
         if self._action_rows:
@@ -87,15 +87,12 @@ async def ls2_subcommand_async(args, working_dir):
     lstable = LSTable()
 
     async_reconciler = AsyncReconciler(db=db, proj=proj, recompute_checksum=args.checksum)
+    which_class = LSAction if args.action else LSEntry
+    listdir_fn = make_merged_listdir_func(proj)
     for path in args.paths:
-        async for current_path, path_entries in async_reconciler.walk(path=path, listdir_fn=local_listdir,
+        async for current_path, path_entries in async_reconciler.walk(path=path, listdir_fn=listdir_fn,
                                                                       recursive=False, ignore_fn=None):
-            if args.action:
-                for entry_name in sorted(path_entries):
-                    entry = path_entries[entry_name]
-                    lstable.add_action_row(entry)
-            else:
-                for entry_name in sorted(path_entries):
-                    entry = path_entries[entry_name]
-                    lstable.add_full_row(entry)
+            for entry_name in sorted(path_entries):
+                entry = path_entries[entry_name]
+                lstable.add_row(which_class.from_file_state(entry))
             lstable.print_table()

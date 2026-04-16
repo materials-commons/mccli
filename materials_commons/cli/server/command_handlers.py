@@ -18,7 +18,7 @@ from datetime import datetime
 import materials_commons.api as mcapi
 
 from materials_commons.cli.functions import make_local_project_client
-from materials_commons.cli.models import LSAction, FileEntry
+from materials_commons.cli.models import LSAction, FileState
 from materials_commons.cli.async_reconciler import AsyncReconciler
 from materials_commons.cli.run import run_command_stream, CommandOutputLine
 from materials_commons.cli.server import projects
@@ -118,7 +118,7 @@ async def handle_list_project_directory_actions(queue: asyncio.Queue, cmd: Dict[
     proj = await projects.get_local_project(local_project_path.as_posix())
     db = await FileIndexDB.create(to_project_db_path(proj.local_path))
 
-    def build_files(file_entries: dict[str, FileEntry]) -> list[dict]:
+    def build_files(file_entries: dict[str, FileState]) -> list[dict]:
         """
         Build a list of file entries as dictionaries for the response payload. Because this can
         be expensive to run on the event loop, it is offloaded to a thread.
@@ -126,7 +126,7 @@ async def handle_list_project_directory_actions(queue: asyncio.Queue, cmd: Dict[
         files_list = []
         for entry_name in sorted(file_entries):
             entry = file_entries[entry_name]
-            files_list.append(asdict(LSAction.from_file_entry(entry)))
+            files_list.append(asdict(LSAction.from_file_state(entry)))
         return files_list
 
     async_reconciler = AsyncReconciler(db=db, proj=proj, recompute_checksum=False)

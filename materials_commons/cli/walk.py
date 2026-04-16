@@ -1,13 +1,14 @@
 import asyncio
 import os
+from datetime import timezone
 from pathlib import Path
 from typing import AsyncIterator, Callable, Optional, Awaitable
 
-from materials_commons.cli.models import LocalProject, DirEntryInfo, LocalDirEntryInfo, RemoteDirEntryInfo
+from materials_commons.cli.models import LocalProject, WalkObservation, LocalFileEntry, RemoteFileEntry, EntryKind
 from materials_commons.cli.server import projects
 
 IgnoreFunc = Callable[[Path, bool], bool]
-ListDirFunc = Callable[[Path], Awaitable[list[DirEntryInfo]]]
+ListDirFunc = Callable[[Path], Awaitable[list[WalkObservation]]]
 
 
 async def async_walk(
@@ -15,8 +16,8 @@ async def async_walk(
         listdir_fn: ListDirFunc,
         recursive: bool = True,
         ignore_fn: Optional[IgnoreFunc] = None,
-) -> AsyncIterator[tuple[Path, list[DirEntryInfo]]]:
-    """Asynchronously walk a directory tree, yielding DirEntryInfo objects for each directory and file.
+) -> AsyncIterator[tuple[Path, list[WalkObservation]]]:
+    """Asynchronously walk a directory tree, yielding WalkObservation objects for each directory and file.
 
     Args:
         path: The root directory to start the walk from.
@@ -25,9 +26,9 @@ async def async_walk(
         ignore_fn: An optional function to ignore directories or files.
 
     Returns:
-        An async iterator yielding tuples of (Path, list[DirEntryInfo]) for each directory visited.
-        The list contains DirEntryInfo objects for each file and directory within the directory.
-        Path is the current directory that list[DirEntryInfo] entries belong to.
+        An async iterator yielding tuples of (Path, list[WalkObservation]) for each directory visited.
+        The list contains WalkObservation objects for each file and directory within the directory.
+        Path is the current directory that list[WalkObservation] entries belong to.
         The iterator stops when all directories have been visited.
     """
     root = Path(path)
@@ -38,10 +39,10 @@ async def async_walk(
         if ignore_fn and ignore_fn(current, True):
             continue
 
-        entries = await listdir_fn(current)
+        observations = await listdir_fn(current)
 
-        filtered: list[DirEntryInfo] = []
-        for entry in entries:
+        filtered: list[WalkObservation] = []
+        for entry in observations:
             if _default_files_to_ignore(entry.path):
                 continue
 
@@ -58,7 +59,7 @@ async def async_walk(
             stack.extend(entry.path for entry in reversed(filtered) if entry.is_dir)
 
 
-async def local_listdir(path: str | Path) -> list[DirEntryInfo]:
+async def local_listdir(path: str | Path) -> list[WalkObservation]:
     """Asynchronously list the contents of a directory.
 
     Args:
@@ -67,25 +68,99 @@ async def local_listdir(path: str | Path) -> list[DirEntryInfo]:
 
     # scan encapsulates os.scandir() which is not async. We need a function to wrap it that we can
     # call asyncio.to_thread on to run it.
-    def _scan():
-        items = []
+    def _scan() -> list[WalkObservation]:
+
+        items: list[WalkObservation] = []
+
         with os.scandir(path) as entries:
             for entry in entries:
-                items.append(LocalDirEntryInfo(entry))
+                is_symlink = entry.is_symlink()
+                size = None
+                mtime_ns = None
+                ctime_ns = None
+                kind = None
+                try:
+                    sinfo = entry.stat(follow_symlinks=False)
+                    size = sinfo.st_size
+                    mtime_ns = sinfo.st_mtime_ns
+                    ctime_ns = sinfo.st_ctime_ns
+                except OSError:
+                    pass
+
+                try:
+                    if is_symlink:
+                        if entry.is_dir(follow_symlinks=True):
+                            kind = "dir"
+                        elif entry.is_file(follow_symlinks=True):
+                            kind = "file"
+                        else:
+                            kind = None
+                    else:
+                        if entry.is_dir(follow_symlinks=False):
+                            kind = "dir"
+                        elif entry.is_file(follow_symlinks=False):
+                            kind = "file"
+                        else:
+                            kind = None
+                except Exception as e:
+                    kind = None
+
+                local = LocalFileEntry(
+                    path=Path(entry.path),
+                    name=entry.name,
+                    kind=kind,
+                    is_symlink=is_symlink,
+                    size=size,
+                    mtime_ns=mtime_ns,
+                    ctime_ns=ctime_ns,
+                    raw=entry,
+                )
+                items.append(
+                    WalkObservation(
+                        local_path=Path(entry.path),
+                        remote_path=None,
+                        local_entry=local,
+                        file_record=None,
+                        remote_entry=None,
+                    )
+                )
         return items
 
     return await asyncio.to_thread(_scan)
 
 
-async def remote_listdir(project_path: str | Path, proj: LocalProject) -> list[DirEntryInfo]:
+async def remote_listdir(project_path: str | Path, proj: LocalProject) -> list[WalkObservation]:
     """Asynchronously list the contents of a remote directory.
 
     Args:
         project_path: The path within the project to list directory contents of.
         proj: The local project object representing the remote project.
     """
-    entries = await asyncio.to_thread(proj.remote.list_directory_by_path, proj.id, project_path)
-    return [RemoteDirEntryInfo(entry) for entry in entries]
+    entries = await asyncio.to_thread(proj.remote.list_directory_by_path, proj.id, project_path.as_posix())
+    items: list[WalkObservation] = []
+    for entry in entries:
+        kind: EntryKind = "dir" if entry.mime_type == "directory" else "file"
+        remote_entry = RemoteFileEntry(
+            path=Path(entry.directory.path) / entry.name,
+            name=entry.name,
+            kind=kind,
+            size=entry.size,
+            mtime_ns=int(entry.updated_at.replace(tzinfo=timezone.utc).timestamp() * 1_000_000_000),
+            ctime_ns=int(entry.created_at.replace(tzinfo=timezone.utc).timestamp() * 1_000_000_000),
+            remote_file_id=getattr(entry, "id", None),
+            checksum=getattr(entry, "checksum", None),
+            raw=entry,
+        )
+        items.append(
+            WalkObservation(
+                local_path=None,
+                remote_path=Path(entry.path),
+                local_entry=None,
+                file_record=None,
+                remote_entry=remote_entry,
+            )
+        )
+    return items
 
 
 def make_remote_listdir_func(proj: LocalProject) -> ListDirFunc:
@@ -99,18 +174,18 @@ def make_remote_listdir_func(proj: LocalProject) -> ListDirFunc:
         An asynchronous function that lists directory contents of a remote project.
     """
 
-    async def _remote_listdir(path: Path) -> list[DirEntryInfo]:
+    async def _remote_listdir(path: Path) -> list[WalkObservation]:
         return await remote_listdir(path, proj)
 
     return _remote_listdir
 
 
 async def merged_local_remote_listdir(
-        local_listdir_fn: Callable[[Path], Awaitable[list[DirEntryInfo]]],
-        remote_listdir_fn: Callable[[Path], Awaitable[list[DirEntryInfo]]],
+        local_listdir_fn: Callable[[Path], Awaitable[list[WalkObservation]]],
+        remote_listdir_fn: Callable[[Path], Awaitable[list[WalkObservation]]],
         proj: LocalProject,
         path: Path,
-) -> list[DirEntryInfo]:
+) -> list[WalkObservation]:
     """
     Merge local and remote directory listings, prioritizing local entries.
     """
@@ -118,16 +193,26 @@ async def merged_local_remote_listdir(
     project_path = projects.local_to_remote_project_path(Path(proj.local_path), path)
     remote_entries = await remote_listdir_fn(project_path)
 
-    seen = {entry.name for entry in local_entries}
+    local_by_name = {obs.name: obs for obs in local_entries}
+    remote_by_name = {obs.name: obs for obs in remote_entries}
 
-    merged = list(local_entries)
-    for entry in remote_entries:
-        key = entry.name
-        if key not in seen:
-            merged.append(entry)
-            seen.add(key)
+    merged: list[WalkObservation] = []
 
-    return sorted(merged, key=lambda entry: entry.name.lower())
+    names = set(local_by_name) | set(remote_by_name)
+    for name in sorted(names, key=lambda s: s.lower()):
+        local_obs = local_by_name.get(name)
+        remote_obs = remote_by_name.get(name)
+        merged.append(
+            WalkObservation(
+                local_path=local_obs.local_path if local_obs else None,
+                remote_path=project_path / name,
+                file_record=None,
+                local_entry=local_obs.local_entry if local_obs else None,
+                remote_entry=remote_obs.remote_entry if remote_obs else None,
+            )
+        )
+
+    return merged
 
 
 def make_merged_listdir_func(proj: LocalProject) -> ListDirFunc:
@@ -136,7 +221,7 @@ def make_merged_listdir_func(proj: LocalProject) -> ListDirFunc:
     """
     remote_listdir_fn = make_remote_listdir_func(proj)
 
-    async def _merged_listdir(path: Path) -> list[DirEntryInfo]:
+    async def _merged_listdir(path: Path) -> list[WalkObservation]:
         return await merged_local_remote_listdir(local_listdir_fn=local_listdir,
                                                  remote_listdir_fn=remote_listdir_fn,
                                                  proj=proj,
