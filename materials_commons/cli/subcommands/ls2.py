@@ -94,5 +94,8 @@ async def ls2_subcommand_async(args, working_dir):
                                                                       recursive=False, ignore_fn=None):
             for entry_name in sorted(path_entries):
                 entry = path_entries[entry_name]
+                if entry.exception:
+                    print(f"Error reconciling file: {entry.exception}")
+                    continue
                 lstable.add_row(which_class.from_file_state(entry))
             lstable.print_table()
