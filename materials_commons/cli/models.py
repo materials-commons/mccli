@@ -9,49 +9,6 @@ from materials_commons.api import models
 
 
 @dataclass(frozen=True)
-class EntryStatInfo:
-    size: int
-    mtime_ns: int
-    ctime_ns: int
-
-
-@dataclass
-class FileEntry:
-    path: Path
-    name: str
-    is_remote: bool
-    raw_entry: models.File | os.DirEntry
-    _stat_info: Optional[EntryStatInfo] = None
-
-    @property
-    def is_dir(self) -> bool:
-        if not self.is_remote:
-            return self.raw_entry.mime_type == "directory"
-        else:
-            return self.raw_entry.is_dir(follow_symlinks=False)
-
-    def is_file(self) -> bool:
-        return not self.is_dir
-
-    def stat(self) -> EntryStatInfo:
-        if not self._stat_info:
-            if self.is_remote:
-                self._stat_info = EntryStatInfo(
-                    size=self.raw_entry.size,
-                    ctime_ns=int(self.raw_entry.created_at.replace(tzinfo=timezone.utc).timestamp() * 1_000_000_000),
-                    mtime_ns=int(self.raw_entry.updated_at.replace(tzinfo=timezone.utc).timestamp() * 1_000_000_000),
-                )
-            else:
-                sinfo = self.raw_entry.stat()
-                self._stat_info = EntryStatInfo(
-                    size=sinfo.st_size,
-                    ctime_ns=int(sinfo.st_ctime_ns),
-                    mtime_ns=int(sinfo.st_mtime_ns),
-                )
-        return self._stat_info
-
-
-@dataclass(frozen=True)
 class FileRecord:
     path: str
     name: str

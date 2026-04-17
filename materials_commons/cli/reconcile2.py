@@ -11,8 +11,10 @@ from materials_commons.api import models
 
 from materials_commons.cli.filedb import FileIndexDB
 from materials_commons.cli.functions import checksum_async
-from materials_commons.cli.models import FileRecord, LocalObserved, LocalProject, FileState, FileDecision
+from materials_commons.cli.models import FileRecord, LocalObserved, LocalProject, FileState, FileDecision, \
+    WalkObservation
 from materials_commons.cli.server import projects
+from materials_commons.cli.walk import path_to_local_file_entry, mcapi_file_to_remote_file_entry
 
 
 def reconcile_file(
@@ -439,7 +441,7 @@ async def safe_stat(path: str) -> Optional[os.stat_result]:
         return None
 
 
-async def observe_and_reconcile_to_file_entry(db: FileIndexDB,
+async def observe_and_reconcile_to_file_state(db: FileIndexDB,
                                               proj: LocalProject,
                                               file_path: str,
                                               recompute_checksum: bool = True) -> FileState:
@@ -459,11 +461,17 @@ async def observe_and_reconcile_to_file_entry(db: FileIndexDB,
                               local_observed=local_observed,
                               now_ts=int(datetime.now(timezone.utc).timestamp()))
 
-    file_entry = FileState(
-        remote_entry=remote_entry,
-        local_entry=local_observed if local_observed.exists else None,
-        file_decision=decision,
-        file_record=file_record
+    observation = WalkObservation(
+        local_path=Path(file_path),
+        remote_path=project_path,
+        file_record=file_record,
+        local_entry=path_to_local_file_entry(Path(file_path)),
+        remote_entry=mcapi_file_to_remote_file_entry(remote_entry)
     )
 
-    return file_entry
+    file_state = FileState(
+        observation=observation,
+        file_decision=decision,
+    )
+
+    return file_state
