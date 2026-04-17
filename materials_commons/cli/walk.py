@@ -1,8 +1,9 @@
 import asyncio
-import os
 from datetime import timezone
 from pathlib import Path
 from typing import AsyncIterator, Callable, Optional, Awaitable
+
+import materials_commons.api.models as mcmodel
 
 from materials_commons.cli.models import LocalProject, WalkObservation, LocalFileEntry, RemoteFileEntry, EntryKind
 from materials_commons.cli.server import projects
@@ -59,74 +60,92 @@ async def async_walk(
             stack.extend(entry.path for entry in reversed(filtered) if entry.is_dir)
 
 
+def path_to_local_file_entry(entry: Path) -> LocalFileEntry:
+    """Convert a Path object to a LocalFileEntry object."""
+    is_symlink = entry.is_symlink()
+    size = None
+    mtime_ns = None
+    ctime_ns = None
+    kind: EntryKind | None = None
+
+    try:
+        sinfo = entry.stat()
+        size = sinfo.st_size
+        mtime_ns = sinfo.st_mtime_ns
+        ctime_ns = sinfo.st_ctime_ns
+    except OSError:
+        pass
+
+    try:
+        if is_symlink:
+            if entry.is_dir():
+                kind = "dir"
+            elif entry.is_file():
+                kind = "file"
+            else:
+                kind = None
+        else:
+            if entry.is_dir():
+                kind = "dir"
+            elif entry.is_file():
+                kind = "file"
+            else:
+                kind = None
+    except OSError:
+        kind = None
+
+    local = LocalFileEntry(
+        path=entry,
+        name=entry.name,
+        kind=kind,
+        is_symlink=is_symlink,
+        size=size,
+        mtime_ns=mtime_ns,
+        ctime_ns=ctime_ns,
+        raw=entry,
+    )
+    return local
+
+
 async def local_listdir(path: str | Path) -> list[WalkObservation]:
-    """Asynchronously list the contents of a directory.
+    """Asynchronously list the contents of a directory."""
+    root = Path(path)
 
-    Args:
-        path: The directory path to create a list of entries of.
-    """
-
-    # scan encapsulates os.scandir() which is not async. We need a function to wrap it that we can
-    # call asyncio.to_thread on to run it.
     def _scan() -> list[WalkObservation]:
-
         items: list[WalkObservation] = []
 
-        with os.scandir(path) as entries:
-            for entry in entries:
-                is_symlink = entry.is_symlink()
-                size = None
-                mtime_ns = None
-                ctime_ns = None
-                kind = None
-                try:
-                    sinfo = entry.stat(follow_symlinks=False)
-                    size = sinfo.st_size
-                    mtime_ns = sinfo.st_mtime_ns
-                    ctime_ns = sinfo.st_ctime_ns
-                except OSError:
-                    pass
+        for entry in root.iterdir():
+            local = path_to_local_file_entry(entry)
 
-                try:
-                    if is_symlink:
-                        if entry.is_dir(follow_symlinks=True):
-                            kind = "dir"
-                        elif entry.is_file(follow_symlinks=True):
-                            kind = "file"
-                        else:
-                            kind = None
-                    else:
-                        if entry.is_dir(follow_symlinks=False):
-                            kind = "dir"
-                        elif entry.is_file(follow_symlinks=False):
-                            kind = "file"
-                        else:
-                            kind = None
-                except Exception as e:
-                    kind = None
+            items.append(
+                WalkObservation(
+                    local_path=entry,
+                    remote_path=None,
+                    local_entry=local,
+                    file_record=None,
+                    remote_entry=None,
+                )
+            )
 
-                local = LocalFileEntry(
-                    path=Path(entry.path),
-                    name=entry.name,
-                    kind=kind,
-                    is_symlink=is_symlink,
-                    size=size,
-                    mtime_ns=mtime_ns,
-                    ctime_ns=ctime_ns,
-                    raw=entry,
-                )
-                items.append(
-                    WalkObservation(
-                        local_path=Path(entry.path),
-                        remote_path=None,
-                        local_entry=local,
-                        file_record=None,
-                        remote_entry=None,
-                    )
-                )
         return items
 
     return await asyncio.to_thread(_scan)
+
+
+def mcapi_file_to_remote_file_entry(entry: mcmodel.File) -> RemoteFileEntry:
+    kind: EntryKind = "dir" if entry.mime_type == "directory" else "file"
+    remote_entry = RemoteFileEntry(
+        path=Path(entry.directory.path) / entry.name,
+        name=entry.name,
+        kind=kind,
+        size=entry.size,
+        mtime_ns=int(entry.updated_at.replace(tzinfo=timezone.utc).timestamp() * 1_000_000_000),
+        ctime_ns=int(entry.created_at.replace(tzinfo=timezone.utc).timestamp() * 1_000_000_000),
+        remote_file_id=getattr(entry, "id", None),
+        checksum=getattr(entry, "checksum", None),
+        raw=entry,
+    )
+    return remote_entry
 
 
 async def remote_listdir(project_path: str | Path, proj: LocalProject) -> list[WalkObservation]:
@@ -139,18 +158,7 @@ async def remote_listdir(project_path: str | Path, proj: LocalProject) -> list[W
     entries = await asyncio.to_thread(proj.remote.list_directory_by_path, proj.id, project_path.as_posix())
     items: list[WalkObservation] = []
     for entry in entries:
-        kind: EntryKind = "dir" if entry.mime_type == "directory" else "file"
-        remote_entry = RemoteFileEntry(
-            path=Path(entry.directory.path) / entry.name,
-            name=entry.name,
-            kind=kind,
-            size=entry.size,
-            mtime_ns=int(entry.updated_at.replace(tzinfo=timezone.utc).timestamp() * 1_000_000_000),
-            ctime_ns=int(entry.created_at.replace(tzinfo=timezone.utc).timestamp() * 1_000_000_000),
-            remote_file_id=getattr(entry, "id", None),
-            checksum=getattr(entry, "checksum", None),
-            raw=entry,
-        )
+        remote_entry = mcapi_file_to_remote_file_entry(entry)
         items.append(
             WalkObservation(
                 local_path=None,

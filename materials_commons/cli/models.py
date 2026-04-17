@@ -101,7 +101,7 @@ class RemoteFileEntry:
 
 @dataclass
 class LocalFileEntry:
-    raw: os.DirEntry
+    raw: Path
     path: Path
     name: str
     kind: Optional[EntryKind]
