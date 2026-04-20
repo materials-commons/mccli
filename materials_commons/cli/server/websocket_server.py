@@ -4,20 +4,13 @@ import socket
 import ssl
 from _asyncio import Task
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional, Callable, Awaitable
+from typing import Dict, Any, Optional
 
 import websockets
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK, InvalidStatus
 
 from materials_commons.cli import server
-from materials_commons.cli.server.db.db_manager import DBManager
-from materials_commons.cli.server.downloader.file_download_manager import FileDownloadManager
-from materials_commons.cli.server.project_filedbs import ProjectFileDBs
-from materials_commons.cli.server.uploader.file_upload_manager import FileUploadManager
-from materials_commons.cli.user_config import Config
-
-# Type alias for handler functions
-CommandHandler = Callable[[Any, Dict[str, Any]], Awaitable[None]]
+from materials_commons.cli.server.command_handlers.protocol import CommandHandlerLookup
 
 
 async def cleanup_tasks(receiver_task: Task[None], sender_task: Task[Any], heartbeat_task: Task[None]):
@@ -28,9 +21,7 @@ async def cleanup_tasks(receiver_task: Task[None], sender_task: Task[Any], heart
         return_when=asyncio.FIRST_COMPLETED
     )
 
-    # If we are here, then we need to cancel both done and pending tasks.
-
-    # First we cancel pending tasks
+    # Now cancel both done and pending tasks.
     for task in pending:
         task.cancel()
         try:
@@ -38,7 +29,6 @@ async def cleanup_tasks(receiver_task: Task[None], sender_task: Task[Any], heart
         except asyncio.CancelledError:
             pass
 
-    # Next, cancel done tasks
     for task in done:
         task.cancel()
         try:
@@ -51,35 +41,16 @@ class WebSocketCommandListener:
     DEFAULT_RECONNECT_MIN_SEC = 1
     DEFAULT_RECONNECT_MAX_SEC = 30
 
-    def __init__(self, ws_url: str, token: Optional[str], client_uuid: str, handlers: Dict[str, CommandHandler],
-                 ws_send_queue: asyncio.Queue, db_write_queue: asyncio.Queue, project_dbs: ProjectFileDBs,
-                 max_concurrent: int = 3):
+    def __init__(self, ws_url: str, token: Optional[str], client_uuid: str, handler_lookup: CommandHandlerLookup,
+                 ws_send_queue: asyncio.Queue, max_concurrent: int = 3):
         self.ws_url = ws_url
         self.token = token
         self.client_uuid = client_uuid
         self.ws_send_queue = ws_send_queue
-        self.db_write_queue = db_write_queue
-        self.project_dbs = project_dbs
         self.backoff = self.DEFAULT_RECONNECT_MIN_SEC
-        self.handlers = handlers
+        self.handler_lookup = handler_lookup
         self.user_id: Optional[int] = None
         self.max_concurrent = max_concurrent
-
-        config = Config()
-
-        self.file_upload_manager = FileUploadManager(send_queue=ws_send_queue, db_write_queue=db_write_queue,
-                                                     project_dbs=project_dbs, client_id=client_uuid,
-                                                     max_concurrent=max_concurrent)
-
-        self.file_download_manager = FileDownloadManager(send_queue=ws_send_queue, client_id=client_uuid,
-                                                         mcurl=config.default_remote.mcurl,
-                                                         apitoken=config.default_remote.mcapikey,
-                                                         max_concurrent=max_concurrent)
-        self.db_manager = DBManager(db_queue=self.db_write_queue, project_dbs=self.project_dbs)
-
-        self._upload_workers: list[Task] = []
-        self._download_workers: list[Task] = []
-        self._db_workers: list[Task] = []
 
     async def run(self) -> None:
         """
@@ -89,10 +60,6 @@ class WebSocketCommandListener:
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
-
-        self._upload_workers = await self.file_upload_manager.start_workers()
-        self._download_workers = await self.file_download_manager.start_workers()
-        self._db_workers = await self.db_manager.start_workers()
 
         while True:
             headers = self.build_headers()
@@ -124,33 +91,8 @@ class WebSocketCommandListener:
 
     async def shutdown(self):
         """Shutdown the file transfer workers"""
-
-        # Stop upload workers
-        self.file_upload_manager.stop_workers()
-        for worker in self._upload_workers:
-            worker.cancel()
-            try:
-                await worker
-            except asyncio.CancelledError:
-                pass
-
-        # Stop download workers
-        self.file_download_manager.stop_workers()
-        for worker in self._download_workers:
-            worker.cancel()
-            try:
-                await worker
-            except asyncio.CancelledError:
-                pass
-
-        # Stop db workers
-        self.db_manager.stop_workers()
-        for worker in self._db_workers:
-            worker.cancel()
-            try:
-                await worker
-            except asyncio.CancelledError:
-                pass
+        # Keep for now in case we want to add shutdown logic later
+        pass
 
     async def _ws_sender_loop(self, ws):
         """Reads from the queue and sends to the websocket."""
@@ -191,7 +133,6 @@ class WebSocketCommandListener:
             except json.JSONDecodeError:
                 continue
 
-            # print(f"Received message: {data}")
             if isinstance(data, dict):
                 await self._dispatch(data)
             elif isinstance(data, list):
@@ -213,7 +154,6 @@ class WebSocketCommandListener:
             except Exception as e:
                 print(f"heartbeat loop exception: {e}")
                 pass
-        print("heartbeat loop exiting")
 
     async def _dispatch(self, cmd: Dict[str, Any]) -> None:
         kind = cmd.get("type") or cmd.get("command")
@@ -237,27 +177,31 @@ class WebSocketCommandListener:
                 self.user_id = user_id
             return
 
-        # Route file transfer messages to the FileTransferManager
-        if kind in ["TRANSFER_ACCEPT", "TRANSFER_REJECT", "CHUNK_ACK", "CHUNK_ERROR",
-                    "TRANSFER_FINALIZE", "UPLOAD_FAILED", "TRANSFER_RESUME_RESPONSE"]:
-            if self.file_upload_manager:
-                await self.file_upload_manager.handle_message(cmd)
-                return
-
-        # We have handlers for the other file transfer commands. These handlers need access
-        # to the file_transfer_manager so that they can pause/resume transfers. So we set
-        # the file_transfer_manager on the command object. This is only used for the
-        # upload and download handlers.
-        if kind in ["UPLOAD_FILE", "UPLOAD_DIRECTORY",
-                    "CANCEL_UPLOAD", "PAUSE_UPLOAD", "RESUME_UPLOAD"]:
-            cmd["_file_manager"] = self.file_upload_manager
-
-        if kind in ["DOWNLOAD_FILE", "CANCEL_DOWNLOAD", "PAUSE_DOWNLOAD", "RESUME_DOWNLOAD"]:
-            cmd["_file_manager"] = self.file_download_manager
-
-        handler = self.handlers.get(kind)
+        handler = self.handler_lookup.get_handler(kind)
         if handler:
             await handler(self.ws_send_queue, cmd)
+
+        # # Route file transfer messages to the FileTransferManager
+        # if kind in ["TRANSFER_ACCEPT", "TRANSFER_REJECT", "CHUNK_ACK", "CHUNK_ERROR",
+        #             "TRANSFER_FINALIZE", "UPLOAD_FAILED", "TRANSFER_RESUME_RESPONSE"]:
+        #     if self.file_upload_manager:
+        #         await self.file_upload_manager.handle_message(cmd)
+        #         return
+        #
+        # # We have handlers for the other file transfer commands. These handlers need access
+        # # to the file_transfer_manager so that they can pause/resume transfers. So we set
+        # # the file_transfer_manager on the command object. This is only used for the
+        # # upload and download handlers.
+        # if kind in ["UPLOAD_FILE", "UPLOAD_DIRECTORY",
+        #             "CANCEL_UPLOAD", "PAUSE_UPLOAD", "RESUME_UPLOAD"]:
+        #     cmd["_file_manager"] = self.file_upload_manager
+        #
+        # if kind in ["DOWNLOAD_FILE", "CANCEL_DOWNLOAD", "PAUSE_DOWNLOAD", "RESUME_DOWNLOAD"]:
+        #     cmd["_file_manager"] = self.file_download_manager
+        #
+        # handler = self.handlers.get(kind)
+        # if handler:
+        #     await handler(self.ws_send_queue, cmd)
 
     def build_headers(self) -> Dict[str, str]:
         headers = {}

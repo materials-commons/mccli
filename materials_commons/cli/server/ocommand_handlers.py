@@ -31,8 +31,8 @@ CommandHandler = Callable[[Any, Dict[str, Any]], Awaitable[None]]
 
 def register_handlers() -> Dict[str, CommandHandler]:
     return {
-        "sync": handle_sync,
-        "refresh_cache": handle_refresh_cache,
+        "SYNC": handle_sync,
+        "REFRESH_CACHE": handle_refresh_cache,
         "SHUTDOWN": handle_shutdown,
 
         # List commands
@@ -140,7 +140,7 @@ async def handle_list_project_directory_actions(queue: asyncio.Queue, cmd: Dict[
     await queue.put({"command": "LIST_PROJECT_DIRECTORY_ACTIONS", "payload": response_payload})
 
 
-async def handle_list_project_directory(queue: asyncio.Queue, cmd: Dict[str, any]) -> None:
+async def handle_list_project_directory(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] list_project_directory -> {cmd}")
     payload = cmd.get("payload") or {}
     request_id = payload.get("request_id")

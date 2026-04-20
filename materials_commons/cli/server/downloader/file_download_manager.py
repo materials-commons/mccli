@@ -19,15 +19,15 @@ class FileDownloadManager:
         self.download_queue: asyncio.Queue = asyncio.Queue()
         self.results: Dict[str, bool] = {}
         self._workers_running = False
+        self._worker_tasks: list[asyncio.Task] = []
 
-    async def start_workers(self):
+    async def start_workers(self) -> None:
         """Start background workers to process download queue"""
         self._workers_running = True
-        workers = [
+        self._worker_tasks = [
             asyncio.create_task(self._download_worker(i))
             for i in range(self.max_concurrent)
         ]
-        return workers
 
     async def _download_worker(self, worker_id: int):
         """Worker that processes downloads from queue"""
@@ -136,6 +136,12 @@ class FileDownloadManager:
             for downloader in self.active_downloads.values()
         ]
 
-    def stop_workers(self):
+    async def stop_workers(self):
         """Stop all worker tasks"""
         self._workers_running = False
+        for worker in self._worker_tasks:
+            worker.cancel()
+            try:
+                await worker
+            except asyncio.CancelledError:
+                pass

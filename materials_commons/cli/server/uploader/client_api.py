@@ -6,8 +6,11 @@ from typing import List
 import websockets
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK, InvalidStatus
 
-from materials_commons.cli.server.command_handlers import register_handlers
+from materials_commons.cli.server.command_handlers.upload_handler_lookup import UploadHandlerLookup
+from materials_commons.cli.server.db.db_manager import DBManager
+from materials_commons.cli.server.ocommand_handlers import register_handlers
 from materials_commons.cli.server.project_filedbs import ProjectFileDBs
+from materials_commons.cli.server.uploader.file_upload_manager import FileUploadManager
 from materials_commons.cli.server.websocket_server import WebSocketCommandListener
 from materials_commons.cli.user_config import Config
 
@@ -41,21 +44,22 @@ async def ws_upload(
     db_write_queue = asyncio.Queue()
     project_dbs = ProjectFileDBs()
 
+    file_upload_manager = FileUploadManager(send_queue=send_queue, db_write_queue=db_write_queue,
+                                            project_dbs=project_dbs, client_id=config.client_uuid)
+    await file_upload_manager.start_workers()
+
+    db_manager = DBManager(db_queue=db_write_queue, project_dbs=project_dbs)
+    await db_manager.start_workers()
+
     # Create websocket listener
     listener = WebSocketCommandListener(
         ws_url=ws_url,
         token=config.default_remote.mcapikey,
         client_uuid=config.client_uuid,
-        handlers=register_handlers(),
+        handler_lookup=UploadHandlerLookup(file_upload_manager),
         ws_send_queue=send_queue,
-        db_write_queue=db_write_queue,
-        project_dbs=project_dbs,
         max_concurrent=max_concurrent
     )
-
-    # Start upload workers
-    upload_workers = await listener.file_upload_manager.start_workers()
-    db_workers = await listener.db_manager.start_workers()
 
     # Setup SSL context
     ssl_context = ssl.create_default_context()
@@ -87,7 +91,7 @@ async def ws_upload(
 
             transfer_ids = []
             for file_path, project_path in zip(file_paths, project_paths):
-                transfer_id = await listener.file_upload_manager.upload_file(
+                transfer_id = await file_upload_manager.upload_file(
                     file_path=file_path,
                     project_id=project_id,
                     project_path=project_path,
@@ -100,11 +104,10 @@ async def ws_upload(
 
             # Wait for all uploads to complete
             logger.info("Waiting for uploads to complete...")
-            await listener.file_upload_manager.wait_all()
+            await file_upload_manager.wait_all()
 
             # Cancel sender/receiver tasks
             sender_task.cancel()
-
             try:
                 await sender_task
             except asyncio.CancelledError:
@@ -118,12 +121,12 @@ async def ws_upload(
 
             # Check results for each upload
             for transfer_id in transfer_ids:
-                success = listener.file_upload_manager.results.get(transfer_id, False)
+                success = file_upload_manager.results.get(transfer_id, False)
                 if not success:
                     # At least one upload failed so return False
                     return False
 
-            # If we are here then all uploads succeeded
+            # If we are here, then all uploads succeeded
             return True
 
     except (ConnectionClosedOK, ConnectionClosedError, InvalidStatus, OSError, asyncio.TimeoutError) as e:
@@ -134,25 +137,10 @@ async def ws_upload(
         # Shutdown gracefully
         logger.info("Shutting down websocket infrastructure...")
 
-        # Shutdown the websocket listener
+        # Shutdown the websocket listener and all workers
         await listener.shutdown()
-
-        # # Stop upload workers
-        # for worker in upload_workers:
-        #     worker.cancel()
-        #     try:
-        #         await worker
-        #     except asyncio.CancelledError:
-        #         # Ignore errors from canceled workers. We are exiting anyway.
-        #         pass
-        #
-        # await db_manager.stop_workers()
-        # for worker in db_workers:
-        #     worker.cancel()
-        #     try:
-        #         await worker
-        #     except asyncio.CancelledError:
-        #         pass
+        await file_upload_manager.stop_workers()
+        await db_manager.stop_workers()
 
 
 def ws_upload_synchronous(
@@ -175,7 +163,7 @@ def ws_upload_synchronous(
         project_id (int): The unique identifier of the project associated with the upload.
         ws_url (str): The WebSocket URL used for the upload connection. Defaults to "wss://materialscommons.org/ws".
         chunk_size (int): The size of file chunks to be uploaded concurrently. Defaults to 1 MiB.
-        max_concurrent (int): The maximum number of concurrent uploads allowed. Defaults to 3.
+        max_concurrent (int): The maximum number of concurrent uploads that are allowed. Defaults to 3.
 
     Returns:
         bool: True if the upload was successful, False otherwise.

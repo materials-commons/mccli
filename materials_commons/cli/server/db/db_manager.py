@@ -15,11 +15,11 @@ class DBManager:
         self._db_queue = db_queue
         self._project_dbs = project_dbs
         self._workers_running = False
+        self._worker_tasks: list[asyncio.Task] = []
 
-    async def start_workers(self):
+    async def start_workers(self) -> None:
         self._workers_running = True
-        workers = [asyncio.create_task(self._db_queue_worker())]
-        return workers
+        self._worker_tasks = [asyncio.create_task(self._db_queue_worker())]
 
     async def _db_queue_worker(self):
         while self._workers_running:
@@ -46,5 +46,11 @@ class DBManager:
             finally:
                 self._db_queue.task_done()
 
-    def stop_workers(self):
+    async def stop_workers(self):
         self._workers_running = False
+        for worker in self._worker_tasks:
+            worker.cancel()
+            try:
+                await worker
+            except asyncio.CancelledError:
+                pass

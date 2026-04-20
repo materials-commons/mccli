@@ -1,7 +1,6 @@
 import asyncio
 import json
 import os
-import stat
 import threading
 from pathlib import Path
 from typing import Optional
@@ -11,7 +10,6 @@ from materials_commons.api import models
 
 from materials_commons.cli.filedb import FileIndexDB
 from materials_commons.cli.functions import make_local_project
-from materials_commons.cli.reconcile2 import safe_stat
 
 # Cache list of projects
 _projects = None
@@ -202,9 +200,14 @@ async def get_local_project(path: str):
 
 async def is_dir(db: FileIndexDB, proj: models.Project, path: str) -> bool:
     # First check if the path exists locally
-    sinfo = await safe_stat(path)
-    if sinfo is not None:
-        return stat.S_ISDIR(sinfo.st_mode)
+    try:
+        p = Path(path)
+        return p.is_dir()
+    except Exception:
+        pass
+    # sinfo = await safe_stat(path)
+    # if sinfo is not None:
+    #     return stat.S_ISDIR(sinfo.st_mode)
 
     # Next, check if the path exists in the database
     remote_entry = await db.get_file_by_path(path)
