@@ -2,7 +2,7 @@ import asyncio
 from pathlib import Path
 
 from materials_commons.cli.filedb import FileIndexDB
-from materials_commons.cli.functions import project_path
+from materials_commons.cli.old.functions import project_path
 from materials_commons.cli.server import projects
 
 

@@ -2,8 +2,8 @@ import os
 import time
 import unittest
 
-import materials_commons.cli.functions as clifuncs
-from materials_commons.cli.user_config import Config
+import materials_commons.cli.old.functions as clifuncs
+from materials_commons.cli.old.user_config import Config
 from .cli_test_project import test_project_directory, rmdir_if, remove_hidden_project_files
 
 class TestFunctions(unittest.TestCase):

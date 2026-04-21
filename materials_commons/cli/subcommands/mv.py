@@ -1,11 +1,9 @@
 import argparse
-import os
-import sys
 
-import materials_commons.cli.exceptions as cliexcept
-import materials_commons.cli.functions as clifuncs
-import materials_commons.cli.tree_functions as treefuncs
-from materials_commons.cli.treedb import RemoteTree
+import materials_commons.cli.old.exceptions as cliexcept
+import materials_commons.cli.old.functions as clifuncs
+import materials_commons.cli.old.tree_functions as treefuncs
+from materials_commons.cli.old.treedb import RemoteTree
 
 def make_parser():
     """Make argparse.ArgumentParser for `mc mv`"""

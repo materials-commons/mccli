@@ -8,11 +8,10 @@ from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK, Inv
 
 from materials_commons.cli.server.command_handlers.upload_handler_lookup import UploadHandlerLookup
 from materials_commons.cli.server.db.db_manager import DBManager
-from materials_commons.cli.server.ocommand_handlers import register_handlers
 from materials_commons.cli.server.project_filedbs import ProjectFileDBs
 from materials_commons.cli.server.uploader.file_upload_manager import FileUploadManager
 from materials_commons.cli.server.websocket_server import WebSocketCommandListener
-from materials_commons.cli.user_config import Config
+from materials_commons.cli.old.user_config import Config
 
 logger = logging.getLogger(__name__)
 

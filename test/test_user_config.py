@@ -3,9 +3,8 @@ import os
 import unittest
 
 import materials_commons.api.client as mcclient
-import materials_commons.cli.user_config as user_config
+import materials_commons.cli.old.user_config as user_config
 
-from .cli_test_functions import captured_output, print_string_io
 from .cli_test_project import test_project_directory, mkdir_if, remove_if, rmdir_if
 
 

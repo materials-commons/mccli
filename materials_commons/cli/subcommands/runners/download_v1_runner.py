@@ -1,9 +1,9 @@
 import os
 
-import materials_commons.cli.file_functions as filefuncs
-import materials_commons.cli.functions as clifuncs
-import materials_commons.cli.tree_functions as treefuncs
-from materials_commons.cli.treedb import LocalTree, RemoteTree
+import materials_commons.cli.old.file_functions as filefuncs
+import materials_commons.cli.old.functions as clifuncs
+import materials_commons.cli.old.tree_functions as treefuncs
+from materials_commons.cli.old.treedb import LocalTree, RemoteTree
 
 
 def run_v1_download(args, working_dir):

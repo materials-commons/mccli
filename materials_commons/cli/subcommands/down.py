@@ -5,10 +5,10 @@ import os
 
 import requests
 
-import materials_commons.cli.exceptions as cliexcept
-import materials_commons.cli.file_functions as filefuncs
-import materials_commons.cli.functions as clifuncs
-import materials_commons.cli.tree_functions as treefuncs
+import materials_commons.cli.old.exceptions as cliexcept
+import materials_commons.cli.old.file_functions as filefuncs
+import materials_commons.cli.old.functions as clifuncs
+import materials_commons.cli.old.tree_functions as treefuncs
 from materials_commons.cli.subcommands.runners.download_globus_runner import run_globus_download
 from materials_commons.cli.subcommands.runners.download_v1_runner import run_v1_download
 from materials_commons.cli.subcommands.runners.download_v2_runner import run_v2_download

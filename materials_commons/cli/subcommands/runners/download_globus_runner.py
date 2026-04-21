@@ -1,10 +1,9 @@
 import time
 
-import materials_commons.cli.exceptions as cliexcept
-import materials_commons.cli.functions as clifuncs
-import materials_commons.cli.globus as cliglobus
-import materials_commons.cli.tree_functions as treefuncs
-from materials_commons.cli.treedb import LocalTree, RemoteTree
+import materials_commons.cli.old.functions as clifuncs
+import materials_commons.cli.old.globus as cliglobus
+import materials_commons.cli.old.tree_functions as treefuncs
+from materials_commons.cli.old.treedb import LocalTree, RemoteTree
 
 
 def run_globus_download(args, working_dir):

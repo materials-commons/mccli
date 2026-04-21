@@ -2,11 +2,10 @@ import argparse
 import getpass
 import re
 import requests
-import sys
 
 import materials_commons.api as mcapi
-from materials_commons.cli.functions import print_remotes
-from materials_commons.cli.user_config import Config, RemoteConfig
+from materials_commons.cli.old.functions import print_remotes
+from materials_commons.cli.old.user_config import Config, RemoteConfig
 
 def print_known_remotes():
     print("Known remotes:")

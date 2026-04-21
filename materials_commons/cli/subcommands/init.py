@@ -1,12 +1,10 @@
 import argparse
-import json
 import os
 import requests
-import sys
 
 import materials_commons.api as mcapi
-import materials_commons.cli.functions as clifuncs
-from materials_commons.cli.exceptions import MCCLIException
+import materials_commons.cli.old.functions as clifuncs
+from materials_commons.cli.old.exceptions import MCCLIException
 
 
 def init_project(name, description="", prefix=None, remote_config=None):

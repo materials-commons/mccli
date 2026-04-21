@@ -1,8 +1,6 @@
 """Temporary functions"""
-import json
-import os.path
 from collections.abc import Iterable
-from materials_commons.cli.exceptions import MCCLIException
+from materials_commons.cli.old.exceptions import MCCLIException
 
 def get_dataset(client, project_id, dataset_id):
     """Temporary workaround because Client.get_dataset is returning the wrong dataset"""

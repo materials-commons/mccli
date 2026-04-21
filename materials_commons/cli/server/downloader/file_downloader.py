@@ -10,7 +10,7 @@ from typing import Optional, Callable
 import aiofiles.os as aio_os
 import requests
 
-from materials_commons.cli.functions import checksum
+from materials_commons.cli.old.functions import checksum
 
 logger = logging.getLogger(__name__)
 

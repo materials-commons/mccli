@@ -1,5 +1,4 @@
 import asyncio
-from asyncio import Task
 from pathlib import Path
 
 from materials_commons.cli.async_reconciler import AsyncReconciler
@@ -8,7 +7,7 @@ from materials_commons.cli.models import LocalProject, FileState
 from materials_commons.cli.reconcile2 import observe_and_reconcile_to_file_state
 from materials_commons.cli.server import projects
 from materials_commons.cli.server.downloader.file_download_manager import FileDownloadManager
-from materials_commons.cli.user_config import Config
+from materials_commons.cli.old.user_config import Config
 from materials_commons.cli.walk import local_listdir
 
 
@@ -26,18 +25,12 @@ class Downloader:
                                                          apitoken=self.config.default_remote.mcapikey,
                                                          max_concurrent=max_concurrent)
         self.async_reconciler = AsyncReconciler(db=db, proj=proj, recompute_checksum=True)
-        self.tasks: list[Task[None]] = []
 
     async def start_workers(self):
-        self.tasks = await self.file_download_manager.start_workers()
+        await self.file_download_manager.start_workers()
 
     async def stop_workers(self):
-        self.file_download_manager.stop_workers()
-        for task in self.tasks:
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
+        await self.file_download_manager.stop_workers()
 
     async def download_file(self, path: str):
         recompute_checksum = self.async_reconciler.recompute_checksum

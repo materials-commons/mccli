@@ -1,7 +1,5 @@
-import json
 import os
 import pytest
-import time
 import unittest
 
 
@@ -9,8 +7,8 @@ import materials_commons.api as mcapi
 
 # The purpose of this test to check expected server and api behavior independently of cli code
 # Restrict use of CLI functions to configuration and only very basic functions
-from materials_commons.cli.file_functions import isfile, isdir
-from materials_commons.cli.functions import checksum
+from materials_commons.cli.old.file_functions import isfile, isdir
+from materials_commons.cli.old.functions import checksum
 
 from .cli_test_project import make_basic_project_1, test_project_directory, remove_if, \
     upload_project_files

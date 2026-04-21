@@ -5,8 +5,8 @@ import contextlib
 import json
 import re
 
-import materials_commons.cli.functions as clifuncs
-from materials_commons.cli.exceptions import MCCLIException
+import materials_commons.cli.old.functions as clifuncs
+from materials_commons.cli.old.exceptions import MCCLIException
 
 @contextlib.contextmanager
 def output_method(file=None, force=False):

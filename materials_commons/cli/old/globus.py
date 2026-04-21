@@ -3,10 +3,10 @@ from globus_sdk.scopes import TransferScopes
 import os
 
 import materials_commons.api as mcapi
-import materials_commons.cli.exceptions as cliexcept
-import materials_commons.cli.file_functions as filefuncs
-import materials_commons.cli.tree_functions as treefuncs
-from materials_commons.cli.user_config import Config
+import materials_commons.cli.old.exceptions as cliexcept
+import materials_commons.cli.old.file_functions as filefuncs
+import materials_commons.cli.old.tree_functions as treefuncs
+from materials_commons.cli.old.user_config import Config
 
 CLIENT_ID = '1e4aacbc-8c10-4812-a54a-8434d2030a41'
 

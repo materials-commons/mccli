@@ -5,11 +5,11 @@ import os
 from tabulate import tabulate
 
 from materials_commons.cli.filedb import FileIndexDB, to_project_db_path
-from materials_commons.cli.functions import humanize, format_time
-from materials_commons.cli.models import LSAction, LSEntry, FileState
+from materials_commons.cli.old.functions import humanize, format_time
+from materials_commons.cli.models import LSAction, LSEntry
 from materials_commons.cli.async_reconciler import AsyncReconciler
 from materials_commons.cli.server import projects
-from materials_commons.cli.walk import local_listdir, make_merged_listdir_func
+from materials_commons.cli.walk import make_merged_listdir_func
 
 
 class LSTable:

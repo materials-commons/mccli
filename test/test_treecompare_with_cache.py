@@ -3,12 +3,11 @@ import unittest
 
 import materials_commons.api as mcapi
 
-import materials_commons.cli.tree_functions as treefuncs
-import materials_commons.cli.functions as clifuncs
-from materials_commons.cli.file_functions import isfile, isdir
-from materials_commons.cli.treedb import LocalTree, RemoteTree
+import materials_commons.cli.old.tree_functions as treefuncs
+import materials_commons.cli.old.functions as clifuncs
+from materials_commons.cli.old.treedb import LocalTree, RemoteTree
 
-from .cli_test_project import make_basic_project_1, test_project_directory, remove_if, mkdir_if, \
+from .cli_test_project import make_basic_project_1, test_project_directory, mkdir_if, \
     upload_project_files, remove_hidden_project_files
 
 class TestTreeCompareWithCache(unittest.TestCase):

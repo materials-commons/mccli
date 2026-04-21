@@ -9,7 +9,7 @@ import materials_commons.api as mcapi
 from materials_commons.api import models
 
 from materials_commons.cli.filedb import FileIndexDB
-from materials_commons.cli.functions import make_local_project
+from materials_commons.cli.old.functions import make_local_project
 
 # Cache list of projects
 _projects = None

@@ -3,12 +3,10 @@ import unittest
 
 import materials_commons.api as mcapi
 
-import materials_commons.cli.tree_functions as treefuncs
-import materials_commons.cli.file_functions as filefuncs
+import materials_commons.cli.old.file_functions as filefuncs
 from materials_commons.cli.subcommands.down import standard_download
 
-from .cli_test_project import make_basic_project_1, test_project_directory, remove_if, mkdir_if, \
-    upload_project_files, remove_hidden_project_files
+from .cli_test_project import make_basic_project_1, test_project_directory, remove_if, upload_project_files
 
 
 class TestStandardDownload(unittest.TestCase):

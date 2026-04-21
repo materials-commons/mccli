@@ -4,10 +4,10 @@ import os
 import sys
 
 import materials_commons.api as mcapi
-import materials_commons.cli.functions as clifuncs
-import materials_commons.cli.file_functions as filefuncs
-import materials_commons.cli.tmp_functions as tmpfuncs
-from materials_commons.cli.print_formatter import PrintFormatter
+import materials_commons.cli.old.functions as clifuncs
+import materials_commons.cli.old.file_functions as filefuncs
+import materials_commons.cli.old.tmp_functions as tmpfuncs
+
 
 def make_version_record(file, is_current):
     return {

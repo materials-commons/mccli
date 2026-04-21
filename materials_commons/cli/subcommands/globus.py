@@ -1,16 +1,14 @@
 import argparse
-import json
 import sys
 import yaml
 
 from io import StringIO
 
 import materials_commons.api as mcapi
-import materials_commons.cli.functions as clifuncs
-import materials_commons.cli.globus as cliglobus
-from materials_commons.cli.exceptions import MCCLIException
-from materials_commons.cli.list_objects import ListObjects
-from materials_commons.cli.user_config import Config
+import materials_commons.cli.old.functions as clifuncs
+import materials_commons.cli.old.globus as cliglobus
+from materials_commons.cli.old.list_objects import ListObjects
+from materials_commons.cli.old.user_config import Config
 
 
 def set_current_globus_upload(project_local_path, upload=None):

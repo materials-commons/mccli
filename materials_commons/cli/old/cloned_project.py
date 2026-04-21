@@ -1,11 +1,10 @@
 import os
 import pathlib
 import tempfile
-from contextlib import contextmanager
 
-import materials_commons.cli.exceptions as cliexcept
-import materials_commons.cli.functions as clifuncs
-from materials_commons.cli.user_config import Config, \
+import materials_commons.cli.old.exceptions as cliexcept
+import materials_commons.cli.old.functions as clifuncs
+from materials_commons.cli.old.user_config import Config, \
     get_remote_config_and_login_if_necessary
 from materials_commons.cli.subcommands.down import down_subcommand
 from materials_commons.cli.subcommands.up import up_subcommand

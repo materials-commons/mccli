@@ -1,13 +1,11 @@
 import argparse
 import os
-import sys
 import time
 
 import materials_commons.api as mcapi
-import materials_commons.cli.functions as clifuncs
-import materials_commons.cli.tree_functions as treefuncs
-import materials_commons.cli.file_functions as filefuncs
-from materials_commons.cli.treedb import LocalTree, RemoteTree
+import materials_commons.cli.old.functions as clifuncs
+import materials_commons.cli.old.tree_functions as treefuncs
+from materials_commons.cli.old.treedb import RemoteTree
 
 
 def print_fetch_status(pconfig):

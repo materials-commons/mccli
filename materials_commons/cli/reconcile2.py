@@ -10,7 +10,7 @@ from aiofiles import os as aio_os
 from materials_commons.api import models
 
 from materials_commons.cli.filedb import FileIndexDB
-from materials_commons.cli.functions import checksum_async
+from materials_commons.cli.old.functions import checksum_async
 from materials_commons.cli.models import FileRecord, LocalObserved, LocalProject, FileState, FileDecision, \
     WalkObservation
 from materials_commons.cli.server import projects

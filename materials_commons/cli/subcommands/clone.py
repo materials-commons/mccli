@@ -1,10 +1,7 @@
 import argparse
-import json
-import os
-import sys
 
 import materials_commons.api as mcapi
-import materials_commons.cli.functions as clifuncs
+import materials_commons.cli.old.functions as clifuncs
 
 def make_parser():
     """Make argparse.ArgumentParser for `mc clone`"""

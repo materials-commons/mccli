@@ -1,8 +1,7 @@
-import json
 import sys
 import materials_commons.api as mcapi
-import materials_commons.cli.functions as clifuncs
-from materials_commons.cli.list_objects import ListObjects
+import materials_commons.cli.old.functions as clifuncs
+from materials_commons.cli.old.list_objects import ListObjects
 
 def set_current_experiment(project_local_path, expt=None):
     pconfig = clifuncs.read_project_config(project_local_path)

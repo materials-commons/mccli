@@ -5,9 +5,9 @@ import os
 
 import materials_commons.api as mcapi
 
-import materials_commons.cli.functions as clifuncs
-import materials_commons.cli.user_config as user_config
-from materials_commons.cli.exceptions import MCCLIException
+import materials_commons.cli.old.functions as clifuncs
+import materials_commons.cli.old.user_config as user_config
+from materials_commons.cli.old.exceptions import MCCLIException
 from materials_commons.cli.subcommands.proj import ProjSubcommand
 
 from .cli_test_functions import captured_output, print_string_io

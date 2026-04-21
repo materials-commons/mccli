@@ -1,13 +1,10 @@
 import sys
-import json
 import yaml
-from collections import OrderedDict
 
-import materials_commons.api.models as models
-from materials_commons.cli.exceptions import MCCLIException
-from materials_commons.cli.list_objects import ListObjects
-from materials_commons.cli.functions import read_project_config, getit, trunc, format_time, \
-    remove_hidden_project_files
+from materials_commons.cli.old.exceptions import MCCLIException
+from materials_commons.cli.old.list_objects import ListObjects
+from materials_commons.cli.old.functions import read_project_config, getit, trunc, format_time
+
 
 def make_parser():
     """Make argparse.ArgumentParser for `mc ls`"""

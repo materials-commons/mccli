@@ -1,9 +1,6 @@
-import unittest
 import os
-import re
-from .cli_test_functions import captured_output
 from .cli_test_exceptions import MCCLITestException
-from materials_commons.cli.file_functions import isfile, isdir, make_local_abspath
+from materials_commons.cli.old.file_functions import isfile, isdir, make_local_abspath
 
 
 def mkdir_if(path):

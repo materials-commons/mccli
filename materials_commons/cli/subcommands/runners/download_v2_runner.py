@@ -2,7 +2,7 @@ from materials_commons.cli.downloader import Downloader
 from materials_commons.cli.filedb import FileIndexDB, to_project_db_path
 
 from materials_commons.cli.server import projects
-from materials_commons.cli.user_config import Config
+from materials_commons.cli.old.user_config import Config
 
 
 async def run_v2_download(args, working_dir):

@@ -11,11 +11,11 @@ import materials_commons.api.models as models
 import requests
 from tabulate import tabulate
 
-from materials_commons.cli.exceptions import MCCLIException, MissingRemoteException, \
+from materials_commons.cli.old.exceptions import MCCLIException, MissingRemoteException, \
     MultipleRemoteException, NoDefaultRemoteException
-from materials_commons.cli.print_formatter import PrintFormatter, trunc
-from materials_commons.cli.sqltable import SqlTable
-from materials_commons.cli.user_config import Config, RemoteConfig
+from materials_commons.cli.old.print_formatter import PrintFormatter, trunc
+from materials_commons.cli.old.sqltable import SqlTable
+from materials_commons.cli.old.user_config import Config, RemoteConfig
 
 
 # TODO: mcapi.Config, mcapi.Remote, mcapi.RemoteConfig

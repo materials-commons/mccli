@@ -5,7 +5,7 @@ from pathlib import Path
 
 import igittigitt
 
-import materials_commons.cli.functions as clifuncs
+import materials_commons.cli.old.functions as clifuncs
 from materials_commons.cli.server import projects
 from materials_commons.cli.server.db.db_manager import DBManager
 from materials_commons.cli.server.indexer.file_index_manager import FileIndexManager

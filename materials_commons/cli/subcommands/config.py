@@ -1,10 +1,7 @@
-import os
-import json
 import argparse
 
 import materials_commons.api as mcapi
-import materials_commons.cli.functions as clifuncs
-from materials_commons.cli.user_config import Config
+from materials_commons.cli.old.user_config import Config
 
 def make_parser():
     """Make argparse.ArgumentParser for `mc config`"""

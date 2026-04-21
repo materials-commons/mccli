@@ -3,10 +3,11 @@ import unittest
 
 import materials_commons.api as mcapi
 
-from materials_commons.cli.file_functions import isfile, isdir
-from materials_commons.cli.treedb import LocalTree, RemoteTree
+from materials_commons.cli.old.file_functions import isfile, isdir
+from materials_commons.cli.old.treedb import LocalTree, RemoteTree
 
-from .cli_test_project import make_basic_project_1, test_project_directory, remove_if
+from .cli_test_project import make_basic_project_1, test_project_directory
+
 
 class TestTreeTable(unittest.TestCase):
 

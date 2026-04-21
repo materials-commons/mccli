@@ -1,15 +1,13 @@
 import os
-import sqlite3
 import time
-import warnings
 
 from tabulate import tabulate
 
 import materials_commons.api as mcapi
-import materials_commons.cli.exceptions as cliexcept
-import materials_commons.cli.functions as clifuncs
-import materials_commons.cli.file_functions as filefuncs
-from materials_commons.cli.sqltable import SqlTable, sql_iter
+import materials_commons.cli.old.exceptions as cliexcept
+import materials_commons.cli.old.functions as clifuncs
+import materials_commons.cli.old.file_functions as filefuncs
+from materials_commons.cli.old.sqltable import SqlTable, sql_iter
 
 
 # tree:
@@ -318,7 +316,7 @@ class RemoteTree(TreeTable):
 
     @staticmethod
     def default_print_fmt():
-        from materials_commons.cli.functions import as_is, format_time, humanize
+        from materials_commons.cli.old.functions import as_is, format_time, humanize
         # (key, header, fmt, size, function)
         return [
             ("path", "path","<", 80, as_is),
@@ -515,7 +513,7 @@ class LocalTree(TreeTable):
 
     @staticmethod
     def default_print_fmt():
-        from materials_commons.cli.functions import as_is, format_time, humanize
+        from materials_commons.cli.old.functions import as_is, format_time, humanize
         # (key, header, fmt, size, function)
         return [
             ("path", "path","<", 80, as_is),

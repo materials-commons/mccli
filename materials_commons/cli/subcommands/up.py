@@ -4,11 +4,11 @@ import sys
 
 import igittigitt
 
-import materials_commons.cli.exceptions as cliexcept
-import materials_commons.cli.functions as clifuncs
-import materials_commons.cli.globus as cliglobus
-import materials_commons.cli.tree_functions as treefuncs
-from materials_commons.cli.treedb import LocalTree, RemoteTree
+import materials_commons.cli.old.exceptions as cliexcept
+import materials_commons.cli.old.functions as clifuncs
+import materials_commons.cli.old.globus as cliglobus
+import materials_commons.cli.old.tree_functions as treefuncs
+from materials_commons.cli.old.treedb import LocalTree, RemoteTree
 from materials_commons.cli.subcommands.server import DEFAULT_WS_URL
 from materials_commons.cli.server.uploader.client_api import ws_upload_synchronous
 import os

@@ -1,9 +1,8 @@
 import io
-import json
 import os.path
 import requests
 import materials_commons.api as mcapi
-from materials_commons.cli.exceptions import MCCLIException
+from materials_commons.cli.old.exceptions import MCCLIException
 
 def isfile(file_or_dir):
     return isinstance(file_or_dir, mcapi.File) and file_or_dir.mime_type != "directory"

@@ -1,8 +1,5 @@
 import argparse
 import asyncio
-import signal
-import uuid
-from asyncio import Task
 from typing import Awaitable, Callable, Dict, Any
 
 from materials_commons.cli.server.command_handlers.admin_handler_lookup import AdminHandlerLookup
@@ -11,14 +8,9 @@ from materials_commons.cli.server.command_handlers.list_handler_lookup import Li
 from materials_commons.cli.server.command_handlers.multi_handler_lookup import MultiHandlerLookup
 from materials_commons.cli.server.command_handlers.search_find_handler_lookup import SearchFindHandlerLookup
 from materials_commons.cli.server.command_handlers.upload_handler_lookup import UploadHandlerLookup
-from materials_commons.cli.server.db.db_manager import DBManager
-from materials_commons.cli.server.downloader.file_download_manager import FileDownloadManager
-from materials_commons.cli.server.ocommand_handlers import register_handlers
-from materials_commons.cli.server.local_rest_server import LocalRestServer
-from materials_commons.cli.server.project_filedbs import ProjectFileDBs
-from materials_commons.cli.server.uploader.file_upload_manager import FileUploadManager
+from materials_commons.cli.server.service_container import ServiceContainer
+from materials_commons.cli.server.service_runtime import ServiceRuntime
 from materials_commons.cli.server.websocket_server import WebSocketCommandListener
-from materials_commons.cli.user_config import Config
 
 CommandHandler = Callable[[Dict[str, Any]], Awaitable[None]]
 
@@ -44,40 +36,25 @@ def server_subcommand(argv, working_dir=None):
 
 
 async def server_subcommand_async(args, working_dir=None):
-    config = Config()
-    if config.client_uuid is None:
-        config.client_uuid = str(uuid.uuid4())
-        config.save()
+    container = ServiceContainer.create()
+    service_runtime = ServiceRuntime(container)
+    await service_runtime.start(
+        local_rest_server=True,
+        file_upload_manager=True,
+        file_download_manager=True,
+        db_manager=True,
+    )
 
-    send_queue = asyncio.Queue()
-    db_queue = asyncio.Queue()
-    project_dbs = ProjectFileDBs()
-
-    local_rest_server = LocalRestServer(loop=asyncio.get_running_loop(), queue=send_queue)
-    local_rest_server.start()
-
-    file_upload_manager = FileUploadManager(send_queue=send_queue, db_write_queue=db_queue,
-                                            project_dbs=project_dbs, client_id=config.client_uuid)
-
-    file_download_manager = FileDownloadManager(send_queue=send_queue, client_id=config.client_uuid,
-                                                mcurl=config.default_remote.mcurl,
-                                                apitoken=config.default_remote.mcapikey)
-    db_manager = DBManager(db_queue=db_queue, project_dbs=project_dbs)
-
-    await file_upload_manager.start_workers()
-    await file_download_manager.start_workers()
-    await db_manager.start_workers()
-
-    lookup_handler = MultiHandlerLookup(UploadHandlerLookup(file_upload_manager),
-                                        DownloadHandlerLookup(file_download_manager), ListHandlerLookup(),
+    lookup_handler = MultiHandlerLookup(UploadHandlerLookup(container.file_upload_manager),
+                                        DownloadHandlerLookup(container.file_download_manager), ListHandlerLookup(),
                                         SearchFindHandlerLookup(), AdminHandlerLookup())
 
     listener = WebSocketCommandListener(
         ws_url=args.ws_url,
-        token=config.default_remote.mcapikey,
-        client_uuid=config.client_uuid,
+        token=container.config.default_remote.mcapikey,
+        client_uuid=container.config.client_uuid,
         handler_lookup=lookup_handler,
-        ws_send_queue=send_queue,
+        ws_send_queue=container.send_queue,
     )
 
     try:
@@ -85,8 +62,5 @@ async def server_subcommand_async(args, working_dir=None):
     except asyncio.CancelledError:
         print("\nServer is shutting down...", flush=True)
     finally:
-        local_rest_server.stop()
         await listener.shutdown()
-        await file_upload_manager.stop_workers()
-        await file_download_manager.stop_workers()
-        await db_manager.stop_workers()
+        await service_runtime.stop()

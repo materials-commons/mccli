@@ -1,21 +1,16 @@
 import argparse
-import json
 import os
 import unittest
 
 import materials_commons.api as mcapi
 
-import materials_commons.cli.functions as clifuncs
-import materials_commons.cli.tree_functions as treefuncs
-from materials_commons.cli.file_functions import isfile, isdir
 from materials_commons.cli.subcommands.dataset import DatasetSubcommand
 from materials_commons.cli.subcommands.init import init_project
 from materials_commons.cli.subcommands.ls import ls_subcommand
-import materials_commons.cli.user_config as user_config
+import materials_commons.cli.old.user_config as user_config
 
 from .cli_test_functions import working_dir, captured_output, print_string_io
-from .cli_test_project import make_basic_project_1, test_project_directory, make_file, remove_if, \
-    upload_project_files
+from .cli_test_project import make_basic_project_1, test_project_directory, upload_project_files
 
 def is_equal(A, B):
     if not type(A) is type(B):
