@@ -73,7 +73,7 @@ class FileUploader:
             if not await self._wait_for_acceptance():
                 if self._already_uploaded:
                     logger.info(f"File {self.file_path} already uploaded")
-                    print(f"File {self.file_path} already uploaded...")
+                    print(f"Uploaded {self.file_path}...")
                     return True
                 return False
 
@@ -137,6 +137,9 @@ class FileUploader:
 
     async def _send_transfer_init(self) -> bool:
         """Send TRANSFER_INIT message via queue"""
+        if self.file_size == 0:
+            print(f"Skipping {self.file_path.as_posix()} (empty file)...")
+            return True
         finfo = await asyncio.to_thread(os.stat, self.file_path.as_posix())
         file_record = await self.db.get_file_by_path(self.project_path.as_posix())
         if file_has_changed(file_record, finfo) or file_record.checksum is None:
