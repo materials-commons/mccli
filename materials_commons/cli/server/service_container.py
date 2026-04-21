@@ -7,7 +7,7 @@ from materials_commons.cli.server.downloader.file_download_manager import FileDo
 from materials_commons.cli.server.local_rest_server import LocalRestServer
 from materials_commons.cli.server.project_filedbs import ProjectFileDBs
 from materials_commons.cli.server.uploader.file_upload_manager import FileUploadManager
-from materials_commons.cli.old.user_config import Config
+from materials_commons.cli.config import Config
 
 
 class ServiceContainer:
@@ -21,7 +21,7 @@ class ServiceContainer:
 
     @classmethod
     def create(cls) -> "ServiceContainer":
-        config = Config()
+        config = Config.load()
         if config.client_uuid is None:
             config.client_uuid = str(uuid.uuid4())
             config.save()
