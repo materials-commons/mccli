@@ -22,7 +22,7 @@ class ServiceContainer:
     @classmethod
     def create(cls) -> "ServiceContainer":
         config = Config.load()
-        if config.client_uuid is None:
+        if config.client_uuid is None or config.client_uuid == "":
             config.client_uuid = str(uuid.uuid4())
             config.save()
 
