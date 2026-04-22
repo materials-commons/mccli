@@ -2,7 +2,7 @@ import json
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 
 from materials_commons.api.client import Client
 
@@ -60,3 +60,9 @@ class LocalProject:
             local_path=Path(local_root),
             client=client
         )
+
+@dataclass(frozen=True)
+class DBWriteRequest:
+    project: LocalProject
+    command: str
+    data: Any
