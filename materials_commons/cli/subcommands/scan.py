@@ -6,10 +6,13 @@ from pathlib import Path
 import igittigitt
 
 import materials_commons.cli.old.functions as clifuncs
+from materials_commons.cli.local_project import LocalProject
 from materials_commons.cli.server import projects
 from materials_commons.cli.server.db.db_manager import DBManager
-from materials_commons.cli.server.indexer.file_index_manager import FileIndexManager
+from materials_commons.cli.server.indexer.file_index_manager import FileIndexManager, IndexRequest
 from materials_commons.cli.server.project_filedbs import ProjectFileDBs
+from materials_commons.cli.server.service_container import ServiceContainer
+from materials_commons.cli.server.service_runtime import ServiceRuntime
 from materials_commons.cli.walk import async_walk, make_ignore_func, local_listdir
 
 
@@ -39,47 +42,43 @@ def make_parser():
 async def scan_subcommand_async(argv, working_dir):
     """Builds and populates the file index database for project scan; skips ignored directories and files"""
 
-    ## Setup for the run
-    proj = clifuncs.make_local_project(working_dir)
+    # Load project
+    proj = LocalProject.load(working_dir)
     proj.remote.raise_exception = False
 
+    # Initialize database
+    await proj.get_filedb()
+
+    # Setup ignore parser
     ignore_parser = igittigitt.IgnoreParser()
     ignore_parser.parse_rule_files(base_dir=proj.local_path, filename=".mcignore", add_default_patterns=False)
-    project_file_dbs = ProjectFileDBs()
-    file_index_queue = asyncio.Queue()
-    db_queue = asyncio.Queue()
 
-    # Hack for now: preload the existing project_id until we make projectFileDBs async safe
-    await project_file_dbs.get_filedb(proj.id)
+    # Start services
+    container = ServiceContainer.create()
+    service_runtime = ServiceRuntime(container)
+    await service_runtime.start(file_index_manager=True)
 
-    file_index_manager = FileIndexManager(project_file_dbs, db_queue, file_index_queue)
-    file_index_workers = await file_index_manager.start_workers()
+    try:
+        # Run the scan
+        await scan_files_async(container.file_index_queue, ignore_parser, proj)
 
-    db_manager = DBManager(db_queue, project_file_dbs)
-    db_workers = await db_manager.start_workers()
+        # Let services drain any in-progress work
+        await service_runtime.drain()
 
-    ## Run the scan
-    await scan_files_async(proj.local_path, proj.local_path, file_index_queue, ignore_parser, proj)
+    finally:
+        # Shutdown services
+        await service_runtime.stop()
 
-    ## Shutdown all tasks
-    await stop_workers(file_index_queue, file_index_workers, file_index_manager)
-    await stop_workers(db_queue, db_workers, db_manager)
-    await project_file_dbs.close_dbs()
-
-
-async def stop_workers(queue: asyncio.Queue, workers: list[Task[None]], manager) -> None:
-    """Stop all workers and wait for them to finish"""
-    await queue.join()
-    manager.stop_workers()
-    for worker in workers:
-        try:
-            await worker
-        except asyncio.CancelledError:
-            pass
+        # Close database
+        db = await proj.get_filedb()
+        await db.close()
 
 
-async def scan_files_async(project_root, mc_path, file_index_queue, ignore_parser, proj):
+async def scan_files_async(file_index_queue: asyncio.Queue[IndexRequest],
+                           ignore_parser: igittigitt.IgnoreParser,
+                           proj: LocalProject) -> None:
     """Scan files and directories in a project asynchronously"""
+    project_root = proj.local_path
     ignore_fn = make_ignore_func(ignore_parser, project_root)
     async for path, entries in async_walk(path=project_root, recursive=True, ignore_fn=ignore_fn,
                                           listdir_fn=local_listdir):
@@ -90,4 +89,8 @@ async def scan_files_async(project_root, mc_path, file_index_queue, ignore_parse
                 continue
             remote_entry_path = remote_dir / entry.name
             remote_entry = remote_entries.get(remote_entry_path.as_posix(), None)
-            await file_index_queue.put((entry.path, remote_entry_path.as_posix(), remote_entry, proj.id))
+            index_request = IndexRequest(file_path=entry.path,
+                                         project_path=remote_entry_path.as_posix(),
+                                         remote_entry=remote_entry,
+                                         project=proj)
+            await file_index_queue.put(index_request)
