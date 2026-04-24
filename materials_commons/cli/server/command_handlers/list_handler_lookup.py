@@ -11,7 +11,7 @@ from materials_commons.cli.filedb import FileIndexDB, to_project_db_path
 from materials_commons.cli.models import FileState, LSAction
 from materials_commons.cli.server import projects
 from materials_commons.cli.server.command_handlers.protocol import CommandHandlerLookup, HandlerFunc
-from materials_commons.cli.walk import local_listdir
+from materials_commons.cli.walk import local_listdir, make_merged_listdir_func
 
 logger = logging.getLogger(__name__)
 
@@ -63,8 +63,9 @@ async def _handle_list_project_directory_actions(queue: asyncio.Queue, cmd: Dict
         return files_list
 
     async_reconciler = AsyncReconciler(db=db, proj=proj, recompute_checksum=False)
+    listdir_fn = make_merged_listdir_func(proj)
     files = []
-    async for current_path, entries in async_reconciler.walk(path=local_project_path, listdir_fn=local_listdir,
+    async for current_path, entries in async_reconciler.walk(path=local_project_path, listdir_fn=listdir_fn,
                                                              recursive=False, ignore_fn=None):
         # run build_files in a thread to avoid blocking the event loop
         files.extend(await asyncio.to_thread(build_files, entries))
