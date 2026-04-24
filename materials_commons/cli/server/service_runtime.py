@@ -7,15 +7,17 @@ class ServiceRuntime:
         self._started_local_rest_server = False
         self._started_file_upload_manager = False
         self._started_file_download_manager = False
+        self._started_file_index_manager = False
         self._started_db_manager = False
 
     async def start(
-        self,
-        *,
-        local_rest_server: bool = False,
-        file_upload_manager: bool = False,
-        file_download_manager: bool = False,
-        db_manager: bool = False,
+            self,
+            *,
+            local_rest_server: bool = False,
+            file_upload_manager: bool = False,
+            file_download_manager: bool = False,
+            file_index_manager: bool = False,
+            db_manager: bool = False,
     ) -> None:
         if db_manager:
             await self.container.db_manager.start_workers()
@@ -32,9 +34,22 @@ class ServiceRuntime:
             await self.container.file_download_manager.start_workers()
             self._started_file_download_manager = True
 
+        if file_index_manager:
+            if not self._started_db_manager:
+                await self.container.db_manager.start_workers()
+                self._started_db_manager = True
+            await self.container.file_index_manager.start_workers()
+            self._started_file_index_manager = True
+
         if local_rest_server:
             self.container.local_rest_server.start()
             self._started_local_rest_server = True
+
+    async def drain(self) -> None:
+        if self._started_file_index_manager:
+            await self.container.file_index_queue.join()
+        if self._started_db_manager:
+            await self.container.db_queue.join()
 
     async def stop(self) -> None:
         if self._started_local_rest_server:
@@ -48,6 +63,10 @@ class ServiceRuntime:
         if self._started_file_download_manager:
             await self.container.file_download_manager.stop_workers()
             self._started_file_download_manager = False
+
+        if self._started_file_index_manager:
+            await self.container.file_index_manager.stop_workers()
+            self._started_file_index_manager = False
 
         if self._started_db_manager:
             await self.container.db_manager.stop_workers()

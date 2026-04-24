@@ -2,12 +2,13 @@ import asyncio
 import uuid
 from functools import cached_property
 
-from materials_commons.cli.server.db.db_manager import DBManager
+from materials_commons.cli.config import Config
+from materials_commons.cli.server.db.db_manager import DBManager, DBWriteRequest
 from materials_commons.cli.server.downloader.file_download_manager import FileDownloadManager
+from materials_commons.cli.server.indexer.file_index_manager import FileIndexManager, IndexRequest
 from materials_commons.cli.server.local_rest_server import LocalRestServer
 from materials_commons.cli.server.project_filedbs import ProjectFileDBs
 from materials_commons.cli.server.uploader.file_upload_manager import FileUploadManager
-from materials_commons.cli.config import Config
 
 
 class ServiceContainer:
@@ -16,7 +17,8 @@ class ServiceContainer:
         self.loop = loop
 
         self.send_queue = asyncio.Queue()
-        self.db_queue = asyncio.Queue()
+        self.db_queue: asyncio.Queue[DBWriteRequest] = asyncio.Queue()
+        self.file_index_queue: asyncio.Queue[IndexRequest] = asyncio.Queue()
         self.project_dbs = ProjectFileDBs()
 
     @classmethod
@@ -51,5 +53,12 @@ class ServiceContainer:
         )
 
     @cached_property
+    def file_index_manager(self) -> FileIndexManager:
+        return FileIndexManager(
+            db_queue=self.db_queue,
+            index_queue=self.file_index_queue,
+        )
+
+    @cached_property
     def db_manager(self) -> DBManager:
-        return DBManager(db_queue=self.db_queue, project_dbs=self.project_dbs)
+        return DBManager(db_queue=self.db_queue)
