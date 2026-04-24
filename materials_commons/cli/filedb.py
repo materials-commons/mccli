@@ -156,7 +156,6 @@ class FileIndexDB:
                 record.transfer_id,
             )
         )
-        # self._write_conn.commit()
 
     async def upsert_many(self, records: List[FileRecord]):
         conn = self._write_conn
@@ -227,6 +226,8 @@ class FileIndexDB:
             if row is None:
                 return None
             return FileRecord(**row)
+        except Exception as e:
+            print(f"Error getting file by path: {e}")
         finally:
             await conn.close()
 
