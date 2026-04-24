@@ -5,7 +5,7 @@ from typing import AsyncIterator, Callable, Optional, Awaitable
 
 import materials_commons.api.models as mcmodel
 
-from materials_commons.cli.models import LocalProject, WalkObservation, LocalFileEntry, RemoteFileEntry, EntryKind
+from materials_commons.cli.models import OldLocalProject, WalkObservation, LocalFileEntry, RemoteFileEntry, EntryKind
 from materials_commons.cli.server import projects
 
 IgnoreFunc = Callable[[Path, bool], bool]
@@ -148,7 +148,7 @@ def mcapi_file_to_remote_file_entry(entry: mcmodel.File) -> RemoteFileEntry:
     return remote_entry
 
 
-async def remote_listdir(project_path: str | Path, proj: LocalProject) -> list[WalkObservation]:
+async def remote_listdir(project_path: str | Path, proj: OldLocalProject) -> list[WalkObservation]:
     """Asynchronously list the contents of a remote directory.
 
     Args:
@@ -171,7 +171,7 @@ async def remote_listdir(project_path: str | Path, proj: LocalProject) -> list[W
     return items
 
 
-def make_remote_listdir_func(proj: LocalProject) -> ListDirFunc:
+def make_remote_listdir_func(proj: OldLocalProject) -> ListDirFunc:
     """
     Create an asynchronous directory listing function for a remote project.
 
@@ -191,7 +191,7 @@ def make_remote_listdir_func(proj: LocalProject) -> ListDirFunc:
 async def merged_local_remote_listdir(
         local_listdir_fn: Callable[[Path], Awaitable[list[WalkObservation]]],
         remote_listdir_fn: Callable[[Path], Awaitable[list[WalkObservation]]],
-        proj: LocalProject,
+        proj: OldLocalProject,
         path: Path,
 ) -> list[WalkObservation]:
     """
@@ -223,7 +223,7 @@ async def merged_local_remote_listdir(
     return merged
 
 
-def make_merged_listdir_func(proj: LocalProject) -> ListDirFunc:
+def make_merged_listdir_func(proj: OldLocalProject) -> ListDirFunc:
     """
     Create a merged listdir function for a given project.
     """

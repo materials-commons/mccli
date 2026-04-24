@@ -9,6 +9,7 @@ import materials_commons.api as mcapi
 from materials_commons.api import models
 
 from materials_commons.cli.filedb import FileIndexDB
+from materials_commons.cli.local_project import LocalProject
 from materials_commons.cli.old.functions import make_local_project
 
 # Cache list of projects
@@ -31,6 +32,8 @@ def _scan_local_projects():
             continue
 
         try:
+            proj = LocalProject.load(project_dir)
+
             with open(config_path, "r") as f:
                 data = json.load(f)
 

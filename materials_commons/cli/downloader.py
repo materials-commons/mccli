@@ -3,7 +3,7 @@ from pathlib import Path
 
 from materials_commons.cli.async_reconciler import AsyncReconciler
 from materials_commons.cli.filedb import FileIndexDB
-from materials_commons.cli.models import LocalProject, FileState
+from materials_commons.cli.models import OldLocalProject, FileState
 from materials_commons.cli.reconcile2 import observe_and_reconcile_to_file_state
 from materials_commons.cli.server import projects
 from materials_commons.cli.server.downloader.file_download_manager import FileDownloadManager
@@ -12,7 +12,7 @@ from materials_commons.cli.walk import local_listdir
 
 
 class Downloader:
-    def __init__(self, proj: LocalProject, db: FileIndexDB, config: Config, force_download: bool,
+    def __init__(self, proj: OldLocalProject, db: FileIndexDB, config: Config, force_download: bool,
                  max_concurrent: int = 3):
         self.proj = proj
         self.db = db

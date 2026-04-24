@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Optional, AsyncIterator
 
 from materials_commons.cli.filedb import FileIndexDB
-from materials_commons.cli.models import LocalProject, FileState, FileDecision, WalkObservation
+from materials_commons.cli.models import OldLocalProject, FileState, FileDecision, WalkObservation
 from materials_commons.cli.reconcile2 import observe_and_reconcile2
 from materials_commons.cli.server import projects
 from materials_commons.cli.walk import ListDirFunc, IgnoreFunc, async_walk
@@ -11,7 +11,7 @@ from materials_commons.cli.walk import ListDirFunc, IgnoreFunc, async_walk
 
 class AsyncReconciler:
     def __init__(self,
-                 proj: LocalProject,
+                 proj: OldLocalProject,
                  db: FileIndexDB,
                  recompute_checksum: bool = True,
                  max_concurrent: int = 10):

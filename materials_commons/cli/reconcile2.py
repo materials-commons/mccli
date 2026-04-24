@@ -11,7 +11,7 @@ from materials_commons.api import models
 
 from materials_commons.cli.filedb import FileIndexDB
 from materials_commons.cli.old.functions import checksum_async
-from materials_commons.cli.models import FileRecord, LocalObserved, LocalProject, FileState, FileDecision, \
+from materials_commons.cli.models import FileRecord, LocalObserved, OldLocalProject, FileState, FileDecision, \
     WalkObservation
 from materials_commons.cli.server import projects
 from materials_commons.cli.walk import path_to_local_file_entry, mcapi_file_to_remote_file_entry
@@ -442,7 +442,7 @@ async def safe_stat(path: str) -> Optional[os.stat_result]:
 
 
 async def observe_and_reconcile_to_file_state(db: FileIndexDB,
-                                              proj: LocalProject,
+                                              proj: OldLocalProject,
                                               file_path: str,
                                               recompute_checksum: bool = True) -> FileState:
     project_path = projects.local_to_remote_project_path(Path(proj.local_path), Path(file_path))

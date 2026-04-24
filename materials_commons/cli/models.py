@@ -261,7 +261,7 @@ class DirectorySnapshot:
     entries: dict[str, FileState]
 
 
-class LocalProject(models.Project):
+class OldLocalProject(models.Project):
     def __init__(self, remote: Optional[mcapi.Client] = None, local_path: Optional[str] = None, data={}):
         super().__init__(data)
         self.remote = remote
