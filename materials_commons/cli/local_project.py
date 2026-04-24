@@ -48,7 +48,11 @@ class LocalProject:
             data = json.load(f)
 
         project_id = int(data["project_id"])
-        project_name = data["name"]
+        # Hack for now until we can store name
+        if "name" not in data:
+            project_name = Path(path).name
+        else:
+            project_name = data["name"]
 
         if client is None:
             config = Config.load()
@@ -61,8 +65,4 @@ class LocalProject:
             client=client
         )
 
-@dataclass(frozen=True)
-class DBWriteRequest:
-    project: LocalProject
-    command: str
-    data: Any
+
