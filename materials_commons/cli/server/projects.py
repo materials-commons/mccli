@@ -9,7 +9,7 @@ import materials_commons.api as mcapi
 from materials_commons.api import models
 
 from materials_commons.cli.filedb import FileIndexDB
-from materials_commons.cli.local_project import LocalProject
+from materials_commons.cli.models import OldLocalProject
 from materials_commons.cli.old.functions import make_local_project
 
 # Cache list of projects
@@ -32,7 +32,7 @@ def _scan_local_projects():
             continue
 
         try:
-            proj = LocalProject.load(project_dir)
+            # proj = LocalProject.load(project_dir)
 
             with open(config_path, "r") as f:
                 data = json.load(f)
@@ -197,7 +197,7 @@ def project_config_dir_path(path: str):
             curr = os.path.dirname(curr)
 
 
-async def get_local_project(path: str):
+async def get_old_local_project(path: str) -> OldLocalProject:
     return await asyncio.to_thread(make_local_project, path)
 
 

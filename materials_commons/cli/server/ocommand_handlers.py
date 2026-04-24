@@ -114,7 +114,7 @@ async def handle_list_project_directory_actions(queue: asyncio.Queue, cmd: Dict[
 
     project_dir_path = Path(proj["project_dir_path"])
     local_project_path = projects.remote_to_local_project_path(project_dir_path, Path(project_path))
-    proj = await projects.get_local_project(local_project_path.as_posix())
+    proj = await projects.get_old_local_project(local_project_path.as_posix())
     db = await FileIndexDB.create(to_project_db_path(proj.local_path))
 
     def build_files(file_entries: dict[str, FileState]) -> list[dict]:

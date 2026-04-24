@@ -6,7 +6,7 @@ from materials_commons.cli.old.user_config import Config
 
 
 async def run_v2_download(args, working_dir):
-    proj = await projects.get_local_project(working_dir)
+    proj = await projects.get_old_local_project(working_dir)
     db = await FileIndexDB.create(to_project_db_path(proj.local_path))
     if proj is None:
         print("Error: Not in a Materials Commons project directory")

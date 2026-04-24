@@ -82,7 +82,7 @@ def ls2_subcommand(argv, working_dir):
 
 
 async def ls2_subcommand_async(args, working_dir):
-    proj = await projects.get_local_project(working_dir)
+    proj = await projects.get_old_local_project(working_dir)
     db = await FileIndexDB.create(to_project_db_path(proj.local_path))
     lstable = LSTable()
 
