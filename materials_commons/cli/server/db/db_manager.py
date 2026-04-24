@@ -1,19 +1,25 @@
 import asyncio
+from dataclasses import dataclass
+from typing import cast
 
-from materials_commons.cli.server.project_filedbs import ProjectFileDBs
+from materials_commons.cli.models import FileRecord
 
+from materials_commons.cli.local_project import LocalProject
+
+@dataclass(frozen=True)
+class DBWriteRequest:
+    project: LocalProject
+    command: str
+    data: FileRecord | list[FileRecord]
 
 class DBManager:
     """
-    Manages writes to the project databases by serializing them through a single task. The
-    DB Manager maintains a has of project databases. Communication to the DBManager
-    is managed through a queue that its task pulls from and writes records from the queue
-    to the project database.
+    Manages writes to the project databases by serializing them through a single task. Communication to the DBManager
+    is managed through a queue that its task pulls from and writes records from the queue to the project database.
     """
 
-    def __init__(self, db_queue: asyncio.Queue, project_dbs: ProjectFileDBs):
-        self._db_queue = db_queue
-        self._project_dbs = project_dbs
+    def __init__(self, db_queue: asyncio.Queue[DBWriteRequest]):
+        self._db_queue: asyncio.Queue[DBWriteRequest] = db_queue
         self._workers_running = False
         self._worker_tasks: list[asyncio.Task] = []
 
@@ -24,23 +30,22 @@ class DBManager:
     async def _db_queue_worker(self):
         while self._workers_running:
             try:
-                (command, project_id, data) = await asyncio.wait_for(self._db_queue.get(), timeout=1.0)
+                write_request: DBWriteRequest = await asyncio.wait_for(self._db_queue.get(), timeout=1.0)
             except asyncio.TimeoutError:
                 continue
 
-            project_db = await self._project_dbs.get_filedb(project_id)
-            if project_db is None:
-                # Log an error here
-                continue
-
             try:
-                if command == 'single':
-                    async with project_db.transaction():
-                        await project_db.upsert(data)
-                elif command == 'multi':
-                    await project_db.upsert_many(data)
+                db = await write_request.project.get_filedb()
+                if write_request.command == 'single':
+                    record = cast(FileRecord, write_request.data)
+                    async with db.transaction():
+                        await db.upsert(record)
+                elif write_request.command == 'multi':
+                    records = cast(list[FileRecord], write_request.data)
+                    async with db.transaction():
+                        await db.upsert_many(records)
                 else:
-                    print(f"Command {command} not recognized")
+                    print(f"Command {write_request.command} not recognized")
             except Exception as e:
                 print(f"Error updating database: {e}")
             finally:
