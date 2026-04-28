@@ -32,7 +32,7 @@ class ListHandlerLookup(CommandHandlerLookup):
 
 async def _handle_list_project_directory_actions(queue: asyncio.Queue, cmd: Dict[str, Any]) -> None:
     print(f"[handler] list_project_directory_actions -> {cmd}")
-    payload = cmd.get("payload") or {}
+    payload: Dict[str, str] = cmd.get("payload") or {}
     request_id = payload.get("request_id")
     project_path = payload.get("project_path")
     project_id = payload.get("project_id")
