@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import os
+from pathlib import Path
 
 from tabulate import tabulate
 
@@ -84,18 +85,24 @@ def ls2_subcommand(argv, working_dir):
 async def ls2_subcommand_async(args, working_dir):
     proj = await projects.get_old_local_project(working_dir)
     db = await FileIndexDB.create(to_project_db_path(proj.local_path))
-    lstable = LSTable()
-
     async_reconciler = AsyncReconciler(db=db, proj=proj, recompute_checksum=args.checksum)
     which_class = LSAction if args.action else LSEntry
     listdir_fn = make_merged_listdir_func(proj)
     for path in args.paths:
-        async for current_path, path_entries in async_reconciler.walk(path=path, listdir_fn=listdir_fn,
-                                                                      recursive=False, ignore_fn=None):
-            for entry_name in sorted(path_entries):
-                entry = path_entries[entry_name]
-                if entry.exception:
-                    print(f"Error reconciling file: {entry.exception}")
-                    continue
-                lstable.add_row(which_class.from_file_state(entry))
+        lstable = LSTable()
+        p = Path(path)
+        if p.is_dir():
+            async for current_path, path_entries in async_reconciler.walk(path=path, listdir_fn=listdir_fn,
+                                                                          recursive=False, ignore_fn=None):
+                for entry_name in sorted(path_entries):
+                    entry = path_entries[entry_name]
+                    if entry.exception:
+                        print(f"Error reconciling file: {entry.exception}")
+                        continue
+                    lstable.add_row(which_class.from_file_state(entry))
+                lstable.print_table()
+        elif p.is_file():
+            state = await async_reconciler.reconcile_file(p)
+            lstable = LSTable()
+            lstable.add_row(which_class.from_file_state(state))
             lstable.print_table()

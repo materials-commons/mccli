@@ -1,5 +1,5 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import timezone
 from pathlib import Path
 from typing import Literal, Optional
@@ -30,6 +30,18 @@ class FileRecord:
     status: Optional[str] = None
     origin: Optional[str] = None
     transfer_id: Optional[str] = None
+
+    def clear_remote(self):
+        """Clear remote fields, leaving local fields intact."""
+        return replace(self,
+                       remote_file_id=None,
+                       remote_size=None,
+                       remote_ctime_ns=None,
+                       remote_checksum=None,
+                       remote_last_seen_ts=None,
+                       status=None,
+                       origin=None,
+                       transfer_id=None)
 
 
 EntryKind = Literal["file", "dir"]

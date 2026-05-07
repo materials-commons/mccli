@@ -133,6 +133,7 @@ def local_to_remote_project_path(proj_base: Path, full_path: Path) -> Path:
     Returns:
         Path: The remote path corresponding to the local path.
     """
+    full_path = full_path.resolve()
     # remote_path will be the relative path from proj_base to full_path, i.e., it
     # won't start with a slash, so we need to add one to get the correct path.
     if full_path.as_posix() == proj_base.as_posix():
