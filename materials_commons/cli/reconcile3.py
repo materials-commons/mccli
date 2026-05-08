@@ -12,6 +12,7 @@ EntryKind = Literal["file", "dir"]
 Action = Literal["skip", "upload", "download", "conflict", "adopt", "db_update"]
 ObservationState = Literal["neither", "local_only", "remote_only", "both"]
 ChecksumProvider = Callable[[Path], Awaitable[str]]
+ReconcileMode = Literal["upload", "download", "sync", "status"]
 
 
 class SingleFileReconciler:
@@ -27,7 +28,8 @@ class SingleFileReconciler:
     - both files changed from the record: conflict
     """
 
-    def __init__(self, *, compute_checksum: bool = False, reuse_checksum_requires_ctime_match: bool = False):
+    def __init__(self, *, mode: ReconcileMode, compute_checksum: bool = False, reuse_checksum_requires_ctime_match: bool = False):
+        self._mode: ReconcileMode = mode
         self._compute_checksum = compute_checksum
         self._reuse_checksum_requires_ctime_match = reuse_checksum_requires_ctime_match
 
@@ -80,7 +82,7 @@ class SingleFileReconciler:
             return self._skip(updated_record, "local directory exists only locally")
 
         if state == "remote_only":
-            updated_record = self.record_with_remote(observation, record)
+            updated_record = self._record_with_remote(observation, record)
             return self._skip(updated_record, "remote directory exists only remotely")
 
         if state == "both":
@@ -110,32 +112,81 @@ class SingleFileReconciler:
 
     async def _reconcile_local_only_file(self, observation: WalkObservation, record: FileRecord) -> FileDecision:
         updated_record = self.record_with_local(observation, record)
-        local_checksum = await self._get_local_checksum(observation)
-        if local_checksum is not None:
-            updated_record = replace(updated_record, local_checksum=local_checksum)
+        if self._mode == "status":
+            return self._reconcile_local_only_status(observation, updated_record)
+        elif self._mode == "upload":
+            return await self._reconcile_local_only_upload(observation, updated_record)
+        elif self._mode == "download":
+            return await self._reconcile_local_only_download(observation, updated_record)
+        elif self._mode == "sync":
+            raise ValueError(f"Mode sync not currently supported")
+        else:
+            raise ValueError(f"Invalid mode: {self._mode}")
 
-        # Check if there is a stale remote entry
-        if observation.file_record is not None:
-            # We have a file record. We didn't see a remote entry, but the file record could have an
-            # entry for it.
-            if observation.file_record.remote_file_id is not None:
-                # There is not a remote entry, we have a file_record with a record of a remote file.
-                # We need to clear those entries.
-                updated_record = updated_record.clear_remote()
-            return self._upload(updated_record, "local file recorded, remote_file it points at no longer exists")
+    def _reconcile_local_only_status(self, observation: WalkObservation, record: FileRecord) -> FileDecision:
+        if observation.file_record:
+            if observation.local_entry_matches_record():
+                reason = "local only, uploadable - record matches local entry"
+            else:
+                reason = "local only, uploadable - update local record"
+        else:
+            reason = "local only, uploadable - add local record"
+        return self._upload(record, reason)
 
-        # If we are here, then there is no file record, so we haven't seen this file before.
-        return self._upload(updated_record, "local file exists only locally")
+    async def _reconcile_local_only_upload(self, observation: WalkObservation, record: FileRecord) -> FileDecision:
+        return self._skip(record, "not implemented")
+
+    async def _reconcile_local_only_download(self, observation: WalkObservation, record: FileRecord) -> FileDecision:
+        record.clear_remote()
+        if observation.file_record:
+            if observation.local_entry_matches_record():
+                return self._skip(record, "local entry matches remote record")
+            else:
+                local_checksum = await asyncio.to_thread(checksum, observation.local_entry.path.as_posix())
+                record = replace(record, local_checksum=local_checksum)
+                reason = "local only, uploadable - update local record"
+                return self._db_update(record, reason)
+        else:
+            # No record in the project database
+            local_checksum = await asyncio.to_thread(checksum, observation.local_entry.path.as_posix())
+            record = replace(record, local_checksum=local_checksum)
+            reason = "local only, uploadable - add local record"
+            return self._db_update(record, reason)
 
     async def _reconcile_remote_only_file(self, observation: WalkObservation, record: FileRecord) -> FileDecision:
-        updated_record = self.record_with_remote(observation, record)
+        updated_record = self._record_with_remote(observation, record)
+        if self._mode == "status":
+            return self._reconcile_remote_only_status(observation, updated_record)
+        elif self._mode == "upload":
+            return self._reconcile_remote_only_upload(observation, updated_record)
+        elif self._mode == "download":
+            return self._reconcile_remote_only_download(observation, updated_record)
+        elif self._mode == "sync":
+            raise ValueError(f"Mode sync not currently supported")
+        else:
+            raise ValueError(f"Invalid mode: {self._mode}")
 
-        if observation.file_record is None:
-            # Remote file, we have no recording of anything locally. There is no file locally.
-            return self._download(updated_record, "remote file exists only remotely")
+    def _reconcile_remote_only_status(self, observation: WalkObservation, record: FileRecord) -> FileDecision:
+        if observation.file_record:
+            # We've seen a previous version of this file
+            reason = "remote only, downloadable - update local record"
+        else:
+            reason = "remote only, downloadable - add local record"
+        return self._download(record, reason)
 
-        # If we are here, then we have a file record, but there is no file in the file system.
-        return self._download(updated_record, "remote file exists only remotely, local record out of date")
+    def _reconcile_remote_only_upload(self, observation: WalkObservation, record: FileRecord) -> FileDecision:
+        if observation.file_record:
+            reason = "remote only, update local record"
+        else:
+            reason = "remote only, add local record"
+        return self._db_update(record, reason)
+
+    def _reconcile_remote_only_download(self, observation: WalkObservation, record: FileRecord) -> FileDecision:
+        if observation.file_record:
+            reason = "remote only - update local record"
+        else:
+            reason = "remote only - add local record"
+        return self._download(record, reason)
 
     async def _reconcile_file_present_on_both_sides(
             self,
@@ -145,42 +196,13 @@ class SingleFileReconciler:
         print("_reconcile_file_present_on_both_sides")
         updated_record = self._record_with_local_and_remote(observation, record)
 
-        # Check if the version on the server is equal to the last version know of. We do this
-        # by checking the database.
-        if observation.file_record is not None and observation.remote_entry is not None:
-            if observation.file_record.remote_file_id == observation.remote_entry.remote_file_id:
-                # The last recorded version is the same as the version on the server. Let's see
-                # what we need to do. First let's check if the file_record and the local_entry
-                # are the same.
-                if observation.file_record.local_size == observation.local_entry.size and \
-                        observation.file_record.local_ctime_ns == observation.local_entry.ctime_ns:
-                    # File hasn't changed, so we can skip it.
-                    return self._skip(updated_record, "local and remote files match")
-                else:
-                    # File has changed. First check if size is different, if it is then we can upload.
-                    if observation.file_record.local_size != observation.local_entry.size:
-                        return self._upload(updated_record, "local file changed")
-                    else:
-                        # Sizes match, so we need to compare checksums
-                        local_checksum = await asyncio.to_thread(checksum, observation.local_entry.path.as_posix())
-                        if local_checksum == observation.file_record.local_checksum:
-                            # Sizes match, checksums match. The only thing that changed is the mtime.
-                            updated_record = replace(updated_record, local_mtime_ns=observation.local_entry.mtime_ns)
-                            return self._skip(updated_record, "local and remote files match")
-                        else:
-                            # Checksums are different
-                            updated_record = replace(updated_record, local_mtime_ns=observation.local_entry.mtime_ns,
-                                                     local_checksum=local_checksum)
-                            return self._upload(updated_record, "local and remote checksums differ")
-            else:
-                # Last recorded remote_file_id is different than the current remote entry
-                # TODO: Start working through the logic from here.
-                updated_record = replace(updated_record, remote_file_id=observation.remote_entry.file_id)
-                return self._upload(updated_record, "remote file ID changed, uploading local file")
+        # Handle a file that we previously saw and recorded locally
+        if observation.file_record is not None:
+            return await self._reconcile_previously_seen_file(observation, updated_record)
 
-        if observation.remote_entry is None:
-            # The remote record is missing, so we can upload the local file.
-            return self._upload(updated_record, "remote file missing, uploading local file")
+        # If we are here, then we are handling a file that has not been previously recorded
+        # in the local project database. So all decisions need to be based on the local
+        # file we have stat() info on, and the remote file.
 
         if self._local_and_remote_metadata_match(observation):
             local_checksum = await self._get_local_checksum(observation)
@@ -225,6 +247,40 @@ class SingleFileReconciler:
 
         return self._conflict(updated_record, "unable to determine safe file reconciliation action")
 
+    async def _reconcile_previously_seen_file(self, observation: WalkObservation, updated_record: FileRecord) -> FileDecision:
+        """
+        Handle the case where the file has been seen before and the remote version matches the last known version.
+        """
+        if observation.file_record.remote_file_id == observation.remote_entry.remote_file_id:
+            # The last recorded version is the same as the version on the server. Let's see
+            # what we need to do. First let's check if the file_record and the local_entry
+            # are the same.
+            if observation.file_record.local_size == observation.local_entry.size and \
+                    observation.file_record.local_ctime_ns == observation.local_entry.ctime_ns:
+                # File hasn't changed, so we can skip it.
+                return self._skip(updated_record, "local and remote files match")
+            else:
+                # File has changed. First check if size is different, if it is then we can upload.
+                if observation.file_record.local_size != observation.local_entry.size:
+                    return self._upload(updated_record, "local file changed")
+                else:
+                    # Sizes match, so we need to compare checksums
+                    local_checksum = await asyncio.to_thread(checksum, observation.local_entry.path.as_posix())
+                    if local_checksum == observation.file_record.local_checksum:
+                        # Sizes match, checksums match. The only thing that changed is the mtime.
+                        updated_record = replace(updated_record, local_mtime_ns=observation.local_entry.mtime_ns)
+                        return self._skip(updated_record, "local and remote files match")
+                    else:
+                        # Checksums are different
+                        updated_record = replace(updated_record, local_mtime_ns=observation.local_entry.mtime_ns,
+                                                 local_checksum=local_checksum)
+                        return self._upload(updated_record, "local and remote checksums differ")
+        else:
+            # Last recorded remote_file_id is different than the current remote entry
+            # TODO: Start working through the logic from here.
+            updated_record = replace(updated_record, remote_file_id=observation.remote_entry.file_id)
+            return self._upload(updated_record, "remote file ID changed, uploading local file")
+
     def record_with_local(self, observation: WalkObservation, record: FileRecord) -> FileRecord:
         if observation.local_entry is None:
             return record
@@ -236,7 +292,7 @@ class SingleFileReconciler:
             local_ctime_ns=observation.local_entry.ctime_ns,
         )
 
-    def record_with_remote(self, observation: WalkObservation, record: FileRecord) -> FileRecord:
+    def _record_with_remote(self, observation: WalkObservation, record: FileRecord) -> FileRecord:
         if observation.remote_entry is None:
             return record
 
@@ -249,7 +305,7 @@ class SingleFileReconciler:
         )
 
     def _record_with_local_and_remote(self, observation: WalkObservation, record: FileRecord) -> FileRecord:
-        return self.record_with_remote(observation, self.record_with_local(observation, record))
+        return self._record_with_remote(observation, self.record_with_local(observation, record))
 
     def _local_and_remote_metadata_match(self, observation: WalkObservation) -> bool:
         if observation.local_entry is None or observation.remote_entry is None:
