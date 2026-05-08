@@ -134,7 +134,19 @@ class SingleFileReconciler:
         return self._upload(record, reason)
 
     async def _reconcile_local_only_upload(self, observation: WalkObservation, record: FileRecord) -> FileDecision:
-        return self._skip(record, "not implemented")
+        if observation.file_record:
+            if observation.local_entry_matches_record():
+                return self._upload(record, "local only")
+            else:
+                local_checksum = await asyncio.to_thread(checksum, observation.local_entry.path.as_posix())
+                record = replace(record, local_checksum=local_checksum)
+                reason = "local only - update local record"
+                return self._upload(record, reason)
+        else:
+            local_checksum = await asyncio.to_thread(checksum, observation.local_entry.path.as_posix())
+            record = replace(record, local_checksum=local_checksum)
+            reason = "local only - add local record"
+            return self._upload(record, reason)
 
     async def _reconcile_local_only_download(self, observation: WalkObservation, record: FileRecord) -> FileDecision:
         record.clear_remote()
