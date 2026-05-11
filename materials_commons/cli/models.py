@@ -1,6 +1,4 @@
-import os
 from dataclasses import dataclass, replace
-from datetime import timezone
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -137,6 +135,7 @@ class WalkObservation:
             return True
         return False
 
+    @property
     def is_file(self) -> bool:
         if self.local_entry is not None and self.local_entry.kind == "file":
             return True
