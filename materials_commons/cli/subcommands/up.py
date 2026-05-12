@@ -1,18 +1,31 @@
 import argparse
+import asyncio
 import logging
+import os
+import ssl
 import sys
+from pathlib import Path
 
 import igittigitt
+import websockets
+from materials_commons.cli.walk import local_listdir
+from websockets import ConnectionClosedOK, ConnectionClosedError, InvalidStatus
+
+from materials_commons.cli.async_reconciler import AsyncReconciler
 
 import materials_commons.cli.old.exceptions as cliexcept
 import materials_commons.cli.old.functions as clifuncs
 import materials_commons.cli.old.globus as cliglobus
 import materials_commons.cli.old.tree_functions as treefuncs
+from materials_commons.cli.local_project import LocalProject
 from materials_commons.cli.old.treedb import LocalTree, RemoteTree
+from materials_commons.cli.server.command_handlers.upload_handler_lookup import UploadHandlerLookup
+from materials_commons.cli.server.service_container import ServiceContainer
+from materials_commons.cli.server.service_runtime import ServiceRuntime
+from materials_commons.cli.server.websocket_server import WebSocketCommandListener
 from materials_commons.cli.subcommands.server import DEFAULT_WS_URL
-from materials_commons.cli.server.uploader.client_api import ws_upload_synchronous
-import os
-from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def make_parser():
@@ -103,116 +116,9 @@ def up_subcommand(argv, working_dir):
                                                   working_dir)[0]
 
     if args.websocket:
-        # convert input paths (absolute or relative to working_dir) to local_abspath
-        local_abspaths = treefuncs.clipaths_to_local_abspaths(
-            proj.local_path, args.paths, working_dir)
-
-        # filter, skipping .mc, those specified by .mcignore
-        local_abspaths = treefuncs.filter_local_abspaths(proj.local_path, local_abspaths, working_dir)
-
-        mcpaths = treefuncs.clipaths_to_mcpaths(proj.local_path, local_abspaths, working_dir)
-
-        ignore_parser = igittigitt.IgnoreParser()
-        ignore_parser.parse_rule_files(base_dir=proj.local_path, filename=".mcignore",
-                                       add_default_patterns=False)
-
-        file_paths = []
-        project_paths = []
-
-        for local_path, mc_path in zip(local_abspaths, mcpaths):
-            if treefuncs.os.path.isdir(local_path):
-                if args.recursive:
-                    for root, dirs, files in os.walk(local_path):
-                        current_dir = os.path.basename(root)
-                        if current_dir == ".mc":
-                            continue
-                        for filename in files:
-                            if filename == ".DS_Store":
-                                continue
-                            # if ignore_parser.match(filename):
-                            #     continue
-                            file_path = os.path.join(root, filename)
-
-                            # Calculate relative path and construct mc_path
-                            relative = Path(file_path).relative_to(local_path)
-                            file_mc_path = str(Path(mc_path) / relative)
-                            file_paths.append(file_path)
-                            project_paths.append(file_mc_path)
-                            # print(f"Indexing {file_mc_path}, {file_path}")
-                else:
-                    print("Skipping directory because --recursive option not specified: " + local_path)
-            else:
-                file_paths.append(local_path)
-                project_paths.append(mc_path)
-        if not file_paths:
-            print("No files to upload.")
-            return
-
-        status = ws_upload_synchronous(
-            file_paths=file_paths,
-            project_paths=project_paths,
-            project_id=proj.id,
-            chunk_size=args.chunk_size,
-            max_concurrent=args.max_concurrent,
-            ws_url=args.ws_url
-        )
-        if not status:
-            print("\nSome uploads failed.")
-            raise cliexcept.MCCLIException(
-                "Upload failed. Check server logs for details.")
-
-        print("\nAll uploads completed successfully!")
+        asyncio.run(ws_upload(args, proj, working_dir))
     elif args.globus:
-
-        # convert input paths (absolute or relative to working_dir) to local_abspath
-        local_abspaths = treefuncs.clipaths_to_local_abspaths(
-            proj.local_path, args.paths, working_dir)
-
-        # filter, skipping .mc, those specified by .mcignore
-        local_abspaths = treefuncs.filter_local_abspaths(
-            proj.local_path, local_abspaths, working_dir)
-
-        mcpaths = treefuncs.clipaths_to_mcpaths(proj.local_path, local_abspaths, working_dir)
-
-        all_uploads = {upload.id: upload for upload in proj.remote.get_all_globus_upload_requests(proj.id)}
-
-        globus_upload_id = None
-        if pconfig.globus_upload_id:
-            globus_upload_id = pconfig.globus_upload_id
-            if globus_upload_id not in all_uploads:
-                print("Current globus upload (name=?, id=" + str(globus_upload_id) + ") no longer exists.")
-                globus_upload_id = None
-        if globus_upload_id is None:
-            name = clifuncs.random_name()
-            upload = proj.remote.create_globus_upload_request(proj.id, name)
-            print("Created new globus upload (name=" + upload.name + ", id=" + str(upload.id) + ").")
-            pconfig.globus_upload_id = upload.id
-            pconfig.save()
-        else:
-            upload = all_uploads[globus_upload_id]
-            print("Using current globus upload (name=" + upload.name + ", id=" + str(upload.id) + ").")
-
-        if upload.status != 2:  # TODO clean up status code / message
-            raise cliexcept.MCCLIException(
-                "Current Globus upload (id=" + str(globus_upload_id) + ") not ready for uploading.")
-
-        label = proj.name + "-" + upload.name
-        if args.label:
-            label = args.label[0]
-
-        globus_ops = cliglobus.GlobusOperations()
-        task_id = globus_ops.upload_v0(proj, mcpaths, upload, working_dir,
-                                       recursive=args.recursive, no_compare=args.no_compare,
-                                       label=label)
-
-        if task_id:
-            print("Globus transfer task initiated.")
-            print("Use `globus task list` to monitor task status.")
-            print("Use `mc globus upload` to manage Globus uploads.")
-            print("Multiple transfer tasks may be initiated.")
-            print("When all tasks finish uploading, use `mc globus upload --id " + str(upload.id) +
-                  " --finish` " + "to import all uploaded files into the Materials Commons project.")
-
+        globus_upload(args, proj, working_dir, pconfig)
     else:
         localtree = None
         if not args.no_compare:
@@ -225,3 +131,113 @@ def up_subcommand(argv, working_dir):
                                      remotetree=remotetree)
 
     return
+
+
+def globus_upload(args, proj, working_dir, pconfig):
+    # convert input paths (absolute or relative to working_dir) to local_abspath
+    local_abspaths = treefuncs.clipaths_to_local_abspaths(
+        proj.local_path, args.paths, working_dir)
+
+    # filter, skipping .mc, those specified by .mcignore
+    local_abspaths = treefuncs.filter_local_abspaths(
+        proj.local_path, local_abspaths, working_dir)
+
+    mcpaths = treefuncs.clipaths_to_mcpaths(proj.local_path, local_abspaths, working_dir)
+
+    all_uploads = {upload.id: upload for upload in proj.remote.get_all_globus_upload_requests(proj.id)}
+
+    globus_upload_id = None
+    if pconfig.globus_upload_id:
+        globus_upload_id = pconfig.globus_upload_id
+        if globus_upload_id not in all_uploads:
+            print("Current globus upload (name=?, id=" + str(globus_upload_id) + ") no longer exists.")
+            globus_upload_id = None
+    if globus_upload_id is None:
+        name = clifuncs.random_name()
+        upload = proj.remote.create_globus_upload_request(proj.id, name)
+        print("Created new globus upload (name=" + upload.name + ", id=" + str(upload.id) + ").")
+        pconfig.globus_upload_id = upload.id
+        pconfig.save()
+    else:
+        upload = all_uploads[globus_upload_id]
+        print("Using current globus upload (name=" + upload.name + ", id=" + str(upload.id) + ").")
+
+    if upload.status != 2:  # TODO clean up status code / message
+        raise cliexcept.MCCLIException(
+            "Current Globus upload (id=" + str(globus_upload_id) + ") not ready for uploading.")
+
+    label = proj.name + "-" + upload.name
+    if args.label:
+        label = args.label[0]
+
+    globus_ops = cliglobus.GlobusOperations()
+    task_id = globus_ops.upload_v0(proj, mcpaths, upload, working_dir,
+                                   recursive=args.recursive, no_compare=args.no_compare,
+                                   label=label)
+
+    if task_id:
+        print("Globus transfer task initiated.")
+        print("Use `globus task list` to monitor task status.")
+        print("Use `mc globus upload` to manage Globus uploads.")
+        print("Multiple transfer tasks may be initiated.")
+        print("When all tasks finish uploading, use `mc globus upload --id " + str(upload.id) +
+              " --finish` " + "to import all uploaded files into the Materials Commons project.")
+
+
+async def ws_upload(args, working_dir):
+    # Load project and set exception handling
+    proj = LocalProject.load(working_dir)
+    proj.remote.raise_exception = False
+
+    # Initialize database
+    db = await proj.get_filedb()
+
+    # Setup ignore parser
+    ignore_parser = igittigitt.IgnoreParser()
+    ignore_parser.parse_rule_files(base_dir=proj.local_path, filename=".mcignore", add_default_patterns=False)
+
+    # Start services
+    container = ServiceContainer.create()
+    service_runtime = ServiceRuntime(container)
+    await service_runtime.start(websocket_listener=True)
+    async_reconciler = AsyncReconciler(db=db, proj=proj, reconcile_mode="upload")
+
+    try:
+        transfer_ids = []
+        for path in args.paths:
+            p = Path(path)
+            if p.is_dir():
+                async for current_path, path_entries in async_reconciler.walk(path=path, listdir_fn=local_listdir,
+                                                                              recursive=args.recursive, ignore_fn=None):
+                    for entry_name in sorted(path_entries):
+                        file_state = path_entries[entry_name]
+                        if file_state.exception:
+                            logger.error(f"Error encountered while processing {entry_name}: {file_state.exception}")
+                            continue
+                        if file_state.file_decision.action == "upload":
+                            transfer_id = await container.file_upload_manager.upload_file(
+                                file_path=file_state.observation.local_path.as_posix(),
+                                project_path=file_state.observation.remote_path.as_posix(),
+                                project_id=proj.id)
+                            transfer_ids.append(transfer_id)
+            elif p.is_file():
+                file_state = await async_reconciler.reconcile_file(p)
+                transfer_id = await container.file_upload_manager.upload_file(
+                    file_path=file_state.observation.local_path.as_posix(),
+                    project_path=file_state.observation.remote_path.as_posix(),
+                    project_id=proj.id)
+                transfer_ids.append(transfer_id)
+    except (ConnectionClosedOK, ConnectionClosedError, InvalidStatus, OSError, asyncio.TimeoutError) as e:
+        logger.error(f"WebSocket connection failed: {e}")
+        return False
+
+    finally:
+        # Shutdown gracefully
+        logger.info("Shutting down websocket infrastructure...")
+
+    # if not status:
+    #     print("\nSome uploads failed.")
+    #     raise cliexcept.MCCLIException(
+    #         "Upload failed. Check server logs for details.")
+    #
+    # print("\nAll uploads completed successfully!")
