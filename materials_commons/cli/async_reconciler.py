@@ -5,7 +5,7 @@ from typing import Optional, AsyncIterator
 
 from materials_commons.cli.filedb import FileIndexDB
 from materials_commons.cli.models import OldLocalProject, FileState, FileDecision, WalkObservation, RemoteFileEntry
-from materials_commons.cli.reconcile3 import SingleFileReconciler
+from materials_commons.cli.reconcile3 import SingleFileReconciler, ReconcileMode
 from materials_commons.cli.server import projects
 from materials_commons.cli.walk import ListDirFunc, IgnoreFunc, async_walk, path_to_local_file_entry
 
@@ -14,13 +14,15 @@ class AsyncReconciler:
     def __init__(self,
                  proj: OldLocalProject,
                  db: FileIndexDB,
-                 recompute_checksum: bool = True,
+                 reconcile_mode: ReconcileMode,
+                 # recompute_checksum: bool = True,
                  max_concurrent: int = 10):
         self.proj = proj
         self.db = db
-        self.recompute_checksum = recompute_checksum
+        # self.recompute_checksum = recompute_checksum
         self.max_concurrent = max_concurrent
-        self.reconciler = SingleFileReconciler(compute_checksum=recompute_checksum)
+        self.reconcile_mode = reconcile_mode
+        self.reconciler = SingleFileReconciler(mode=reconcile_mode)
 
     async def walk(self, path: str | Path, listdir_fn: ListDirFunc, recursive: bool = False,
                    ignore_fn: Optional[IgnoreFunc] = None) -> AsyncIterator[tuple[Path, dict[str, FileState]]]:

@@ -85,7 +85,7 @@ def ls2_subcommand(argv, working_dir):
 async def ls2_subcommand_async(args, working_dir):
     proj = await projects.get_old_local_project(working_dir)
     db = await FileIndexDB.create(to_project_db_path(proj.local_path))
-    async_reconciler = AsyncReconciler(db=db, proj=proj, recompute_checksum=args.checksum)
+    async_reconciler = AsyncReconciler(db=db, proj=proj, reconcile_mode="status")
     which_class = LSAction if args.action else LSEntry
     listdir_fn = make_merged_listdir_func(proj)
     for path in args.paths:
