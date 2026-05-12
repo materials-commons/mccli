@@ -9,6 +9,7 @@ class ServiceRuntime:
         self._started_file_download_manager = False
         self._started_file_index_manager = False
         self._started_db_manager = False
+        self._started_websocket_listener = False
 
     async def start(
             self,
@@ -18,32 +19,41 @@ class ServiceRuntime:
             file_download_manager: bool = False,
             file_index_manager: bool = False,
             db_manager: bool = False,
+            websocket_listener: bool = False,
     ) -> None:
-        if db_manager:
+        if websocket_listener:
+            local_rest_server = True
+            file_upload_manager = True
+            file_download_manager = True
+            file_index_manager = True
+            db_manager = True
+
+        if file_upload_manager:
+            db_manager = True
+
+        if db_manager and not self._started_db_manager:
             await self.container.db_manager.start_workers()
             self._started_db_manager = True
 
-        if file_upload_manager:
-            if not self._started_db_manager:
-                await self.container.db_manager.start_workers()
-                self._started_db_manager = True
+        if file_upload_manager and not self._started_file_upload_manager:
             await self.container.file_upload_manager.start_workers()
             self._started_file_upload_manager = True
 
-        if file_download_manager:
+        if file_download_manager and not self._started_file_download_manager:
             await self.container.file_download_manager.start_workers()
             self._started_file_download_manager = True
 
-        if file_index_manager:
-            if not self._started_db_manager:
-                await self.container.db_manager.start_workers()
-                self._started_db_manager = True
+        if file_index_manager and not self._started_file_index_manager:
             await self.container.file_index_manager.start_workers()
             self._started_file_index_manager = True
 
-        if local_rest_server:
+        if local_rest_server and not self._started_local_rest_server:
             self.container.local_rest_server.start()
             self._started_local_rest_server = True
+
+        if websocket_listener and not self._started_websocket_listener:
+            self.container.websocket_listener.start()
+            self._started_websocket_listener = True
 
     async def drain(self) -> None:
         if self._started_file_index_manager:
@@ -51,10 +61,17 @@ class ServiceRuntime:
         if self._started_db_manager:
             await self.container.db_queue.join()
 
-    async def stop(self) -> None:
+    async def stop(self, *, drain: bool = False) -> None:
+        if self._started_websocket_listener:
+            await self.container.websocket_listener.stop()
+            self._started_websocket_listener = False
+
         if self._started_local_rest_server:
             self.container.local_rest_server.stop()
             self._started_local_rest_server = False
+
+        if drain:
+            await self.drain()
 
         if self._started_file_upload_manager:
             await self.container.file_upload_manager.stop_workers()

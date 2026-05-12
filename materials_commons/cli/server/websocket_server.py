@@ -51,6 +51,13 @@ class WebSocketCommandListener:
         self.handler_lookup = handler_lookup
         self.user_id: Optional[int] = None
         self.max_concurrent = max_concurrent
+        self._task: Optional[asyncio.Task[None]] = None
+
+    def start(self) -> None:
+        if self._task is not None and not self._task.done():
+            return
+
+        self._task = asyncio.create_task(self.run())
 
     async def run(self) -> None:
         """
@@ -81,6 +88,8 @@ class WebSocketCommandListener:
 
                     await cleanup_tasks(receiver_task, sender_task, heartbeat_task)
 
+            except asyncio.CancelledError:
+                raise
             except (ConnectionClosedOK, ConnectionClosedError, InvalidStatus, OSError, asyncio.TimeoutError) as e:
                 print(f"Connection lost: {e}, attemping to reconnect in {self.backoff} seconds")
                 await asyncio.sleep(self.backoff)
@@ -89,10 +98,22 @@ class WebSocketCommandListener:
                     max(self.DEFAULT_RECONNECT_MIN_SEC, self.backoff * 2)
                 )
 
-    async def shutdown(self):
-        """Shutdown the file transfer workers"""
-        # Keep for now in case we want to add shutdown logic later
-        pass
+    async def shutdown(self) -> None:
+        """Shutdown the websocket listener"""
+        if self._task is None:
+            return
+
+        if not self._task.done():
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+
+        self._task = None
+
+    async def stop(self) -> None:
+        await self.shutdown()
 
     async def _ws_sender_loop(self, ws):
         """Reads from the queue and sends to the websocket."""
