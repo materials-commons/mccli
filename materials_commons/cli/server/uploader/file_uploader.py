@@ -2,16 +2,13 @@ import asyncio
 import hashlib
 import logging
 import uuid
-import os
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Optional, Callable, Dict, Any
 
 import aiofiles
 
-from materials_commons.cli.filedb import FileIndexDB, FileRecord
-from materials_commons.cli.server.indexer.file_index_manager import file_has_changed
-
+from materials_commons.cli.filedb import FileIndexDB
+from materials_commons.cli.requests import UploadRequest, DBWriteRequest
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +21,7 @@ class FileUploader:
             db: FileIndexDB,
             ws_send_queue: asyncio.Queue,
             db_write_queue: asyncio.Queue,
-            file_path: str,
-            project_path: str,
-            project_id: int,
+            upload_request: UploadRequest,
             client_id: str,
             chunk_size: int = 1024 * 1024,  # 1MB default
             window_size: int = 10,
@@ -35,19 +30,21 @@ class FileUploader:
         self.db = db
         self.ws_send_queue = ws_send_queue
         self.db_write_queue = db_write_queue
-        self.file_path = Path(file_path)
-        self.project_path = Path(project_path)
-        self.project_id = project_id
+        self.upload_request = upload_request
         self.client_id = client_id
         self.chunk_size = chunk_size
         self.window_size = window_size
         self.progress_callback = progress_callback
 
         self.transfer_id = str(uuid.uuid4())
-        self.file_size = self.file_path.stat().st_size
         self.bytes_sent = 0
         self.paused = False
         self.cancelled = False
+
+        # These fields are referenced multiple times. They are pulled out to make code more readable.
+        self.file_path = upload_request.observation.path
+        self.project_path = upload_request.observation.remote_path
+        self.file_size = upload_request.observation.local_entry.size
 
         # Sliding window for chunk sending
         self.next_chunk_to_send = 0
@@ -137,25 +134,9 @@ class FileUploader:
 
     async def _send_transfer_init(self) -> bool:
         """Send TRANSFER_INIT message via queue"""
-        if self.file_size == 0:
+        if self.upload_request.observation.local_entry.size == 0:
             print(f"Skipping {self.file_path.as_posix()} (empty file)...")
             return True
-        finfo = await asyncio.to_thread(os.stat, self.file_path.as_posix())
-        file_record = await self.db.get_file_by_path(self.project_path.as_posix())
-        if file_has_changed(file_record, finfo) or file_record.checksum is None:
-            csum = await asyncio.to_thread(self._calculate_md5)
-            updated_file_record = FileRecord(
-                path=self.project_path.as_posix(),
-                size=finfo.st_size,
-                mtime_ns=finfo.st_mtime_ns,
-                ctime_ns=finfo.st_ctime_ns,
-                last_seen_ts=int(datetime.now().timestamp()),
-                checksum=csum,
-                status="indexed",
-            )
-            await self.db_write_queue.put(("single", self.project_id, updated_file_record))
-        else:
-            csum = file_record.checksum
 
         msg = {
             "command": "TRANSFER_INIT",
@@ -164,12 +145,12 @@ class FileUploader:
             "client_id": self.client_id,
             "payload": {
                 "transfer_id": self.transfer_id,
-                "project_id": self.project_id,
+                "project_id": self.upload_request.project.id,
                 "file_path": self.file_path.as_posix(),
                 "project_path": self.project_path.as_posix(),
                 "file_size": self.file_size,
                 "chunk_size": self.chunk_size,
-                "checksum": csum
+                "checksum": self.upload_request.updated_record.local_checksum
             }
         }
 
@@ -434,6 +415,13 @@ class FileUploader:
 
         if msg["command"] == "TRANSFER_FINALIZE":
             logger.info(f"Transfer finalized: {self.file_path.name}")
+            # TODO: Do below to capture remote file information
+            # We should receive information here about the file that was uploaded and insert
+            # that information into the database.
+            db_write_request = DBWriteRequest(project=self.upload_request.project,
+                                              data=self.upload_request.updated_record,
+                                              command="single")
+            await self.db_write_queue.put(db_write_request)
             return True
 
         elif msg["command"] == "UPLOAD_FAILED":
@@ -469,5 +457,3 @@ class FileUploader:
                     break
                 md5_hash.update(chunk)
         return md5_hash.hexdigest()
-
-

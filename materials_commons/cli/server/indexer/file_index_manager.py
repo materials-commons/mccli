@@ -1,18 +1,14 @@
 import asyncio
 import os
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from materials_commons.api import models
-
-from materials_commons.cli.local_project import LocalProject
 from materials_commons.cli.models import FileRecord
 from materials_commons.cli.reconcile2 import observe_and_reconcile
-from materials_commons.cli.server.db.db_manager import DBWriteRequest
+from materials_commons.cli.requests import IndexRequest, DBWriteRequest
 
 
-def file_has_changed(file_record: FileRecord, finfo: os.stat_result) -> bool:
+def file_has_changed(file_record: Optional[FileRecord], finfo: os.stat_result) -> bool:
     """Check if a file has changed since the last index. Returns True if file_record is None."""
     if file_record is None:
         return True
@@ -22,13 +18,6 @@ def file_has_changed(file_record: FileRecord, finfo: os.stat_result) -> bool:
             file_record.local_mtime_ns != finfo.st_mtime_ns
     )
 
-@dataclass(frozen=True)
-class IndexRequest:
-    """Request to index a file"""
-    file_path: str | Path
-    project_path: str | Path
-    remote_entry: Optional[models.File]
-    project: LocalProject
 
 class FileIndexManager:
     """Manages multiple concurrent file indexers"""
@@ -77,7 +66,8 @@ class FileIndexManager:
             print(f"Skipping {index_request.file_path} in {index_request.project_path} as it hasn't changed")
             return
 
-        db_write_request = DBWriteRequest(project=index_request.project, command="single", data=file_decision.updated_record)
+        db_write_request = DBWriteRequest(project=index_request.project, command="single",
+                                          data=file_decision.updated_record)
         await self._db_queue.put(db_write_request)
         print(f"Indexed {index_request.file_path} in {index_request.project_path}", flush=True)
 

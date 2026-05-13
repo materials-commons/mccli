@@ -5,9 +5,12 @@ import os
 import ssl
 import sys
 from pathlib import Path
+from pprint import pprint
 
 import igittigitt
 import websockets
+
+from materials_commons.cli.requests import UploadRequest
 from materials_commons.cli.walk import local_listdir
 from websockets import ConnectionClosedOK, ConnectionClosedError, InvalidStatus
 
@@ -116,7 +119,7 @@ def up_subcommand(argv, working_dir):
                                                   working_dir)[0]
 
     if args.websocket:
-        asyncio.run(ws_upload(args, proj, working_dir))
+        asyncio.run(ws_upload(args, working_dir))
     elif args.globus:
         globus_upload(args, proj, working_dir, pconfig)
     else:
@@ -197,7 +200,7 @@ async def ws_upload(args, working_dir):
     ignore_parser.parse_rule_files(base_dir=proj.local_path, filename=".mcignore", add_default_patterns=False)
 
     # Start services
-    container = ServiceContainer.create()
+    container = ServiceContainer.create(ws_url=args.ws_url)
     service_runtime = ServiceRuntime(container)
     await service_runtime.start(websocket_listener=True)
     async_reconciler = AsyncReconciler(db=db, proj=proj, reconcile_mode="upload")
@@ -215,18 +218,20 @@ async def ws_upload(args, working_dir):
                             logger.error(f"Error encountered while processing {entry_name}: {file_state.exception}")
                             continue
                         if file_state.file_decision.action == "upload":
-                            transfer_id = await container.file_upload_manager.upload_file(
-                                file_path=file_state.observation.local_path.as_posix(),
-                                project_path=file_state.observation.remote_path.as_posix(),
-                                project_id=proj.id)
+                            upload_request = UploadRequest(observation=file_state.observation,
+                                                           updated_record=file_state.file_decision.updated_record,
+                                                           project=proj)
+                            transfer_id = await container.file_upload_manager.upload_file(upload_request)
                             transfer_ids.append(transfer_id)
             elif p.is_file():
                 file_state = await async_reconciler.reconcile_file(p)
-                transfer_id = await container.file_upload_manager.upload_file(
-                    file_path=file_state.observation.local_path.as_posix(),
-                    project_path=file_state.observation.remote_path.as_posix(),
-                    project_id=proj.id)
-                transfer_ids.append(transfer_id)
+                pprint(file_state, width=1)
+                if file_state.file_decision.action == "upload":
+                    upload_request = UploadRequest(observation=file_state.observation,
+                                                   updated_record=file_state.file_decision.updated_record,
+                                                   project=proj)
+                    transfer_id = await container.file_upload_manager.upload_file(upload_request)
+                    transfer_ids.append(transfer_id)
     except (ConnectionClosedOK, ConnectionClosedError, InvalidStatus, OSError, asyncio.TimeoutError) as e:
         logger.error(f"WebSocket connection failed: {e}")
         return False
@@ -234,6 +239,7 @@ async def ws_upload(args, working_dir):
     finally:
         # Shutdown gracefully
         logger.info("Shutting down websocket infrastructure...")
+        await service_runtime.stop(drain=True)
 
     # if not status:
     #     print("\nSome uploads failed.")

@@ -4,15 +4,16 @@ from functools import cached_property
 from typing import Optional
 
 from materials_commons.cli.config import Config
+from materials_commons.cli.requests import DBWriteRequest, IndexRequest
 from materials_commons.cli.server.command_handlers.admin_handler_lookup import AdminHandlerLookup
 from materials_commons.cli.server.command_handlers.download_handler_lookup import DownloadHandlerLookup
 from materials_commons.cli.server.command_handlers.list_handler_lookup import ListHandlerLookup
 from materials_commons.cli.server.command_handlers.multi_handler_lookup import MultiHandlerLookup
 from materials_commons.cli.server.command_handlers.search_find_handler_lookup import SearchFindHandlerLookup
 from materials_commons.cli.server.command_handlers.upload_handler_lookup import UploadHandlerLookup
-from materials_commons.cli.server.db.db_manager import DBManager, DBWriteRequest
+from materials_commons.cli.server.db.db_manager import DBManager
 from materials_commons.cli.server.downloader.file_download_manager import FileDownloadManager
-from materials_commons.cli.server.indexer.file_index_manager import FileIndexManager, IndexRequest
+from materials_commons.cli.server.indexer.file_index_manager import FileIndexManager
 from materials_commons.cli.server.local_rest_server import LocalRestServer
 from materials_commons.cli.server.project_filedbs import ProjectFileDBs
 from materials_commons.cli.server.uploader.file_upload_manager import FileUploadManager
@@ -48,7 +49,6 @@ class ServiceContainer:
         return FileUploadManager(
             send_queue=self.send_queue,
             db_write_queue=self.db_queue,
-            project_dbs=self.project_dbs,
             client_id=self.config.client_uuid,
         )
 

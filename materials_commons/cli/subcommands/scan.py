@@ -1,16 +1,12 @@
 import argparse
 import asyncio
-from asyncio import Task
 from pathlib import Path
 
 import igittigitt
 
-import materials_commons.cli.old.functions as clifuncs
 from materials_commons.cli.local_project import LocalProject
+from materials_commons.cli.requests import IndexRequest
 from materials_commons.cli.server import projects
-from materials_commons.cli.server.db.db_manager import DBManager
-from materials_commons.cli.server.indexer.file_index_manager import FileIndexManager, IndexRequest
-from materials_commons.cli.server.project_filedbs import ProjectFileDBs
 from materials_commons.cli.server.service_container import ServiceContainer
 from materials_commons.cli.server.service_runtime import ServiceRuntime
 from materials_commons.cli.walk import async_walk, make_ignore_func, local_listdir

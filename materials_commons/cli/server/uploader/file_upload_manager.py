@@ -5,20 +5,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, Optional, Callable
 
-from materials_commons.cli.server.project_filedbs import ProjectFileDBs
+from materials_commons.cli.requests import UploadRequest
 from materials_commons.cli.server.uploader.file_uploader import FileUploader, logger
 
 
 class FileUploadManager:
     """Manages multiple concurrent file uploads"""
 
-    def __init__(self, send_queue: asyncio.Queue, db_write_queue: asyncio.Queue, project_dbs: ProjectFileDBs,
-                 client_id: str, max_concurrent: int = 3):
+    def __init__(self,
+                 send_queue: asyncio.Queue,
+                 db_write_queue: asyncio.Queue,
+                 client_id: str,
+                 max_concurrent: int = 3):
         self.send_queue = send_queue
         self.db_write_queue = db_write_queue
         self.client_id = client_id
         self.max_concurrent = max_concurrent
-        self.project_filedbs = project_dbs
 
         # Active uploads indexed by transfer_id
         self.active_uploads: Dict[str, FileUploader] = {}
@@ -88,9 +90,7 @@ class FileUploadManager:
 
     async def upload_file(
             self,
-            file_path: str,
-            project_id: int,
-            project_path: str,
+            upload_request: UploadRequest,
             chunk_size: int = 1024 * 1024,
             progress_callback: Optional[Callable[[int, int], None]] = None
     ) -> str:
@@ -99,24 +99,25 @@ class FileUploadManager:
         and then queueing this object. The queued FileUploader will then be picked up by a worker to perform
         the upload.
         """
-        filedb = await self.project_filedbs.get_filedb(project_id)
+        db = await upload_request.project.get_filedb()
         uploader = FileUploader(
-            db=filedb,
+            db=db,
             ws_send_queue=self.send_queue,
             db_write_queue=self.db_write_queue,
-            file_path=file_path,
-            project_path=project_path,
-            project_id=project_id,
+            upload_request=upload_request,
             client_id=self.client_id,
             chunk_size=chunk_size,
             progress_callback=progress_callback
         )
 
+        file_path = upload_request.observation.path
         await self.upload_queue.put(uploader)
         logger.info(f"Queued upload: {file_path} (transfer_id: {uploader.transfer_id})")
 
         return uploader.transfer_id
 
+    # TODO: This should be removed, and the place where its called should do an async_reconciler
+    # walk and call the upload_file() method in this class.
     async def upload_directory(
             self,
             dest_dir: str,

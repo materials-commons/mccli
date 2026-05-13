@@ -87,7 +87,7 @@ class LocalFileEntry:
 
 
 @dataclass
-class WalkObservation:
+class Observation:
     local_path: Optional[Path] = None
     remote_path: Optional[Path] = None
 
@@ -261,7 +261,7 @@ class FileDecision:
 
 @dataclass
 class FileState:
-    observation: WalkObservation
+    observation: Observation
     file_decision: Optional[FileDecision] = None
     exception: Optional[Exception] = None
 

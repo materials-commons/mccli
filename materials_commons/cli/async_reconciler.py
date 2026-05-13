@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Optional, AsyncIterator
 
 from materials_commons.cli.filedb import FileIndexDB
-from materials_commons.cli.models import OldLocalProject, FileState, FileDecision, WalkObservation, RemoteFileEntry
+from materials_commons.cli.models import OldLocalProject, FileState, FileDecision, Observation, RemoteFileEntry
 from materials_commons.cli.reconcile3 import SingleFileReconciler, ReconcileMode
 from materials_commons.cli.server import projects
 from materials_commons.cli.walk import ListDirFunc, IgnoreFunc, async_walk, path_to_local_file_entry
@@ -28,7 +28,7 @@ class AsyncReconciler:
                    ignore_fn: Optional[IgnoreFunc] = None) -> AsyncIterator[tuple[Path, dict[str, FileState]]]:
         sem = asyncio.Semaphore(self.max_concurrent)
 
-        async def single_entry_reconcile(obs: WalkObservation) -> FileDecision:
+        async def single_entry_reconcile(obs: Observation) -> FileDecision:
             async with sem:
                 return await self.reconciler.reconcile_file(obs)
 
@@ -81,7 +81,7 @@ class AsyncReconciler:
             checksum=getattr(mc_remote_file, "checksum", None),
             raw=mc_remote_file,
         )
-        obs = WalkObservation(
+        obs = Observation(
             remote_entry=remote_file_entry,
             local_entry=local_file_entry,
             file_record=file_record,

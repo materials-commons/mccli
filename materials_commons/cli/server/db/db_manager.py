@@ -1,16 +1,9 @@
 import asyncio
-from dataclasses import dataclass
 from typing import cast
 
 from materials_commons.cli.models import FileRecord
+from materials_commons.cli.requests import DBWriteRequest
 
-from materials_commons.cli.local_project import LocalProject
-
-@dataclass(frozen=True)
-class DBWriteRequest:
-    project: LocalProject
-    command: str
-    data: FileRecord | list[FileRecord]
 
 class DBManager:
     """

@@ -2,14 +2,14 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from materials_commons.cli.models import WalkObservation
+from materials_commons.cli.models import Observation
 from materials_commons.cli.reconcile3 import SingleFileReconciler
 
 
 @pytest.mark.asyncio
 async def test_reconcile_file_local_symlink():
     # Create a mock WalkObservation with a local symlink
-    observation = MagicMock(spec=WalkObservation)
+    observation = MagicMock(spec=Observation)
     observation.local_is_symlink.return_value = True
     observation.has_local.return_value = True
     observation.has_remote.return_value = False
@@ -34,7 +34,7 @@ async def test_reconcile_file_local_symlink():
 @pytest.mark.asyncio
 async def test_reconcile_file_kind_conflict():
     # Create a mock WalkObservation with a kind conflict
-    observation = MagicMock(spec=WalkObservation)
+    observation = MagicMock(spec=Observation)
     observation.local_is_symlink.return_value = False
     observation.has_kind_conflict.return_value = True
     observation.is_file = False
@@ -58,7 +58,7 @@ async def test_reconcile_file_kind_conflict():
 @pytest.mark.asyncio
 async def test_reconcile_file_directory():
     # Create a mock WalkObservation for a directory
-    observation = MagicMock(spec=WalkObservation)
+    observation = MagicMock(spec=Observation)
     observation.local_is_symlink.return_value = False
     observation.has_kind_conflict.return_value = False
     observation.is_dir = True
@@ -81,7 +81,7 @@ async def test_reconcile_file_directory():
 @pytest.mark.asyncio
 async def test_reconcile_file_regular_file():
     # Create a mock WalkObservation for a regular file
-    observation = MagicMock(spec=WalkObservation)
+    observation = MagicMock(spec=Observation)
     observation.local_is_symlink.return_value = False
     observation.has_kind_conflict.return_value = False
     observation.is_dir = False
@@ -104,7 +104,7 @@ async def test_reconcile_file_regular_file():
 @pytest.mark.asyncio
 async def test_reconcile_file_no_entry_observed():
     # Create a mock WalkObservation with no local or remote entry observed
-    observation = MagicMock(spec=WalkObservation)
+    observation = MagicMock(spec=Observation)
     observation.local_is_symlink.return_value = False
     observation.has_local.return_value = False
     observation.has_remote.return_value = False

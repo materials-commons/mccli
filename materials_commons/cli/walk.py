@@ -5,11 +5,11 @@ from typing import AsyncIterator, Callable, Optional, Awaitable
 
 import materials_commons.api.models as mcmodel
 
-from materials_commons.cli.models import OldLocalProject, WalkObservation, LocalFileEntry, RemoteFileEntry, EntryKind
+from materials_commons.cli.models import OldLocalProject, Observation, LocalFileEntry, RemoteFileEntry, EntryKind
 from materials_commons.cli.server import projects
 
 IgnoreFunc = Callable[[Path, bool], bool]
-ListDirFunc = Callable[[Path], Awaitable[list[WalkObservation]]]
+ListDirFunc = Callable[[Path], Awaitable[list[Observation]]]
 
 
 async def async_walk(
@@ -17,7 +17,7 @@ async def async_walk(
         listdir_fn: ListDirFunc,
         recursive: bool = True,
         ignore_fn: Optional[IgnoreFunc] = None,
-) -> AsyncIterator[tuple[Path, list[WalkObservation]]]:
+) -> AsyncIterator[tuple[Path, list[Observation]]]:
     """Asynchronously walk a directory tree, yielding WalkObservation objects for each directory and file.
 
     Args:
@@ -42,7 +42,7 @@ async def async_walk(
 
         observations = await listdir_fn(current)
 
-        filtered: list[WalkObservation] = []
+        filtered: list[Observation] = []
         for entry in observations:
             if _default_files_to_ignore(entry.path):
                 continue
@@ -107,18 +107,18 @@ def path_to_local_file_entry(entry: Path) -> LocalFileEntry:
     return local
 
 
-async def local_listdir(path: str | Path) -> list[WalkObservation]:
+async def local_listdir(path: str | Path) -> list[Observation]:
     """Asynchronously list the contents of a directory."""
     root = Path(path)
 
-    def _scan() -> list[WalkObservation]:
-        items: list[WalkObservation] = []
+    def _scan() -> list[Observation]:
+        items: list[Observation] = []
 
         for entry in root.iterdir():
             local = path_to_local_file_entry(entry)
 
             items.append(
-                WalkObservation(
+                Observation(
                     local_path=entry,
                     remote_path=None,
                     local_entry=local,
@@ -148,7 +148,7 @@ def mcapi_file_to_remote_file_entry(entry: mcmodel.File) -> RemoteFileEntry:
     return remote_entry
 
 
-async def remote_listdir(project_path: str | Path, proj: OldLocalProject) -> list[WalkObservation]:
+async def remote_listdir(project_path: str | Path, proj: OldLocalProject) -> list[Observation]:
     """Asynchronously list the contents of a remote directory.
 
     Args:
@@ -156,11 +156,11 @@ async def remote_listdir(project_path: str | Path, proj: OldLocalProject) -> lis
         proj: The local project object representing the remote project.
     """
     entries = await asyncio.to_thread(proj.remote.list_directory_by_path, proj.id, project_path.as_posix())
-    items: list[WalkObservation] = []
+    items: list[Observation] = []
     for entry in entries:
         remote_entry = mcapi_file_to_remote_file_entry(entry)
         items.append(
-            WalkObservation(
+            Observation(
                 local_path=None,
                 remote_path=Path(entry.path),
                 local_entry=None,
@@ -182,18 +182,18 @@ def make_remote_listdir_func(proj: OldLocalProject) -> ListDirFunc:
         An asynchronous function that lists directory contents of a remote project.
     """
 
-    async def _remote_listdir(path: Path) -> list[WalkObservation]:
+    async def _remote_listdir(path: Path) -> list[Observation]:
         return await remote_listdir(path, proj)
 
     return _remote_listdir
 
 
 async def merged_local_remote_listdir(
-        local_listdir_fn: Callable[[Path], Awaitable[list[WalkObservation]]],
-        remote_listdir_fn: Callable[[Path], Awaitable[list[WalkObservation]]],
+        local_listdir_fn: Callable[[Path], Awaitable[list[Observation]]],
+        remote_listdir_fn: Callable[[Path], Awaitable[list[Observation]]],
         proj: OldLocalProject,
         path: Path,
-) -> list[WalkObservation]:
+) -> list[Observation]:
     """
     Merge local and remote directory listings, prioritizing local entries.
     """
@@ -204,14 +204,14 @@ async def merged_local_remote_listdir(
     local_by_name = {obs.name: obs for obs in local_entries}
     remote_by_name = {obs.name: obs for obs in remote_entries}
 
-    merged: list[WalkObservation] = []
+    merged: list[Observation] = []
 
     names = set(local_by_name) | set(remote_by_name)
     for name in sorted(names, key=lambda s: s.lower()):
         local_obs = local_by_name.get(name)
         remote_obs = remote_by_name.get(name)
         merged.append(
-            WalkObservation(
+            Observation(
                 local_path=local_obs.local_path if local_obs else None,
                 remote_path=project_path / name,
                 file_record=None,
@@ -229,7 +229,7 @@ def make_merged_listdir_func(proj: OldLocalProject) -> ListDirFunc:
     """
     remote_listdir_fn = make_remote_listdir_func(proj)
 
-    async def _merged_listdir(path: Path) -> list[WalkObservation]:
+    async def _merged_listdir(path: Path) -> list[Observation]:
         return await merged_local_remote_listdir(local_listdir_fn=local_listdir,
                                                  remote_listdir_fn=remote_listdir_fn,
                                                  proj=proj,
