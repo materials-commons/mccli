@@ -132,6 +132,11 @@ class WebSocketCommandListener:
                 else:
                     # Send JSON (text frame) message
                     await ws.send(json.dumps(msg))
+            except (ConnectionClosedOK, ConnectionClosedError) as e:
+                # The message was removed from the queue but not sent successfully.
+                # Put it back so it can be retried after reconnect.
+                await self.ws_send_queue.put(msg)
+                return
             except Exception as e:
                 # If we are here, then we took a message out of the queue but failed to send it.
                 # That means the message could be lost if we don't re-queue it. For now, we assume
@@ -148,7 +153,12 @@ class WebSocketCommandListener:
     async def _ws_receiver_loop(self, ws):
         """Reads from the websocket and puts messages into the queue."""
         while True:
-            raw = await ws.recv()
+            try:
+                raw = await ws.recv()
+            except (ConnectionClosedOK, ConnectionClosedError) as e:
+                print(f"Websocket closed while receiving message: {e}")
+                return
+
             try:
                 data = json.loads(raw)
             except json.JSONDecodeError:

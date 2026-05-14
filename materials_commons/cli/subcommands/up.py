@@ -2,31 +2,24 @@ import argparse
 import asyncio
 import logging
 import os
-import ssl
 import sys
 from pathlib import Path
-from pprint import pprint
 
 import igittigitt
-import websockets
-
-from materials_commons.cli.requests import UploadRequest
-from materials_commons.cli.walk import local_listdir
 from websockets import ConnectionClosedOK, ConnectionClosedError, InvalidStatus
-
-from materials_commons.cli.async_reconciler import AsyncReconciler
 
 import materials_commons.cli.old.exceptions as cliexcept
 import materials_commons.cli.old.functions as clifuncs
 import materials_commons.cli.old.globus as cliglobus
 import materials_commons.cli.old.tree_functions as treefuncs
+from materials_commons.cli.async_reconciler import AsyncReconciler
 from materials_commons.cli.local_project import LocalProject
 from materials_commons.cli.old.treedb import LocalTree, RemoteTree
-from materials_commons.cli.server.command_handlers.upload_handler_lookup import UploadHandlerLookup
+from materials_commons.cli.requests import UploadRequest
 from materials_commons.cli.server.service_container import ServiceContainer
 from materials_commons.cli.server.service_runtime import ServiceRuntime
-from materials_commons.cli.server.websocket_server import WebSocketCommandListener
 from materials_commons.cli.subcommands.server import DEFAULT_WS_URL
+from materials_commons.cli.walk import local_listdir
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +125,6 @@ def up_subcommand(argv, working_dir):
                                      no_compare=args.no_compare,
                                      upload_as=upload_as, localtree=localtree,
                                      remotetree=remotetree)
-
     return
 
 
@@ -225,7 +217,6 @@ async def ws_upload(args, working_dir):
                             transfer_ids.append(transfer_id)
             elif p.is_file():
                 file_state = await async_reconciler.reconcile_file(p)
-                pprint(file_state, width=1)
                 if file_state.file_decision.action == "upload":
                     upload_request = UploadRequest(observation=file_state.observation,
                                                    updated_record=file_state.file_decision.updated_record,
@@ -238,8 +229,10 @@ async def ws_upload(args, working_dir):
 
     finally:
         # Shutdown gracefully
+        await container.file_upload_manager.wait_all()
         logger.info("Shutting down websocket infrastructure...")
         await service_runtime.stop(drain=True)
+        await db.close()
 
     # if not status:
     #     print("\nSome uploads failed.")

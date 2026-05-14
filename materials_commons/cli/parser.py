@@ -3,15 +3,16 @@ import json
 import os
 import sys
 from datetime import datetime, timedelta
+from importlib.metadata import PackageNotFoundError, version as pkg_version
 from io import StringIO
 
 import materials_commons.api as mcapi
-from importlib.metadata import PackageNotFoundError, version as pkg_version
 import requests
 
 import materials_commons.cli.old.functions as clifuncs
 from materials_commons.cli.old.exceptions import MCCLIException, MissingRemoteException, \
     MultipleRemoteException, NoDefaultRemoteException
+from materials_commons.cli.old.user_config import Config
 from materials_commons.cli.subcommands.clone import clone_subcommand
 from materials_commons.cli.subcommands.config import config_subcommand
 from materials_commons.cli.subcommands.dataset import DatasetSubcommand
@@ -29,11 +30,10 @@ from materials_commons.cli.subcommands.mv import mv_subcommand
 from materials_commons.cli.subcommands.proj import ProjSubcommand
 from materials_commons.cli.subcommands.remote import remote_subcommand
 from materials_commons.cli.subcommands.rm import rm_subcommand
+from materials_commons.cli.subcommands.scan import scan_subcommand
+from materials_commons.cli.subcommands.server import server_subcommand
 from materials_commons.cli.subcommands.up import up_subcommand
 from materials_commons.cli.subcommands.versions import versions_subcommand
-from materials_commons.cli.subcommands.scan import scan_subcommand
-from materials_commons.cli.old.user_config import Config
-from materials_commons.cli.subcommands.server import server_subcommand
 
 standard_usage = [
     {'name': 'remote', 'desc': 'List servers', 'subcommand': remote_subcommand},
