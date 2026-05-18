@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import logging
 import uuid
+from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Optional, Callable, Dict, Any
 
@@ -405,7 +406,7 @@ class FileUploader:
         self.waiting_for_response = "TRANSFER_FINALIZE"
 
         try:
-            msg = await asyncio.wait_for(self.response_queue.get(), timeout=30.0)
+            msg: dict = await asyncio.wait_for(self.response_queue.get(), timeout=30.0)
         except asyncio.TimeoutError:
             logger.error("Timeout waiting for TRANSFER_FINALIZE")
             return False
@@ -417,8 +418,14 @@ class FileUploader:
             # TODO: Do below to capture remote file information
             # We should receive information here about the file that was uploaded and insert
             # that information into the database.
+            payload = msg.get("payload", {})
+            updated_record = replace(self.upload_request.updated_record,
+                                     remote_checksum=payload.get("file_checksum", ""),
+                                     remote_size=payload.get("file_size", 0),
+                                     remote_file_id=payload.get("file_id", 0),
+                                     remote_ctime_ns=payload.get("file_created_at_ns", 0))
             db_write_request = DBWriteRequest(project=self.upload_request.project,
-                                              data=self.upload_request.updated_record,
+                                              data=updated_record,
                                               command="single")
             await self.db_write_queue.put(db_write_request)
             return True
