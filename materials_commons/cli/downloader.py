@@ -24,7 +24,7 @@ class Downloader:
                                                          mcurl=self.config.default_remote.mcurl,
                                                          apitoken=self.config.default_remote.mcapikey,
                                                          max_concurrent=max_concurrent)
-        self.async_reconciler = AsyncReconciler(db=db, proj=proj, recompute_checksum=True)
+        self.async_reconciler = AsyncReconciler(db=db, proj=proj, reconcile_mode="download")
 
     async def start_workers(self):
         await self.file_download_manager.start_workers()

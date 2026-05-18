@@ -6,6 +6,7 @@ from typing import Literal, Optional
 
 from materials_commons.api import models as mcmodel
 
+from materials_commons.cli.local_project import LocalProject
 from materials_commons.cli.models import FileRecord, Observation, FileDecision
 from materials_commons.cli.old.functions import checksum
 
@@ -27,9 +28,12 @@ class SingleFileReconciler:
     - both files changed from the record: conflict
     """
 
-    def __init__(self, *, mode: ReconcileMode,
+    def __init__(self, *,
+                 proj: LocalProject,
+                 mode: ReconcileMode,
                  reuse_checksum_requires_ctime_match: bool = False):
         self._mode: ReconcileMode = mode
+        self._proj: LocalProject = proj
         self._reuse_checksum_requires_ctime_match = reuse_checksum_requires_ctime_match
 
     async def reconcile_file(self, observation: Observation) -> FileDecision:
@@ -252,7 +256,7 @@ class SingleFileReconciler:
         return await self._reconcile_both_sides_upload_no_record(observation, updated_record)
 
     async def _reconcile_both_sides_upload_have_record(self, observation: Observation,
-                                                 updated_record: FileRecord) -> FileDecision:
+                                                       updated_record: FileRecord) -> FileDecision:
         if observation.local_entry_matches_record():
             if observation.file_record.remote_file_id == observation.remote_entry.remote_file_id:
                 # No action needed, files are identical
@@ -343,6 +347,32 @@ class SingleFileReconciler:
 
     async def _previous_version_uploaded(self, observation: Observation,
                                          local_checksum: str) -> Optional[mcmodel.File]:
+        """Gets the previous versions of a file and checks if any match the local checksum"""
+
+        # If we don't have a remote file id then we need to get on by querying on the path.
+        if observation.remote_entry is None or observation.remote_entry.remote_file_id is None:
+            remote_entry = await asyncio.to_thread(self._proj.remote.get_file_by_path, self._proj.id,
+                                                   observation.remote_path)
+            if remote_entry is None:
+                # Didn't find a match for the remote file
+                return None
+            elif remote_entry.checksum == local_checksum:
+                # The remote file matches the local checksum, no need to check previous versions
+                return remote_entry
+            else:
+                # The remote file doesn't match the local checksum, but we can use its id to get previous versions.
+                remote_file_id = remote_entry.remote_file_id
+        else:
+            # There is a remote entry use its id
+            remote_file_id = observation.remote_entry.remote_file_id
+
+        # Get previous versions and look for a match
+        previous_versions = await asyncio.to_thread(self._proj.remote.get_file_versions, self._proj.id, remote_file_id)
+        if previous_versions is None:
+            return None
+        for prev_version in previous_versions:
+            if prev_version.checksum == local_checksum:
+                return prev_version
         return None
 
     def _record_with_local(self, observation: Observation, record: FileRecord) -> FileRecord:

@@ -6,6 +6,7 @@ from pathlib import Path
 from tabulate import tabulate
 
 from materials_commons.cli.filedb import FileIndexDB, to_project_db_path
+from materials_commons.cli.local_project import LocalProject
 from materials_commons.cli.old.functions import humanize, format_time
 from materials_commons.cli.models import LSAction, LSEntry
 from materials_commons.cli.async_reconciler import AsyncReconciler
@@ -83,7 +84,8 @@ def ls2_subcommand(argv, working_dir):
 
 
 async def ls2_subcommand_async(args, working_dir):
-    proj = await projects.get_old_local_project(working_dir)
+    proj = LocalProject.load(working_dir)
+    proj.remote.raise_exception = False
     db = await FileIndexDB.create(to_project_db_path(proj.local_path))
     async_reconciler = AsyncReconciler(db=db, proj=proj, reconcile_mode="status")
     which_class = LSAction if args.action else LSEntry

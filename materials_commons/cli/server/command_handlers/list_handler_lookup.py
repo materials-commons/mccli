@@ -62,7 +62,7 @@ async def _handle_list_project_directory_actions(queue: asyncio.Queue, cmd: Dict
             files_list.append(asdict(LSAction.from_file_state(entry)))
         return files_list
 
-    async_reconciler = AsyncReconciler(db=db, proj=proj, recompute_checksum=False)
+    async_reconciler = AsyncReconciler(db=db, proj=proj)
     listdir_fn = make_merged_listdir_func(proj)
     files = []
     async for current_path, entries in async_reconciler.walk(path=local_project_path, listdir_fn=listdir_fn,
