@@ -156,7 +156,7 @@ class WebSocketCommandListener:
             try:
                 raw = await ws.recv()
             except (ConnectionClosedOK, ConnectionClosedError) as e:
-                print(f"Websocket closed while receiving message: {e}")
+                # print(f"Websocket closed while receiving message: {e}")
                 return
 
             try:
