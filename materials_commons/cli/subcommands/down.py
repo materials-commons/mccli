@@ -9,9 +9,10 @@ import materials_commons.cli.old.exceptions as cliexcept
 import materials_commons.cli.old.file_functions as filefuncs
 import materials_commons.cli.old.functions as clifuncs
 import materials_commons.cli.old.tree_functions as treefuncs
+from materials_commons.cli.downloader import Downloader
+from materials_commons.cli.local_project import LocalProject
 from materials_commons.cli.subcommands.runners.download_globus_runner import run_globus_download
 from materials_commons.cli.subcommands.runners.download_v1_runner import run_v1_download
-from materials_commons.cli.subcommands.runners.download_v2_runner import run_v2_download
 
 
 def make_parser():
@@ -79,6 +80,12 @@ def down_subcommand(argv, working_dir):
     else:
         run_v1_download(args, working_dir)
     return
+
+
+async def run_v2_download(args, working_dir):
+    proj = LocalProject.load(working_dir)
+    downloader = await Downloader.init(proj)
+    await downloader.run(args.paths, recursive=args.recursive)
 
 
 def print_file(args, working_dir):

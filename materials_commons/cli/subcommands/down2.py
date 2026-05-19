@@ -1,6 +1,9 @@
 import argparse
 import asyncio
 
+from materials_commons.cli.downloader import Downloader
+
+from materials_commons.cli.local_project import LocalProject
 from materials_commons.cli.subcommands.runners.download_v2_runner import run_v2_download
 
 
@@ -16,7 +19,13 @@ def make_parser():
     return parser
 
 
-def down2_subcommand(argv, working_dir):
+def down2_subcommand(args, working_dir):
     parser = make_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(args)
     asyncio.run(run_v2_download(args, working_dir))
+
+async def down2_subcommand_async(args, working_dir):
+    proj = LocalProject.load(working_dir)
+    downloader = await Downloader.init(proj)
+    await downloader.run(args.paths, recursive=args.recursive)
+
