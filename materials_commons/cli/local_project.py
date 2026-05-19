@@ -65,4 +65,24 @@ class LocalProject:
             client=client
         )
 
+    def to_remote_path(self, path: Path | str) -> Path:
+        """
+            Converts a local project path to its corresponding remote path. For example,
+            if the proj_base is "/home/user/myproject" and the full_path is "/home/user/myproject/dir/data.txt",
+            the function will return "/dir/data.txt".
+
+            Args:
+                path (Path): The full local path to be converted.
+
+            Returns:
+                Path: The remote path corresponding to the local path.
+            """
+        full_path = Path(path).resolve()
+        # remote_path will be the relative path from proj_base to full_path, i.e., it
+        # won't start with a slash, so we need to add one to get the correct path.
+        if full_path.as_posix() == self.local_path.as_posix():
+            return Path("/")
+        remote_path = full_path.relative_to(self.local_path)
+        return Path("/" + remote_path.as_posix())
+
 

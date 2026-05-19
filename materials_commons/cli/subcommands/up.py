@@ -217,6 +217,10 @@ async def ws_upload(args, working_dir):
                             transfer_ids.append(transfer_id)
             elif p.is_file():
                 file_state = await async_reconciler.reconcile_file(p)
+                if file_state.exception:
+                    logger.error(f"Error encountered while processing {p}: {file_state.exception}")
+                    print(f"Error encountered while processing {p}: {file_state.exception}")
+                    continue
                 if file_state.file_decision.action == "upload":
                     upload_request = UploadRequest(observation=file_state.observation,
                                                    updated_record=file_state.file_decision.updated_record,

@@ -1,16 +1,16 @@
 import asyncio
 import json
 import logging
+import time
 import uuid
 from datetime import datetime, timezone
-from os.path import dirname
-from pathlib import Path
+from os import makedirs
 from typing import Optional, Callable
 
-import aiofiles.os as aio_os
 import requests
 
 from materials_commons.cli.old.functions import checksum
+from materials_commons.cli.requests import DownloadRequest
 
 logger = logging.getLogger(__name__)
 
@@ -20,27 +20,21 @@ class FileDownloader:
 
     def __init__(
             self,
-            send_queue: asyncio.Queue,
-            file_id: int,
-            file_path: str,  # Destination path on local filesystem
-            base_url: str,  # REST endpoint URL
-            project_id: int,
-            client_id: str,
-            apitoken: str,
-            expected_size: Optional[int] = None,
-            expected_checksum: Optional[str] = None,
+            send_queue: Optional[asyncio.Queue],
+            download_request: DownloadRequest,
+            client_id: Optional[str],
             chunk_size: int = 1024 * 1024,  # 1MB chunks for streaming
             progress_callback: Optional[Callable[[int, int], None]] = None
     ):
         self.send_queue = send_queue
-        self.file_id = file_id
-        self.file_path = Path(file_path)
-        self.base_url = base_url
-        self.apitoken = apitoken
-        self.project_id = project_id
+        self.file_id = download_request.observation.remote_entry.remote_file_id
+        self.file_path = download_request.observation.local_path
+        self.base_url = download_request.project.remote.base_url
+        self.apitoken = download_request.project.remote.apikey
+        self.project_id = download_request.project.id
         self.client_id = client_id
-        self.expected_size = expected_size
-        self.expected_checksum = expected_checksum
+        self.expected_size = download_request.observation.remote_entry.size
+        self.expected_checksum = download_request.observation.remote_entry.checksum
         self.chunk_size = chunk_size
         self.progress_callback = progress_callback
 
@@ -61,7 +55,8 @@ class FileDownloader:
         """
         try:
             # Make sure the destination directory exists
-            await aio_os.makedirs(dirname(self.file_path), exist_ok=True)
+            dir_path = self.file_path.resolve().parent
+            await asyncio.to_thread(makedirs,dir_path.as_posix(), exist_ok=True)
 
             # Check if we can resume
             resume_from = 0
@@ -71,6 +66,8 @@ class FileDownloader:
 
             # Download the file
             if not await self._download_with_ranges(resume_from):
+                await self._send_completion_message(success=False, error="Download failed")
+                await self._send_completion_message(success=False, error="Checksum verification failed")
                 return False
 
             # Verify checksum if provided
@@ -80,7 +77,7 @@ class FileDownloader:
                     return False
 
             # Move .part file to the final destination
-            self.part_file.rename(self.file_path)
+            self.part_file.rename(self.file_path.as_posix())
 
             # Clean up metadata
             if self.meta_file.exists():
@@ -130,6 +127,26 @@ class FileDownloader:
 
     async def _download_with_ranges(self, resume_from: int = 0) -> bool:
         """Download the file using HTTP Range requests with streaming"""
+        try:
+            success = await asyncio.to_thread(self._download_with_ranges_blocking, resume_from)
+
+            if not success:
+                await self._save_metadata()
+
+            return success
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"HTTP request failed: {e}")
+            await self._save_metadata()
+            return False
+        except Exception as e:
+            logger.error(f"Download error: {e}")
+            await self._save_metadata()
+            return False
+
+    def _download_with_ranges_blocking(self, resume_from: int = 0) -> bool:
+        "Blocking download. Called from asyncio.to_thread()"
+        """Blocking download implementation. Runs in a worker thread."""
         headers = {
             'Authorization': f'Bearer {self.apitoken}',
         }
@@ -138,10 +155,16 @@ class FileDownloader:
         if resume_from > 0:
             headers['Range'] = f'bytes={resume_from}-'
 
+        response = None
+
         try:
-            # Use asyncio to run requests in thread pool (requests is blocking)
-            response = await asyncio.to_thread(requests.get, self.download_url, verify=False, headers=headers,
-                                               stream=True, timeout=30)
+            response = requests.get(
+                self.download_url,
+                verify=False,
+                headers=headers,
+                stream=True,
+                timeout=30
+            )
 
             # Check if the server supports range requests
             if resume_from > 0 and response.status_code != 206:
@@ -168,16 +191,15 @@ class FileDownloader:
                 for chunk in response.iter_content(chunk_size=self.chunk_size):
                     # Check for pause/cancel
                     while self.paused and not self.cancelled:
-                        await asyncio.sleep(0.1)
+                        time.sleep(0.1)
 
                     if self.cancelled:
                         logger.info("Download cancelled")
-                        await self._save_metadata()
                         return False
 
                     if chunk:
-                        # Write chunk (blocking I/O)
-                        await asyncio.to_thread(f.write, chunk)
+                        # Write chunk
+                        f.write(chunk)
                         self.bytes_received += len(chunk)
 
                         # Progress callback
@@ -186,20 +208,19 @@ class FileDownloader:
 
                         # Periodically save metadata for resume
                         if self.bytes_received % (self.chunk_size * 10) == 0:
-                            await self._save_metadata()
+                            self._save_metadata_blocking()
 
             return True
 
-        except requests.exceptions.RequestException as e:
-            logger.error(f"HTTP request failed: {e}")
-            await self._save_metadata()
-            return False
-        except Exception as e:
-            logger.error(f"Download error: {e}")
-            await self._save_metadata()
-            return False
+        finally:
+            if response is not None:
+                response.close()
 
     async def _save_metadata(self):
+        """Save download state for resume capability"""
+        await asyncio.to_thread(self._save_metadata_blocking)
+
+    def _save_metadata_blocking(self):
         """Save download state for resume capability"""
         metadata = {
             'transfer_id': self.transfer_id,
@@ -220,7 +241,7 @@ class FileDownloader:
 
     async def _verify_checksum(self) -> bool:
         """Verify MD5 checksum of the downloaded file"""
-        actual_checksum = asyncio.to_thread(checksum, self.part_file.as_posix())
+        actual_checksum = await asyncio.to_thread(checksum, self.part_file.as_posix())
 
         if actual_checksum != self.expected_checksum:
             logger.error(f"Checksum mismatch: expected {self.expected_checksum}, got {actual_checksum}")
@@ -248,13 +269,8 @@ class FileDownloader:
         if error:
             msg["payload"]["error"] = error
 
-        await self.send_queue.put(msg)
-
-    def _get_token(self) -> str:
-        """Get authentication token (implement based on your auth system)"""
-        # TODO: Retrieve from your config/session
-        from materials_commons.cli import Config
-        return Config.instance().token
+        if self.send_queue:
+            await self.send_queue.put(msg)
 
     def pause(self):
         """Pause the download"""

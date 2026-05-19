@@ -1,6 +1,7 @@
 import asyncio
 from typing import Dict, Any, Optional, Callable
 
+from materials_commons.cli.requests import DownloadRequest
 from materials_commons.cli.server.downloader.file_downloader import FileDownloader, logger
 
 
@@ -68,11 +69,7 @@ class FileDownloadManager:
 
     async def download_file(
             self,
-            project_id: int,
-            file_id: int,
-            file_path: str,
-            expected_size: Optional[int] = None,
-            expected_checksum: Optional[str] = None,
+            download_request: DownloadRequest,
             chunk_size: int = 1024 * 1024,
             progress_callback: Optional[Callable[[int, int], None]] = None
     ) -> str:
@@ -81,18 +78,13 @@ class FileDownloadManager:
         """
         downloader = FileDownloader(
             send_queue=self.send_queue,
-            file_id=file_id,
-            file_path=file_path,
-            base_url=self.mcurl,
-            apitoken=self.apitoken,
-            project_id=project_id,
+            download_request=download_request,
             client_id=self.client_id,
-            expected_size=expected_size,
-            expected_checksum=expected_checksum,
             chunk_size=chunk_size,
             progress_callback=progress_callback
         )
 
+        file_path = download_request.observation.local_path
         await self.download_queue.put(downloader)
         logger.info(f"Queued download: {file_path} (transfer_id: {downloader.transfer_id})")
 

@@ -60,8 +60,12 @@ async def async_walk(
             stack.extend(entry.path for entry in reversed(filtered) if entry.is_dir)
 
 
-def path_to_local_file_entry(entry: Path) -> LocalFileEntry:
+def path_to_local_file_entry(entry: Path) -> Optional[LocalFileEntry]:
     """Convert a Path object to a LocalFileEntry object."""
+
+    if not entry.exists():
+        return None
+
     is_symlink = entry.is_symlink()
     size = None
     mtime_ns = None

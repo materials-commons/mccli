@@ -17,6 +17,7 @@ from materials_commons.cli.subcommands.clone import clone_subcommand
 from materials_commons.cli.subcommands.config import config_subcommand
 from materials_commons.cli.subcommands.dataset import DatasetSubcommand
 from materials_commons.cli.subcommands.down import down_subcommand
+from materials_commons.cli.subcommands.down2 import down2_subcommand
 from materials_commons.cli.subcommands.expt import ExptSubcommand
 from materials_commons.cli.subcommands.fetch import fetch_subcommand
 # from materials_commons.cli.subcommands.samp import SampSubcommand
@@ -55,6 +56,7 @@ standard_usage = [
     # {'name': 'proc', 'desc': 'List processes', 'subcommand': ProcSubcommand()},
     # {'name': 'samp', 'desc': 'List samples', 'subcommand': SampSubcommand()},
     {'name': 'ls2', 'desc': 'List directory contents (experimental)', 'subcommand': ls2_subcommand},
+    {'name': 'down2', 'desc': 'Donwload files (experimental)', 'subcommand': down2_subcommand},
     {'name': 'config', 'desc': 'Configure `mc`', 'subcommand': config_subcommand},
     {'name': 'server', 'desc': 'Run MC Server', 'subcommand': server_subcommand}
 ]
