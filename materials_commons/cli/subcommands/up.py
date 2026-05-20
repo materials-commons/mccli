@@ -182,7 +182,7 @@ def globus_upload(args, proj, working_dir, pconfig):
 async def ws_upload(args, working_dir):
     # Load project and set exception handling
     proj = LocalProject.load(working_dir)
-    proj.remote.raise_exception = False
+    # proj.remote.raise_exception = False
 
     # Initialize database
     db = await proj.get_filedb()

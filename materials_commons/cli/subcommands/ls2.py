@@ -85,7 +85,7 @@ def ls2_subcommand(argv, working_dir):
 
 async def ls2_subcommand_async(args, working_dir):
     proj = LocalProject.load(working_dir)
-    proj.remote.raise_exception = False
+    # proj.remote.raise_exception = False
     db = await FileIndexDB.create(to_project_db_path(proj.local_path))
     async_reconciler = AsyncReconciler(db=db, proj=proj, reconcile_mode="status")
     which_class = LSAction if args.action else LSEntry
