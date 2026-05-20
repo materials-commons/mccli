@@ -41,7 +41,7 @@ class Downloader:
 
         return cls(proj=proj, db=db, ignore_parser=ignore_parser, container=container, service_runtime=service_runtime)
 
-    async def run(self, paths: list[str | Path], recursive: bool = False):
+    async def run(self, paths: list[str | Path], recursive: bool = False, force: bool = False):
         try:
             for path in paths:
                 p = Path(path)
@@ -62,9 +62,9 @@ class Downloader:
                         continue
 
                     if f.mime_type == "directory":
-                        await self._download_dir(p, recursive=recursive)
+                        await self._download_dir(p, recursive=recursive, force=force)
                     else:
-                        await self._download_file(p)
+                        await self._download_file(p, force=force)
 
         except Exception as e:
             logger.error(f"Unexpected error during download: {e}")
@@ -75,31 +75,33 @@ class Downloader:
             await self.service_runtime.stop()
             await self.db.close()
 
-    async def _download_file(self, path: Path) -> None:
+    async def _download_file(self, path: Path, force: bool = False) -> None:
         file_state = await self.async_reconciler.reconcile_file(path)
         if file_state.exception:
             logger.error(f"Error encountered while processing {path}: {file_state.exception}")
             print(f"Error encountered while processing {path}: {file_state.exception}")
 
-        if file_state.file_decision.action == "download":
+        if file_state.file_decision.action == "download" or force:
             download_request = DownloadRequest(observation=file_state.observation,
                                                updated_record=file_state.file_decision.updated_record,
                                                project=self.proj)
+            print(f"Downloading {path}...")
             transfer_id = await self.container.file_download_manager.download_file(download_request)
             self.transfer_ids.append(transfer_id)
 
-    async def _download_dir(self, path: Path, recursive: bool = False):
+    async def _download_dir(self, path: Path, recursive: bool = False, force: bool = False):
         async for current_path, path_entries in self.async_reconciler.walk(path=path, listdir_fn=self.listdir_fn,
                                                                            recursive=recursive, ignore_fn=None):
             for entry_name in sorted(path_entries):
                 file_state = path_entries[entry_name]
                 if file_state.exception:
                     logger.error(f"Error encountered while processing {entry_name}: {file_state.exception}")
-                    print(f"Error encountered while processing {p}: {file_state.exception}")
+                    print(f"Error encountered while processing {entry_name}: {file_state.exception}")
                     continue
-                if file_state.file_decision.action == "download":
+                if file_state.file_decision.action == "download" or force:
                     download_request = DownloadRequest(observation=file_state.observation,
                                                        updated_record=file_state.file_decision.updated_record,
                                                        project=self.proj)
+                    print(f"Downloading {entry_name} to {current_path / entry_name}...")
                     transfer_id = await self.container.file_download_manager.download_file(download_request)
                     self.transfer_ids.append(transfer_id)
