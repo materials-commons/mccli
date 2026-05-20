@@ -1,6 +1,8 @@
 import argparse
 import asyncio
 import logging
+import time
+from dataclasses import replace
 from pathlib import Path
 
 import igittigitt
@@ -24,7 +26,7 @@ def scan_subcommand(argv, working_dir):
         print("Not implemented yet")
         return
 
-    asyncio.run(scan_subcommand_async(argv, working_dir))
+    asyncio.run(scan2_subcommand_async(argv, working_dir))
 
 
 def make_parser():
@@ -52,7 +54,7 @@ async def scan2_subcommand_async(args, working_dir):
     ignore_parser.parse_rule_files(base_dir=proj.local_path, filename=".mcignore", add_default_patterns=False)
 
     # Start services
-    container = ServiceContainer.create(ws_url=args.ws_url)
+    container = ServiceContainer.create()
     service_runtime = ServiceRuntime(container)
     await service_runtime.start(db_manager=True)
     async_reconciler = AsyncReconciler(db=db, proj=proj, reconcile_mode="status")
@@ -70,9 +72,14 @@ async def scan2_subcommand_async(args, working_dir):
                     continue
 
                 # We have a file, process it
+                updated_record = replace(file_state.file_decision.updated_record,
+                                         local_last_seen_ts=int(time.time()))
                 db_request = DBWriteRequest(project=proj, command="single",
-                                            data=file_state.file_decision.updated_record)
+                                            data=updated_record)
                 await container.db_queue.put(db_request)
+                local_path = file_state.observation.local_path
+                remote_path = file_state.file_decision.updated_record.path
+                print(f"Indexed {local_path} in {remote_path}", flush=True)
     except Exception as e:
         return
     finally:
