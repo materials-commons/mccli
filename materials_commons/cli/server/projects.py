@@ -163,7 +163,10 @@ def remote_to_local_project_path(proj_base: Path, remote_path: Path) -> Path:
 async def list_remote_project_dir_by_path(c: mcapi.Client, project_id: int, project_path: str) -> Optional[
     dict[str, models.File]]:
     """List the contents of a directory in a remote project. Builds a dict of directory entries by path."""
-    path_entries = await asyncio.to_thread(c.list_directory_by_path, project_id, project_path)
+    try:
+        path_entries = await asyncio.to_thread(c.list_directory_by_path, project_id, project_path)
+    except:
+        return {}
     if not path_entries:
         return {}
 
