@@ -46,10 +46,14 @@ class Downloader:
             for path in paths:
                 p = Path(path)
                 if p.is_dir():
+                    # Walk and download local dir
                     await self._download_dir(p, recursive=recursive)
                 elif p.is_file():
+                    # Download local file
                     await self._download_file(p)
                 else:
+                    # If we are here, then the path entry is a remote path. We look up the path to
+                    # determine the type of download to perform.
                     remote_path = self.proj.to_remote_path(p)
                     try:
                         f = self.proj.remote.get_file_by_path(self.proj.id, remote_path.as_posix())
@@ -62,8 +66,10 @@ class Downloader:
                         continue
 
                     if f.mime_type == "directory":
+                        # Remote entry is a directory
                         await self._download_dir(p, recursive=recursive, force=force)
                     else:
+                        # Remote entry is a file
                         await self._download_file(p, force=force)
 
         except Exception as e:
