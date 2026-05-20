@@ -351,8 +351,12 @@ class SingleFileReconciler:
 
         # If we don't have a remote file id then we need to get on by querying on the path.
         if observation.remote_entry is None or observation.remote_entry.remote_file_id is None:
-            remote_entry = await asyncio.to_thread(self._proj.remote.get_file_by_path, self._proj.id,
-                                                   observation.remote_path)
+            try:
+                remote_entry = await asyncio.to_thread(self._proj.remote.get_file_by_path, self._proj.id,
+                                                       observation.remote_path)
+            except Exception as e:
+                remote_entry = None
+
             if remote_entry is None:
                 # Didn't find a match for the remote file
                 return None
@@ -367,9 +371,14 @@ class SingleFileReconciler:
             remote_file_id = observation.remote_entry.remote_file_id
 
         # Get previous versions and look for a match
-        previous_versions = await asyncio.to_thread(self._proj.remote.get_file_versions, self._proj.id, remote_file_id)
+        try:
+            previous_versions = await asyncio.to_thread(self._proj.remote.get_file_versions, self._proj.id, remote_file_id)
+        except Exception as e:
+            previous_versions = None
+
         if previous_versions is None:
             return None
+
         for prev_version in previous_versions:
             if prev_version.checksum == local_checksum:
                 return prev_version
