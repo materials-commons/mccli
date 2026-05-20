@@ -1,15 +1,19 @@
 import argparse
 import asyncio
+import logging
 from pathlib import Path
 
 import igittigitt
+from materials_commons.cli.async_reconciler import AsyncReconciler
 
 from materials_commons.cli.local_project import LocalProject
-from materials_commons.cli.requests import IndexRequest
+from materials_commons.cli.requests import IndexRequest, DBWriteRequest
 from materials_commons.cli.server import projects
 from materials_commons.cli.server.service_container import ServiceContainer
 from materials_commons.cli.server.service_runtime import ServiceRuntime
 from materials_commons.cli.walk import async_walk, make_ignore_func, local_listdir
+
+logger = logging.getLogger(__name__)
 
 
 def scan_subcommand(argv, working_dir):
@@ -35,12 +39,54 @@ def make_parser():
     return parser
 
 
+async def scan2_subcommand_async(args, working_dir):
+    # Load project and set exception handling
+    proj = LocalProject.load(working_dir)
+    # proj.remote.raise_exception = False
+
+    # Initialize database
+    db = await proj.get_filedb()
+
+    # Setup ignore parser
+    ignore_parser = igittigitt.IgnoreParser()
+    ignore_parser.parse_rule_files(base_dir=proj.local_path, filename=".mcignore", add_default_patterns=False)
+
+    # Start services
+    container = ServiceContainer.create(ws_url=args.ws_url)
+    service_runtime = ServiceRuntime(container)
+    await service_runtime.start(db_manager=True)
+    async_reconciler = AsyncReconciler(db=db, proj=proj, reconcile_mode="status")
+    try:
+        async for current_path, path_entries in async_reconciler.walk(path=proj.local_path, listdir_fn=local_listdir,
+                                                                      recursive=True, ignore_fn=None):
+            for entry_name in sorted(path_entries):
+                file_state = path_entries[entry_name]
+                if file_state.exception:
+                    logger.error(f"Error encountered while processing {entry_name}: {file_state.exception}")
+                    continue
+                if file_state.observation.local_path is None:
+                    continue
+                if file_state.observation.local_path.is_dir():
+                    continue
+
+                # We have a file, process it
+                db_request = DBWriteRequest(project=proj, command="single",
+                                            data=file_state.file_decision.updated_record)
+                await container.db_queue.put(db_request)
+    except Exception as e:
+        return
+    finally:
+        await service_runtime.drain()
+        await service_runtime.stop()
+        await db.close()
+
+
 async def scan_subcommand_async(argv, working_dir):
     """Builds and populates the file index database for project scan; skips ignored directories and files"""
 
     # Load project
     proj = LocalProject.load(working_dir)
-    proj.remote.raise_exception = False
+    # proj.remote.raise_exception = False
 
     # Initialize database
     await proj.get_filedb()
