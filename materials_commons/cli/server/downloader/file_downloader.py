@@ -3,6 +3,7 @@ import json
 import logging
 import time
 import uuid
+from dataclasses import replace
 from datetime import datetime, timezone
 from os import makedirs
 from typing import Optional, Callable
@@ -10,7 +11,7 @@ from typing import Optional, Callable
 import requests
 
 from materials_commons.cli.old.functions import checksum
-from materials_commons.cli.requests import DownloadRequest
+from materials_commons.cli.requests import DownloadRequest, DBWriteRequest
 
 logger = logging.getLogger(__name__)
 
@@ -21,12 +22,15 @@ class FileDownloader:
     def __init__(
             self,
             send_queue: Optional[asyncio.Queue],
+            db_write_queue: asyncio.Queue,
             download_request: DownloadRequest,
             client_id: Optional[str],
             chunk_size: int = 1024 * 1024,  # 1MB chunks for streaming
             progress_callback: Optional[Callable[[int, int], None]] = None
     ):
         self.send_queue = send_queue
+        self.db_write_queue = db_write_queue
+        self.download_request = download_request
         self.file_id = download_request.observation.remote_entry.remote_file_id
         self.file_path = download_request.observation.local_path
         self.base_url = download_request.project.remote.base_url
@@ -83,6 +87,15 @@ class FileDownloader:
             if self.meta_file.exists():
                 self.meta_file.unlink()
 
+            # TODO: Need to get the remote_ctime_ns somehow
+            updated_record = replace(self.download_request.updated_record,
+                                     remote_checksum=self.expected_checksum,
+                                     remote_size=self.expected_size,
+                                     remote_file_id=self.file_id)
+            db_write_request = DBWriteRequest(project=self.download_request.project,
+                                              data=updated_record,
+                                              command="single")
+            await self.db_write_queue.put(db_write_request)
             logger.info(f"Download complete: {self.file_path}")
             await self._send_completion_message(success=True)
             return True
