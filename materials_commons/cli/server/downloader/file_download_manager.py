@@ -8,8 +8,9 @@ from materials_commons.cli.server.downloader.file_downloader import FileDownload
 class FileDownloadManager:
     """Manages multiple concurrent file downloads"""
 
-    def __init__(self, send_queue: asyncio.Queue, client_id: str, mcurl: str, apitoken: str, max_concurrent: int = 3):
+    def __init__(self, send_queue: asyncio.Queue, db_write_queue: asyncio.Queue, client_id: str, mcurl: str, apitoken: str, max_concurrent: int = 3):
         self.send_queue = send_queue
+        self.db_write_queue = db_write_queue
         self.client_id = client_id
         self.mcurl = mcurl
         self.apitoken = apitoken

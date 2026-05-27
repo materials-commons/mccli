@@ -19,7 +19,6 @@ class FileUploader:
 
     def __init__(
             self,
-            db: FileIndexDB,
             ws_send_queue: asyncio.Queue,
             db_write_queue: asyncio.Queue,
             upload_request: UploadRequest,
@@ -28,7 +27,6 @@ class FileUploader:
             window_size: int = 10,
             progress_callback: Optional[Callable[[int, int], None]] = None
     ):
-        self.db = db
         self.ws_send_queue = ws_send_queue
         self.db_write_queue = db_write_queue
         self.upload_request = upload_request

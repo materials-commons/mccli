@@ -99,9 +99,7 @@ class FileUploadManager:
         and then queueing this object. The queued FileUploader will then be picked up by a worker to perform
         the upload.
         """
-        db = await upload_request.project.get_filedb()
         uploader = FileUploader(
-            db=db,
             ws_send_queue=self.send_queue,
             db_write_queue=self.db_write_queue,
             upload_request=upload_request,
