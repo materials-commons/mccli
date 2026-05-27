@@ -63,6 +63,10 @@ class FileUploader:
         Upload the file. Returns True on success, False on failure.
         """
         try:
+            if self.file_size == 0:
+                print(f"Skipping {self.file_path.as_posix()} (empty file)...")
+                return True
+
             # Step 1: Initialize the transfer
             if not await self._send_transfer_init():
                 return False
@@ -195,21 +199,35 @@ class FileUploader:
         process_acks_task = asyncio.create_task(self._process_acks())
         send_chunks_task = asyncio.create_task(self._send_chunks_windowed())
 
-        # Wait for both to complete
+        done, pending = await asyncio.wait(
+            {process_acks_task, send_chunks_task},
+            return_when=asyncio.FIRST_EXCEPTION
+        )
+
+        for task in done:
+            if task.exception() is not None:
+                for pending_task in pending:
+                    pending_task.cancel()
+                await asyncio.gather(*pending, return_exceptions=True)
+                logger.error(f"Chunk upload failed: {task.exception()}")
+                return False
+
         send_chunks_result = await send_chunks_task
         if not send_chunks_result:
             process_acks_task.cancel()
+            await asyncio.gather(process_acks_task, return_exceptions=True)
             return False
 
-        # Wait for all ACKs to be received
-        await process_acks_task
+        try:
+            await process_acks_task
+        except Exception as e:
+            logger.error(f"ACK processing failed: {e}")
+            return False
 
-        # We don't care about the process_acks_task result, just return True.
-        # If there are errors, it will be seen in later processing.
         return True
 
     async def _send_chunks_windowed(self, start_chunk: int = 0) -> bool:
-        """Send file chunks using sliding window (don't wait for each ACK)"""
+        """Send file chunks using the sliding window (don't wait for each ACK)"""
         total_chunks = (self.file_size + self.chunk_size - 1) // self.chunk_size
 
         async with aiofiles.open(self.file_path, 'rb') as f:
@@ -319,6 +337,7 @@ class FileUploader:
     async def _send_chunks(self, start_chunk: int = 0) -> bool:
         """Send file chunks as binary frames via queue"""
         sequence = start_chunk
+        total_chunks = (self.file_size + self.chunk_size - 1) // self.chunk_size
 
         with open(self.file_path, 'rb') as f:
             # Seek to start position if resuming
@@ -344,7 +363,7 @@ class FileUploader:
                     "transfer_id": self.transfer_id,
                     "sequence": sequence,
                     "size": len(chunk),
-                    "is_last": False
+                    "is_last": sequence == total_chunks - 1
                 }
 
                 # Package as binary frame indicator
