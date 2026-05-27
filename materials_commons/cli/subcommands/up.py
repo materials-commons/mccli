@@ -32,7 +32,7 @@ def make_parser():
     mc_up_usage = """
     mc up [-r] [--no-compare] [--limit] <pathspec> [<pathspec> ...]
     mc up -g [-r] [--no-compare] [--label] <pathspec> [<pathspec> ...]
-    mc up --websocket [-r] <pathspec> [<pathspec> ...]"""
+    mc up --v2 [-r] <pathspec> [<pathspec> ...]"""
 
     globus_help = """Use globus to upload files. Uses the current active upload or creates a new upload.
      Use `globus task list` to monitor transfer tasks. Use `mc globus upload` to manage uploads."""
@@ -50,7 +50,7 @@ def make_parser():
                         help='File size upload limit (MB). Default=750MB. Max size is also 750MB. Does not apply to Globus uploads.')
     parser.add_argument('-g', '--globus', action="store_true", default=False,
                         help=globus_help)
-    parser.add_argument('--websocket', '--ws', action="store_true", default=False, help=websocket_help)
+    parser.add_argument('--v2', action="store_true", default=False, help=websocket_help)
     parser.add_argument('--ws-url', type=str, default=DEFAULT_WS_URL, help='WebSocket URL for commands')
     parser.add_argument('--label', nargs=1, type=str,
                         help='Globus transfer label to make finding tasks simpler. Default is `<project name>-<upload name>.')
@@ -98,10 +98,10 @@ def up_subcommand(argv, working_dir):
     if args.upload_as and args.globus:
         print("--upload-as option is not supported with --globus")
         raise cliexcept.MCCLIException("Invalid upload request")
-    if args.upload_as and args.websocket:
+    if args.upload_as and args.v2:
         print("--upload-as option is not supported with --websocket")
         raise cliexcept.MCCLIException("Invalid upload request")
-    if args.globus and args.websocket:
+    if args.globus and args.v2:
         print("--globus option is not supported with --websocket")
         raise cliexcept.MCCLIException("Invalid upload request")
 
@@ -111,7 +111,7 @@ def up_subcommand(argv, working_dir):
                                                   args.upload_as,
                                                   working_dir)[0]
 
-    if args.websocket:
+    if args.v2:
         asyncio.run(ws_upload(args, working_dir))
     elif args.globus:
         globus_upload(args, proj, working_dir, pconfig)

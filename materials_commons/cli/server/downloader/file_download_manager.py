@@ -79,6 +79,7 @@ class FileDownloadManager:
         """
         downloader = FileDownloader(
             send_queue=self.send_queue,
+            db_write_queue=self.db_write_queue,
             download_request=download_request,
             client_id=self.client_id,
             chunk_size=chunk_size,

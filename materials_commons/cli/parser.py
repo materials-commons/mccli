@@ -50,13 +50,13 @@ standard_usage = [
     {'name': 'fetch', 'desc': 'Remote data fetching and configuration', 'subcommand': fetch_subcommand},
     {'name': 'up', 'desc': 'Upload files', 'subcommand': up_subcommand},
     {'name': 'down', 'desc': 'Download files', 'subcommand': down_subcommand},
-    {'name': 'scan', 'desc': 'Scan local directory for files to upload', 'subcommand': scan_subcommand},
+    {'name': 'scan', 'desc': 'Scan project and build database of project state', 'subcommand': scan_subcommand},
     {'name': 'globus', 'desc': 'Manage Globus uploads and downloads', 'subcommand': globus_subcommand},
     {'name': 'versions', 'desc': 'List file versions', 'subcommand': versions_subcommand},
     # {'name': 'proc', 'desc': 'List processes', 'subcommand': ProcSubcommand()},
     # {'name': 'samp', 'desc': 'List samples', 'subcommand': SampSubcommand()},
-    {'name': 'ls2', 'desc': 'List directory contents (experimental)', 'subcommand': ls2_subcommand},
-    {'name': 'down2', 'desc': 'Donwload files (experimental)', 'subcommand': down2_subcommand},
+    # {'name': 'ls2', 'desc': 'List directory contents (experimental)', 'subcommand': ls2_subcommand},
+    # {'name': 'down2', 'desc': 'Donwload files (experimental)', 'subcommand': down2_subcommand},
     {'name': 'config', 'desc': 'Configure `mc`', 'subcommand': config_subcommand},
     {'name': 'server', 'desc': 'Run MC Server', 'subcommand': server_subcommand}
 ]

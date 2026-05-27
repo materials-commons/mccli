@@ -56,6 +56,7 @@ class ServiceContainer:
     def file_download_manager(self) -> FileDownloadManager:
         return FileDownloadManager(
             send_queue=self.send_queue,
+            db_write_queue=self.db_queue,
             client_id=self.config.client_uuid,
             mcurl=self.config.default_remote.mcurl,
             apitoken=self.config.default_remote.mcapikey,

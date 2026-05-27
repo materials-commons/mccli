@@ -23,7 +23,9 @@ def make_parser():
     mc_down_usage = """
     mc down [-r] [-p] [-o] [-f] [--no-compare] <pathspec> [<pathspec> ...]
     mc down -p <pathspec>
-    mc down -g [-r] [--no-compare] [--label] <pathspec> [<pathspec> ...]"""
+    mc down -g [-r] [--no-compare] [--label] <pathspec> [<pathspec> ...]
+    mc down --v2 [-r] <pathspec> [<pathspec> ...]
+    """
 
     parser = argparse.ArgumentParser(
         description=mc_down_description,

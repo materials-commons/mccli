@@ -72,7 +72,7 @@ class AsyncReconciler:
                                                  remote_project_path.as_posix())
         local_file_entry = path_to_local_file_entry(Path(path))
         remote_file_entry = RemoteFileEntry(
-            path=Path(mc_remote_file.path) / mc_remote_file.name,
+            path=Path(mc_remote_file.path),
             name=mc_remote_file.name,
             kind="file",
             size=mc_remote_file.size,

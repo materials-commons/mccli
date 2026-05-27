@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 import copy
 import json
 import os
@@ -10,6 +11,7 @@ import materials_commons.cli.old.functions as clifuncs
 import materials_commons.cli.old.tree_functions as treefuncs
 import materials_commons.cli.old.file_functions as filefuncs
 from materials_commons.cli.old.treedb import LocalTree, RemoteTree
+from materials_commons.cli.subcommands.ls2 import ls2_subcommand_async
 
 #  Want to print() something like:
 #
@@ -144,6 +146,8 @@ def make_parser():
     parser.add_argument('paths', nargs='*', default=[os.getcwd()], help='Files or directories')
     parser.add_argument('--checksum', action="store_true", default=False, help='Calculate MD5 checksum for local files')
     parser.add_argument('--json', action="store_true", default=False, help='Print JSON exactly')
+    parser.add_argument('--v2', action="store_true", default=False, help='Use v2 API for listing contents')
+    parser.add_argument('--action', action="store_true", default=False, help='Show action and reason for file decision (v2 only)')
 
     # TODO: re-implement w/datasets
     # # --include file_or_dir
@@ -228,10 +232,14 @@ def ls_subcommand(argv, working_dir):
     proj = clifuncs.make_local_project(working_dir)
     pconfig = clifuncs.read_project_config(proj.local_path)
 
+    if args.v2:
+        asyncio.run(ls2_subcommand_async(args, working_dir))
+        return
+
     # convert cli input to materials commons path convention: /path/to/file_or_dir
     mcpaths = treefuncs.clipaths_to_mcpaths(proj.local_path, args.paths,
                                             working_dir)
-
+    
     if args.checksum:
         localtree = LocalTree(proj.local_path)
     else:

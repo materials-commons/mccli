@@ -78,7 +78,7 @@ class Downloader:
 
         finally:
             await self.container.file_download_manager.wait_all()
-            await self.service_runtime.stop()
+            await self.service_runtime.stop(drain=True)
             await self.db.close()
 
     async def _download_file(self, path: Path, force: bool = False) -> None:
@@ -86,6 +86,7 @@ class Downloader:
         if file_state.exception:
             logger.error(f"Error encountered while processing {path}: {file_state.exception}")
             print(f"Error encountered while processing {path}: {file_state.exception}")
+            return
 
         if file_state.file_decision.action == "download" or force:
             download_request = DownloadRequest(observation=file_state.observation,
@@ -94,6 +95,8 @@ class Downloader:
             print(f"Downloading {path}...")
             transfer_id = await self.container.file_download_manager.download_file(download_request)
             self.transfer_ids.append(transfer_id)
+        else:
+            print(f"Skipping download of {path} because {file_state.file_decision.reason}")
 
     async def _download_dir(self, path: Path, recursive: bool = False, force: bool = False):
         async for current_path, path_entries in self.async_reconciler.walk(path=path, listdir_fn=self.listdir_fn,

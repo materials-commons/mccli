@@ -57,7 +57,6 @@ def make_uploader(
     upload_request = make_upload_request(file_path, len(file_bytes))
 
     uploader = FileUploader(
-        db=SimpleNamespace(),
         ws_send_queue=ws_send_queue,
         db_write_queue=db_write_queue,
         upload_request=upload_request,
