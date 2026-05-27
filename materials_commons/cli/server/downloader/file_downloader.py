@@ -87,8 +87,11 @@ class FileDownloader:
             if self.meta_file.exists():
                 self.meta_file.unlink()
 
+            # Get info so we can set the database
+            sinfo = self.file_path.stat()
+
             # TODO: Need to get the remote_ctime_ns somehow
-            sinfo = self.part_file.stat()
+
             updated_record = replace(self.download_request.updated_record,
                                      remote_checksum=self.expected_checksum,
                                      local_size=self.expected_size,
@@ -96,6 +99,7 @@ class FileDownloader:
                                      local_mtime_ns=sinfo.st_mtime_ns,
                                      local_ctime_ns=sinfo.st_ctime_ns,
                                      remote_last_seen_ts=int(time.time()),
+                                     local_last_seen_ts=int(time.time()),
                                      remote_size=self.expected_size,
                                      remote_file_id=self.file_id)
             db_write_request = DBWriteRequest(project=self.download_request.project,
