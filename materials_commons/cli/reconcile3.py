@@ -73,7 +73,7 @@ class SingleFileReconciler:
         return FileRecord(
             path=str(observation.remote_path),
             name=observation.name,
-            dir=str(observation.path.resolve().parent),
+            dir=str(observation.remote_path.resolve().parent),
             is_clean_local_copy=0,
         )
 
