@@ -59,7 +59,7 @@ class FileIndexDB:
         conn = await aiosqlite.connect(self.db_path, timeout=30.0, check_same_thread=False)
         conn.row_factory = aiosqlite.Row
         await conn.execute("PRAGMA journal_mode=WAL;")
-        await conn.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+        # await conn.execute("PRAGMA wal_checkpoint(TRUNCATE);")
         await conn.execute("PRAGMA busy_timeout=5000;")
         await conn.execute("PRAGMA synchronous=NORMAL;")
         await conn.execute("PRAGMA cache_size=100000;")
