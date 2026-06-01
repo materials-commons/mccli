@@ -68,20 +68,27 @@ class AsyncReconciler:
     async def reconcile_file(self, path: str | Path) -> FileState:
         remote_project_path = projects.local_to_remote_project_path(Path(self.proj.local_path), Path(path))
         file_record = await self.db.get_file_by_path(remote_project_path.as_posix())
-        mc_remote_file = await asyncio.to_thread(self.proj.remote.get_file_by_path, self.proj.id,
-                                                 remote_project_path.as_posix())
+        try:
+            mc_remote_file = await asyncio.to_thread(self.proj.remote.get_file_by_path, self.proj.id,
+                                                     remote_project_path.as_posix())
+        except Exception as e:
+            mc_remote_file = None
         local_file_entry = path_to_local_file_entry(Path(path))
-        remote_file_entry = RemoteFileEntry(
-            path=Path(mc_remote_file.path),
-            name=mc_remote_file.name,
-            kind="file",
-            size=mc_remote_file.size,
-            mtime_ns=int(mc_remote_file.updated_at.replace(tzinfo=timezone.utc).timestamp() * 1_000_000_000),
-            ctime_ns=int(mc_remote_file.created_at.replace(tzinfo=timezone.utc).timestamp() * 1_000_000_000),
-            remote_file_id=getattr(mc_remote_file, "id", None),
-            checksum=getattr(mc_remote_file, "checksum", None),
-            raw=mc_remote_file,
-        )
+        if mc_remote_file:
+            remote_file_entry = RemoteFileEntry(
+                path=Path(mc_remote_file.path),
+                name=mc_remote_file.name,
+                kind="file",
+                size=mc_remote_file.size,
+                mtime_ns=int(mc_remote_file.updated_at.replace(tzinfo=timezone.utc).timestamp() * 1_000_000_000),
+                ctime_ns=int(mc_remote_file.created_at.replace(tzinfo=timezone.utc).timestamp() * 1_000_000_000),
+                remote_file_id=getattr(mc_remote_file, "id", None),
+                checksum=getattr(mc_remote_file, "checksum", None),
+                raw=mc_remote_file,
+            )
+        else:
+            remote_file_entry = None
+
         obs = Observation(
             remote_entry=remote_file_entry,
             local_entry=local_file_entry,

@@ -71,9 +71,9 @@ class SingleFileReconciler:
             return observation.file_record
 
         return FileRecord(
-            path=str(observation.path),
+            path=str(observation.remote_path),
             name=observation.name,
-            dir=str(observation.path.parent),
+            dir=str(observation.path.resolve().parent),
             is_clean_local_copy=0,
         )
 
@@ -243,11 +243,11 @@ class SingleFileReconciler:
                     # The out-of-date file record has a different id than on the server. We don't know the
                     # state without computing the checksum and doing additional work. We will suggest that
                     # the user run a scan to reconcile the state.
-                    return self._skip(updated_record, "status unknown; run scan to reconcile with checksum")
+                    return self._skip(updated_record, "status unknown; run scan to reconcile with checksum 1")
         else:
             # We don't have a local file record, so we can't figure out the state. We will suggest that
             # the user run a scan to reconcile the state.
-            return self._skip(updated_record, "status unknown; run scan to reconcile with checksum")
+            return self._skip(updated_record, "status unknown; run scan to reconcile with checksum 2")
 
     async def _reconcile_both_sides_only_upload(self, observation: Observation,
                                                 updated_record: FileRecord) -> FileDecision:

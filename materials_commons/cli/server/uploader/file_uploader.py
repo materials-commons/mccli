@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import logging
+import time
 import uuid
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -437,6 +438,7 @@ class FileUploader:
             # that information into the database.
             payload = msg.get("payload", {})
             updated_record = replace(self.upload_request.updated_record,
+                                     local_last_seen_ts=int(time.time()),
                                      remote_checksum=payload.get("file_checksum", ""),
                                      remote_size=payload.get("file_size", 0),
                                      remote_file_id=payload.get("file_id", 0),

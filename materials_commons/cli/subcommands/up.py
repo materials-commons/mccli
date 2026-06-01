@@ -227,6 +227,8 @@ async def ws_upload(args, working_dir):
                                                    project=proj)
                     transfer_id = await container.file_upload_manager.upload_file(upload_request)
                     transfer_ids.append(transfer_id)
+                else:
+                    print(f"Skipping {p} - already uploaded")
     except (ConnectionClosedOK, ConnectionClosedError, InvalidStatus, OSError, asyncio.TimeoutError) as e:
         logger.error(f"WebSocket connection failed: {e}")
         return False
@@ -238,9 +240,3 @@ async def ws_upload(args, working_dir):
         await service_runtime.stop(drain=True)
         await db.close()
 
-    # if not status:
-    #     print("\nSome uploads failed.")
-    #     raise cliexcept.MCCLIException(
-    #         "Upload failed. Check server logs for details.")
-    #
-    # print("\nAll uploads completed successfully!")
