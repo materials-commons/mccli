@@ -90,21 +90,26 @@ async def ls2_subcommand_async(args, working_dir):
     async_reconciler = AsyncReconciler(db=db, proj=proj, reconcile_mode="status")
     which_class = LSAction if args.action else LSEntry
     listdir_fn = make_merged_listdir_func(proj)
-    for path in args.paths:
-        lstable = LSTable()
-        p = Path(path)
-        if p.is_dir():
-            async for current_path, path_entries in async_reconciler.walk(path=path, listdir_fn=listdir_fn,
-                                                                          recursive=False, ignore_fn=None):
-                for entry_name in sorted(path_entries):
-                    entry = path_entries[entry_name]
-                    if entry.exception:
-                        print(f"Error reconciling file: {entry.exception}")
-                        continue
-                    lstable.add_row(which_class.from_file_state(entry))
-                lstable.print_table()
-        elif p.is_file():
-            state = await async_reconciler.reconcile_file(p)
+    try:
+        for path in args.paths:
             lstable = LSTable()
-            lstable.add_row(which_class.from_file_state(state))
-            lstable.print_table()
+            p = Path(path)
+            if p.is_dir():
+                async for current_path, path_entries in async_reconciler.walk(path=path, listdir_fn=listdir_fn,
+                                                                              recursive=False, ignore_fn=None):
+                    for entry_name in sorted(path_entries):
+                        entry = path_entries[entry_name]
+                        if entry.exception:
+                            print(f"Error reconciling file: {entry.exception}")
+                            continue
+                        lstable.add_row(which_class.from_file_state(entry))
+                    lstable.print_table()
+            elif p.is_file():
+                state = await async_reconciler.reconcile_file(p)
+                lstable = LSTable()
+                lstable.add_row(which_class.from_file_state(state))
+                lstable.print_table()
+    except Exception as e:
+        pass
+    finally:
+        await db.close()
