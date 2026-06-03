@@ -21,7 +21,17 @@ setup(
         "": ["*.txt"]
     },
     packages=find_namespace_packages(
-        include=['materials_commons.cli', 'materials_commons.cli.subcommands', 'materials_commons.cli.server', 'materials_commons.cli.server.uploader', 'materials_commons.cli.server.downloader', 'materials_commons.cli.server.indexer']
+        include=[
+            'materials_commons.cli',
+            'materials_commons.cli.old',
+            'materials_commons.cli.subcommands',
+            'materials_commons.cli.subcommands.runners',
+            'materials_commons.cli.server',
+            'materials_commons.cli.server.command_handlers',
+            'materials_commons.cli.server.db',
+            'materials_commons.cli.server.uploader',
+            'materials_commons.cli.server.downloader',
+            'materials_commons.cli.server.indexer']
     ),
     entry_points={
         'console_scripts': ['mc=materials_commons.cli.parser:main']
