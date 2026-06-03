@@ -70,6 +70,7 @@ setup(
         "requests",
         "setuptools",
         "sortedcontainers",
-        "tabulate"
+        "tabulate",
+        "aiosqlite",
     ]
 )
