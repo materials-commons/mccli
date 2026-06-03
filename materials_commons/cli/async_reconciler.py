@@ -45,6 +45,7 @@ class AsyncReconciler:
             # Go through all the observations and match to the file records
             for obs in observations:
                 obs.file_record = file_records_map.get(obs.name, None)
+                obs.remote_path = remote_dir / obs.name
                 path_states[obs.name] = FileState(observation=obs)
 
             results = await asyncio.gather(
