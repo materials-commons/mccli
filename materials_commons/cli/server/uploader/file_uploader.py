@@ -74,6 +74,7 @@ class FileUploader:
             if not await self._wait_for_acceptance():
                 if self._already_uploaded:
                     logger.info(f"File {self.file_path} already uploaded")
+                    print(f"Uploaded {self.file_path}...")
                     return True
                 return False
 
