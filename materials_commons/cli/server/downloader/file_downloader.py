@@ -12,6 +12,7 @@ import requests
 
 from materials_commons.cli.old.functions import checksum
 from materials_commons.cli.requests import DownloadRequest, DBWriteRequest
+from materials_commons.cli.server import projects
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,10 @@ class FileDownloader:
         self.db_write_queue = db_write_queue
         self.download_request = download_request
         self.file_id = download_request.observation.remote_entry.remote_file_id
-        self.file_path = download_request.observation.local_path
+        if download_request.observation.local_path is None:
+            self.file_path = projects.remote_to_local_project_path(download_request.project.local_path, download_request.observation.remote_path)
+        else:
+            self.file_path = download_request.observation.local_path
         self.base_url = download_request.project.remote.base_url
         self.apitoken = download_request.project.remote.apikey
         self.project_id = download_request.project.id

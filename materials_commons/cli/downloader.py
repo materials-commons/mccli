@@ -1,4 +1,5 @@
 import logging
+import traceback
 from pathlib import Path
 
 from igittigitt import IgnoreParser, igittigitt
@@ -45,13 +46,7 @@ class Downloader:
         try:
             for path in paths:
                 p = Path(path)
-                if p.is_dir():
-                    # Walk and download local dir
-                    await self._download_dir(p, recursive=recursive)
-                elif p.is_file():
-                    # Download local file
-                    await self._download_file(p)
-                else:
+                if not p.exists():
                     # If we are here, then the path entry is a remote path. We look up the path to
                     # determine the type of download to perform.
                     remote_path = self.proj.to_remote_path(p)
@@ -71,9 +66,16 @@ class Downloader:
                     else:
                         # Remote entry is a file
                         await self._download_file(p, force=force)
+                elif p.is_dir():
+                    # Walk and download local dir
+                    await self._download_dir(p, recursive=recursive)
+                elif p.is_file():
+                    # Download local file
+                    await self._download_file(p)
 
         except Exception as e:
             logger.error(f"Unexpected error during download: {e}")
+            traceback.print_exc()
             return False
 
         finally:

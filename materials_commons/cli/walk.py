@@ -118,26 +118,30 @@ async def local_listdir(path: str | Path) -> list[Observation]:
     def _scan() -> list[Observation]:
         items: list[Observation] = []
 
-        for entry in root.iterdir():
-            local = path_to_local_file_entry(entry)
+        try:
+            for entry in root.iterdir():
+                local = path_to_local_file_entry(entry)
 
-            items.append(
-                Observation(
-                    local_path=entry,
-                    remote_path=None,
-                    local_entry=local,
-                    file_record=None,
-                    remote_entry=None,
+                items.append(
+                    Observation(
+                        local_path=entry,
+                        remote_path=None,
+                        local_entry=local,
+                        file_record=None,
+                        remote_entry=None,
+                    )
                 )
-            )
-
-        return items
+        except:
+            pass
+        finally:
+            return items
 
     return await asyncio.to_thread(_scan)
 
 
 def mcapi_file_to_remote_file_entry(entry: mcmodel.File) -> RemoteFileEntry:
     kind: EntryKind = "dir" if entry.mime_type == "directory" else "file"
+    print(f"mcapi_file_to_remote_file_entry called for entry: {entry.mime_type}, {entry.name}, {entry.directory.path}")
     remote_entry = RemoteFileEntry(
         path=Path(entry.directory.path) / entry.name,
         name=entry.name,
@@ -159,6 +163,7 @@ async def remote_listdir(project_path: str | Path, proj: OldLocalProject) -> lis
         project_path: The path within the project to list directory contents of.
         proj: The local project object representing the remote project.
     """
+    print(f"remote_listdir called for project_path: {project_path}, proj: {proj}")
     entries = await asyncio.to_thread(proj.remote.list_directory_by_path, proj.id, project_path.as_posix())
     items: list[Observation] = []
     for entry in entries:
@@ -201,7 +206,9 @@ async def merged_local_remote_listdir(
     """
     Merge local and remote directory listings, prioritizing local entries.
     """
+    print(f"merged_local_remote_listdir {proj.local_path}, {path}")
     local_entries = await local_listdir_fn(path)
+
     project_path = projects.local_to_remote_project_path(Path(proj.local_path), path)
     remote_entries = await remote_listdir_fn(project_path)
 
