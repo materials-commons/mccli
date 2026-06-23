@@ -208,6 +208,7 @@ async def ws_upload(args, working_dir):
                         file_state = path_entries[entry_name]
                         if file_state.exception:
                             logger.error(f"Error encountered while processing {entry_name}: {file_state.exception}")
+                            # print(f"Error encountered while processing {entry_name}: {file_state.exception}")
                             continue
                         if file_state.file_decision.action == "upload":
                             upload_request = UploadRequest(observation=file_state.observation,
@@ -219,7 +220,7 @@ async def ws_upload(args, working_dir):
                 file_state = await async_reconciler.reconcile_file(p)
                 if file_state.exception:
                     logger.error(f"Error encountered while processing {p}: {file_state.exception}")
-                    print(f"Error encountered while processing {p}: {file_state.exception}")
+                    # print(f"Error encountered while processing {p}: {file_state.exception}")
                     continue
                 if file_state.file_decision.action == "upload":
                     upload_request = UploadRequest(observation=file_state.observation,
