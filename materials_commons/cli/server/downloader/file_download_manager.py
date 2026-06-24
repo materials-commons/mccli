@@ -25,6 +25,9 @@ class FileDownloadManager:
 
     async def start_workers(self) -> None:
         """Start background workers to process download queue"""
+        if self._workers_running:
+            logger.info("Download workers already running")
+            return
         self._workers_running = True
         self._worker_tasks = [
             asyncio.create_task(self._download_worker(i))
