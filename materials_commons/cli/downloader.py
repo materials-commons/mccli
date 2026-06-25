@@ -116,3 +116,5 @@ class Downloader:
                     print(f"Downloading {entry_name} to {current_path / entry_name}...")
                     transfer_id = await self.container.file_download_manager.download_file(download_request)
                     self.transfer_ids.append(transfer_id)
+                else:
+                    print(f"Skipping download of {entry_name} because {file_state.file_decision.reason}")
