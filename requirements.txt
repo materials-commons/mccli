@@ -1,7 +1,8 @@
-websockets
-aiofiles
-aiosqlite
-globus-cli
+websockets~=16.0
+aiofiles~=25.1.0
+aiosqlite~=0.22.1
+fastmcp~=3.4.2
+globus-cli~=3.9.0
 globus-sdk~=3.13.0
 igittigitt==2.1.0
 materials-commons-api~=2.0.1
