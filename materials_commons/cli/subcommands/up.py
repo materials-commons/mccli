@@ -79,7 +79,6 @@ def up_subcommand(argv, working_dir):
     showLogs = os.getenv("MC_SHOW_LOGS")
     if showLogs == "true":
         logging.basicConfig(
-            level=logging.INFO,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             handlers=[logging.StreamHandler(sys.stdout)]
         )
@@ -217,7 +216,9 @@ async def ws_upload(args, working_dir):
                             transfer_id = await container.file_upload_manager.upload_file(upload_request)
                             transfer_ids.append(transfer_id)
             elif p.is_file():
+                print("calling async_reconciler.reconcile_file")
                 file_state = await async_reconciler.reconcile_file(p)
+                print("past reconcile_file")
                 if file_state.exception:
                     logger.error(f"Error encountered while processing {p}: {file_state.exception}")
                     # print(f"Error encountered while processing {p}: {file_state.exception}")
@@ -226,7 +227,9 @@ async def ws_upload(args, working_dir):
                     upload_request = UploadRequest(observation=file_state.observation,
                                                    updated_record=file_state.file_decision.updated_record,
                                                    project=proj)
+                    print("start upload_file")
                     transfer_id = await container.file_upload_manager.upload_file(upload_request)
+                    print("end upload_file")
                     transfer_ids.append(transfer_id)
                 else:
                     print(f"Skipping {p} - already uploaded")
