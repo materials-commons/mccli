@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import logging
+import sys
 import time
 import uuid
 from dataclasses import replace
@@ -15,8 +16,27 @@ from materials_commons.cli.requests import UploadRequest, DBWriteRequest
 logger = logging.getLogger(__name__)
 
 
+def _format_bytes(value: float) -> str:
+    """Format bytes as a human-readable value."""
+    units = ("B", "KB", "MB", "GB", "TB")
+    size = float(value)
+
+    for unit in units:
+        if size < 1024.0 or unit == units[-1]:
+            return f"{size:.1f} {unit}"
+        size /= 1024.0
+
+    return f"{size:.1f} TB"
+
 class FileUploader:
     """Handles upload of a single file via websocket using queue pattern"""
+
+    # These class variables are used to track progress of file uploads. They are shared across all
+    # instances of FileUploader. The lock keeps different writers to the terminal from interfering
+    # with each other.
+    _progress_lock = asyncio.Lock()
+    _progress_rows: Dict[str, int] = {}
+    _progress_row_count = 0
 
     def __init__(
             self,
@@ -40,6 +60,7 @@ class FileUploader:
         self.bytes_sent = 0
         self.paused = False
         self.cancelled = False
+        self.upload_started_at = time.monotonic()
 
         # These fields are referenced multiple times. They are pulled out to make code more readable.
         self.file_path = upload_request.observation.path
@@ -66,20 +87,25 @@ class FileUploader:
                 print(f"Skipping {self.file_path.as_posix()} (empty file)...")
                 return True
 
+            await self._render_progress(status="starting")
+
             # Step 1: Initialize the transfer
             if not await self._send_transfer_init():
+                await self._render_progress(status="failed on initialization")
                 return False
 
             # Step 2: Wait for acceptance
             if not await self._wait_for_acceptance():
                 if self._already_uploaded:
                     logger.info(f"File {self.file_path} already uploaded")
-                    print(f"Uploaded {self.file_path}...")
+                    await self._render_progress(self.file_size, self.file_size, status="already uploaded")
                     return True
+                await self._render_progress(status="failed on acceptance")
                 return False
 
             # # Step 3: Send file chunks
             if not await self._send_chunks2():
+                await self._render_progress(status="failed on chunk sending")
                 return False
 
             # ### New
@@ -99,19 +125,21 @@ class FileUploader:
 
             # Step 4: Send completion
             if not await self._send_transfer_complete():
+                await self._render_progress(status="failed on completion")
                 return False
 
             # Step 5: Wait for finalization
             if not await self._wait_for_finalization():
+                await self._render_progress(status="failed on finalization")
                 return False
 
             logger.info(f"File upload complete for {self.file_path}")
-            print(f"Uploaded {self.file_path}...")
+            await self._render_progress(self.file_size, self.file_size, status="complete")
             return True
 
         except Exception as e:
             logger.error(f"Error uploading file {self.file_path}: {e}")
-            print(f"Error uploading file {self.file_path}: {e}")
+            await self._render_progress(status=f"error: {e}")
             return False
 
     async def resume(self, resume_from_byte: int, resume_from_chunk: int) -> bool:
@@ -323,6 +351,8 @@ class FileUploader:
 
                     self.bytes_sent = bytes_received
 
+                await self._render_progress(self.bytes_sent, self.file_size, status="uploading")
+
                 # Progress callback outside lock
                 if self.progress_callback:
                     self.progress_callback(self.bytes_sent, self.file_size)
@@ -389,6 +419,8 @@ class FileUploader:
                     self.bytes_sent = ack_msg["payload"]["bytes_received"]
                     sequence += 1
 
+                    await self._render_progress(self.bytes_sent, self.file_size, status="uploading")
+                    
                     # Progress callback
                     if self.progress_callback:
                         self.progress_callback(self.bytes_sent, self.file_size)
@@ -472,6 +504,51 @@ class FileUploader:
         """Cancel the upload"""
         self.cancelled = True
         logger.info(f"Upload cancelled: {self.file_path.name}")
+
+    async def _render_progress(self,
+                               bytes_sent: Optional[int] = None,
+                               total_bytes: Optional[int] = None,
+                               status: str = "uploading") -> None:
+        """Render this upload's progress on a stable terminal row."""
+        if not sys.stdout.isatty():
+            # Not running in a terminal, so don't render progress
+            return
+
+        bytes_sent = self.bytes_sent if bytes_sent is None else bytes_sent
+        total_bytes = self.file_size if total_bytes is None else total_bytes
+
+        # Lock to make sure writers to the terminal aren't interfering with each other
+        async with FileUploader._progress_lock:
+            if self.transfer_id not in FileUploader._progress_rows:
+                FileUploader._progress_rows[self.transfer_id] = FileUploader._progress_row_count
+                FileUploader._progress_row_count += 1
+                print()
+
+            row = FileUploader._progress_rows[self.transfer_id]
+            rows_from_cursor = FileUploader._progress_row_count - row
+
+            percent = 100.0 if total_bytes == 0 else min((bytes_sent / total_bytes) * 100.0, 100.0)
+            elapsed = max(time.monotonic() - self.upload_started_at, 0.001)
+            rate = bytes_sent / elapsed
+
+            line = (
+                f"{self.file_path.as_posix()} | "
+                f"{_format_bytes(bytes_sent)} / {_format_bytes(total_bytes)} | "
+                f"{percent:6.2f}% | "
+                f"{_format_bytes(rate)}/s | "
+                f"{status}"
+            )
+
+            terminal_width = 120
+            if len(line) > terminal_width:
+                line = line[:terminal_width - 3] + "..."
+
+            sys.stdout.write("\033[s")
+            sys.stdout.write(f"\033[{rows_from_cursor}A")
+            sys.stdout.write("\r\033[K")
+            sys.stdout.write(line)
+            sys.stdout.write("\033[u")
+            sys.stdout.flush()
 
     def _calculate_md5(self, chunk_size=8192) -> str:
         """Calculate md5 hash of file"""
