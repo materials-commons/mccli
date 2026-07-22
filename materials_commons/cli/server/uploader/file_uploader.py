@@ -13,6 +13,7 @@ import aiofiles
 from materials_commons.cli.requests import UploadRequest, DBWriteRequest
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.WARNING)
 
 
 def _format_bytes(value: float) -> str:

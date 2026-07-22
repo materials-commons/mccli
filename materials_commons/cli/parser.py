@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import os
 import sys
 from datetime import datetime, timedelta
@@ -144,6 +145,8 @@ def check_package_version():
 
 
 def main(argv=None, working_dir=None):
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.WARNING)
     if argv is None:
         argv = sys.argv
     if working_dir is None:

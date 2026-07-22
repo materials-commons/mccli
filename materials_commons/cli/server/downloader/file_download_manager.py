@@ -1,9 +1,11 @@
 import asyncio
 from typing import Dict, Any, Optional, Callable
+import logging
 
 from materials_commons.cli.requests import DownloadRequest
 from materials_commons.cli.server.downloader.file_downloader import FileDownloader, logger
 
+logger.setLevel(logging.WARNING)
 
 class FileDownloadManager:
     """Manages multiple concurrent file downloads"""
