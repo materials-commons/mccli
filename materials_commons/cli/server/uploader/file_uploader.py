@@ -10,7 +10,6 @@ from typing import Optional, Callable, Dict, Any
 
 import aiofiles
 
-from materials_commons.cli.filedb import FileIndexDB
 from materials_commons.cli.requests import UploadRequest, DBWriteRequest
 
 logger = logging.getLogger(__name__)
@@ -420,7 +419,7 @@ class FileUploader:
                     sequence += 1
 
                     await self._render_progress(self.bytes_sent, self.file_size, status="uploading")
-                    
+
                     # Progress callback
                     if self.progress_callback:
                         self.progress_callback(self.bytes_sent, self.file_size)
