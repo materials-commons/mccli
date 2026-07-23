@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import replace
 from typing import Literal, Optional
 
@@ -9,6 +10,7 @@ from materials_commons.api import models as mcmodel
 from materials_commons.cli.local_project import LocalProject
 from materials_commons.cli.models import FileRecord, Observation, FileDecision
 from materials_commons.cli.old.functions import checksum
+from materials_commons.cli.terminal_progress import TerminalProgress
 
 Action = Literal["skip", "upload", "download", "conflict", "adopt", "db_update"]
 ObservationState = Literal["neither", "local_only", "remote_only", "both"]
@@ -141,12 +143,12 @@ class SingleFileReconciler:
             if observation.local_entry_matches_record() and observation.file_record.local_checksum:
                 return self._upload(record, "local only")
             else:
-                local_checksum = await asyncio.to_thread(checksum, observation.local_entry.path.as_posix())
+                local_checksum = await self._checksum_with_feedback(observation)
                 record = replace(record, local_checksum=local_checksum)
                 reason = "local only - update local record"
                 return self._upload(record, reason)
         else:
-            local_checksum = await asyncio.to_thread(checksum, observation.local_entry.path.as_posix())
+            local_checksum = await self._checksum_with_feedback(observation)
             record = replace(record, local_checksum=local_checksum)
             reason = "local only - add local record"
             return self._upload(record, reason)
@@ -157,13 +159,13 @@ class SingleFileReconciler:
             if observation.local_entry_matches_record():
                 return self._skip(record, "local entry matches existing record; no remote file to download")
             else:
-                local_checksum = await asyncio.to_thread(checksum, observation.local_entry.path.as_posix())
+                local_checksum = await self._checksum_with_feedback(observation)
                 record = replace(record, local_checksum=local_checksum)
                 reason = "local only, uploadable - update local record"
                 return self._db_update(record, reason)
         else:
             # No record in the project database
-            local_checksum = await asyncio.to_thread(checksum, observation.local_entry.path.as_posix())
+            local_checksum = await self._checksum_with_feedback(observation)
             record = replace(record, local_checksum=local_checksum)
             reason = "local only, uploadable - add local record"
             return self._db_update(record, reason)
@@ -265,14 +267,14 @@ class SingleFileReconciler:
                 # No action needed, local has been uploaded, but remote changed, and we could download it.
                 return self._skip(updated_record, "local matches remote, but remote file differs (downloadable)")
         # Local entry is different. Compute new checksum and upload.
-        local_checksum = await asyncio.to_thread(checksum, observation.local_entry.path.as_posix())
+        local_checksum = await self._checksum_with_feedback(observation)
         updated_record = replace(updated_record, local_checksum=local_checksum)
         return self._upload(updated_record, "local file changed")
 
     async def _reconcile_both_sides_upload_no_record(self, observation: Observation,
                                                      updated_record: FileRecord) -> FileDecision:
         # No file record. Let's compute the checksum and see if that matches the remote
-        local_checksum = await asyncio.to_thread(checksum, observation.local_entry.path.as_posix())
+        local_checksum = await self._checksum_with_feedback(observation)
         if local_checksum == observation.remote_entry.checksum:
             return self._db_update(updated_record, "local matches remote, add file record")
         updated_record = replace(updated_record, local_checksum=local_checksum)
@@ -304,7 +306,7 @@ class SingleFileReconciler:
         else:
             # The file record and the local file don't match. We need to compute the checksum for the
             # local to determine if the local file has ever been uploaded.
-            local_checksum = await asyncio.to_thread(checksum, observation.local_entry.path.as_posix())
+            local_checksum = await self._checksum_with_feedback(observation)
             # Check if the local checksum matches the file record checksum
             if local_checksum == observation.file_record.local_checksum:
                 # The checksum matches, so this file has been uploaded. So we can safely download the remote.
@@ -328,7 +330,7 @@ class SingleFileReconciler:
         """
         # There is no file_record; that means we don't know the state of the local file. First, lets compute
         # the checksum of the local file.
-        local_checksum = await asyncio.to_thread(checksum, observation.local_entry.path.as_posix())
+        local_checksum = await self._checksum_with_feedback(observation)
         if local_checksum == observation.remote_entry.checksum:
             # Need to create a file_record
             return self._db_update(updated_record, "local file matches remote checksum")
@@ -372,7 +374,8 @@ class SingleFileReconciler:
 
         # Get previous versions and look for a match
         try:
-            previous_versions = await asyncio.to_thread(self._proj.remote.get_file_versions, self._proj.id, remote_file_id)
+            previous_versions = await asyncio.to_thread(self._proj.remote.get_file_versions, self._proj.id,
+                                                        remote_file_id)
         except Exception as e:
             previous_versions = None
 
@@ -432,3 +435,42 @@ class SingleFileReconciler:
 
     def _db_update(self, record: FileRecord, reason: str) -> FileDecision:
         return self._decision("db_update", record, reason, updated=True)
+
+    async def _checksum_with_feedback(self, observation: Observation) -> str:
+        path = observation.local_entry.path
+        total_bytes = observation.local_entry.size
+        progress_id = f"checksum:{path.as_posix()}"
+        loop = asyncio.get_running_loop()
+
+        def make_line(bytes_read: int, status: str = "computing checksum") -> str:
+            percent = 100.0 if total_bytes == 0 else min((bytes_read / total_bytes) * 100.0, 100.0)
+            return (
+                f"{path.as_posix()} | "
+                f"checksum | "
+                f"{bytes_read} / {total_bytes} bytes | "
+                f"{percent:6.2f}% | "
+                f"{status}"
+            )
+
+        last_render_at = 0.0
+
+        def progress_callback(bytes_read: int) -> None:
+            nonlocal last_render_at
+
+            now = time.monotonic()
+            if now - last_render_at < 1.0 and bytes_read < total_bytes:
+                return
+
+            last_render_at = now
+            line = make_line(bytes_read)
+            asyncio.run_coroutine_threadsafe(
+                TerminalProgress.render(progress_id, line),
+                loop,
+            )
+
+        await TerminalProgress.render(progress_id, make_line(0))
+
+        result = await asyncio.to_thread(checksum, path.as_posix(), 1024 * 1024, progress_callback)
+
+        await TerminalProgress.render(progress_id, make_line(total_bytes, "checksum complete"))
+        return result

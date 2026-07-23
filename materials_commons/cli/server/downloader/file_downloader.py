@@ -13,6 +13,7 @@ import requests
 from materials_commons.cli.old.functions import checksum
 from materials_commons.cli.requests import DownloadRequest, DBWriteRequest
 from materials_commons.cli.server import projects
+from materials_commons.cli.terminal_progress import TerminalProgress
 
 logger = logging.getLogger(__name__)
 
@@ -154,25 +155,35 @@ class FileDownloader:
 
     async def _download_with_ranges(self, resume_from: int = 0) -> bool:
         """Download the file using HTTP Range requests with streaming"""
+
+        # Get the event loop so we can schedule progress rendering. Since the routine
+        # _download_with_ranges_blocking is not async it will need the loop do the
+        # progress. We have to get the async loop here in the async routine, and then
+        # pass it to the blocking download routine.
+        loop = asyncio.get_running_loop()
         try:
-            success = await asyncio.to_thread(self._download_with_ranges_blocking, resume_from)
+            await self._render_progress(status="starting")
+            success = await asyncio.to_thread(self._download_with_ranges_blocking, resume_from, loop)
 
             if not success:
                 await self._save_metadata()
+                await self._render_progress(status="failed downloading")
+                return False
 
             return success
 
         except requests.exceptions.RequestException as e:
             logger.error(f"HTTP request failed: {e}")
             await self._save_metadata()
+            await self._render_progress(status=f"failed with HTTP exception: {e}")
             return False
         except Exception as e:
             logger.error(f"Download error: {e}")
             await self._save_metadata()
+            await self._render_progress(status=f"failed with exception: {e}")
             return False
 
-    def _download_with_ranges_blocking(self, resume_from: int = 0) -> bool:
-        "Blocking download. Called from asyncio.to_thread()"
+    def _download_with_ranges_blocking(self, resume_from: int = 0, loop: Optional[asyncio.AbstractEventLoop] = None) -> bool:
         """Blocking download implementation. Runs in a worker thread."""
         headers = {
             'Authorization': f'Bearer {self.apitoken}',
@@ -213,6 +224,26 @@ class FileDownloader:
 
             # Open the file in append mode if resuming, write mode otherwise
             mode = 'ab' if resume_from > 0 else 'wb'
+            last_progress_render_at = 0.0
+            progress_interval_seconds = 0.25
+
+            def schedule_progress_render(status: str = "downloading", force: bool = False) -> None:
+                nonlocal last_progress_render_at
+
+                if loop is None:
+                    return
+
+                now = time.monotonic()
+                if not force and now - last_progress_render_at < progress_interval_seconds:
+                    return
+
+                last_progress_render_at = now
+                asyncio.run_coroutine_threadsafe(
+                    self._render_progress(self.bytes_received, self.expected_size, status=status),
+                    loop,
+                )
+
+            schedule_progress_render(status="downloading", force=True)
 
             with open(self.part_file, mode) as f:
                 for chunk in response.iter_content(chunk_size=self.chunk_size):
@@ -222,12 +253,15 @@ class FileDownloader:
 
                     if self.cancelled:
                         logger.info("Download cancelled")
+                        schedule_progress_render(status="cancelled", force=True)
                         return False
 
                     if chunk:
                         # Write chunk
                         f.write(chunk)
                         self.bytes_received += len(chunk)
+
+                        schedule_progress_render()
 
                         # Progress callback
                         if self.progress_callback:
@@ -236,6 +270,8 @@ class FileDownloader:
                         # Periodically save metadata for resume
                         if self.bytes_received % (self.chunk_size * 10) == 0:
                             self._save_metadata_blocking()
+
+            schedule_progress_render(status="download complete", force=True)
 
             return True
 
@@ -313,3 +349,23 @@ class FileDownloader:
         """Cancel the download"""
         self.cancelled = True
         logger.info(f"Download cancelled: {self.file_path}")
+
+    async def _render_progress(self,
+                               bytes_received: Optional[int] = None,
+                               total_bytes: Optional[int] = None,
+                               status: str = "downloading") -> None:
+        """Render this download's progress on a stable terminal row."""
+        bytes_received = self.bytes_received if bytes_received is None else bytes_received
+        total_bytes = self.expected_size if total_bytes is None else total_bytes
+
+        percent = 100.0 if total_bytes == 0 else min((bytes_received / total_bytes) * 100.0, 100.0)
+
+        line = (
+            f"{self.file_path.as_posix()} | "
+            f"download | "
+            f"{bytes_received} / {total_bytes} bytes | "
+            f"{percent:6.2f}% | "
+            f"{status}"
+        )
+
+        await TerminalProgress.render(f"download:{self.transfer_id}", line)

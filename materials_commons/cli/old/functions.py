@@ -144,28 +144,33 @@ def format_time(time_value, fmt="%Y %b %d %H:%M:%S") -> str:
         return str(type(time_value))
 
 
-def checksum(path, chunk_size=8192):
-    """Generate MD5 checksum for the file at "path"
+def checksum(path, chunk_size=1024*1024, progress_callback=None):
+    """Generate MD5 checksum for the file at path
 
     Args:
         path (str): Path to file
         chunk_size (int): Size of chunks to read (default 8192 bytes)
+        progress_callback (callable): Callback function to report progress as progress_callback(bytes_read)
 
     Returns:
         str: MD5 checksum hexdigest
     """
     md5 = hashlib.md5()
+    bytes_read = 0
     with open(path, 'rb') as f:
         while True:
             chunk = f.read(chunk_size)
             if not chunk:
                 break
             md5.update(chunk)
+            bytes_read += len(chunk)
+            if progress_callback:
+                progress_callback(bytes_read)
     return md5.hexdigest()
 
 
-async def checksum_async(path, chunk_size=8192):
-    """Generate MD5 checksum for the file at "path"""
+async def checksum_async(path, chunk_size=1024*1024):
+    """Generate MD5 checksum for the file at path"""
     return await asyncio.to_thread(checksum, path, chunk_size)
 
 

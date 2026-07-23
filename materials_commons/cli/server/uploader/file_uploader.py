@@ -7,6 +7,7 @@ import uuid
 from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Optional, Callable, Dict, Any
+from materials_commons.cli.terminal_progress import TerminalProgress, format_bytes
 
 import aiofiles
 
@@ -15,18 +16,6 @@ from materials_commons.cli.requests import UploadRequest, DBWriteRequest
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
 
-
-def _format_bytes(value: float) -> str:
-    """Format bytes as a human-readable value."""
-    units = ("B", "KB", "MB", "GB", "TB")
-    size = float(value)
-
-    for unit in units:
-        if size < 1024.0 or unit == units[-1]:
-            return f"{size:.1f} {unit}"
-        size /= 1024.0
-
-    return f"{size:.1f} TB"
 
 class FileUploader:
     """Handles upload of a single file via websocket using queue pattern"""
@@ -61,6 +50,7 @@ class FileUploader:
         self.paused = False
         self.cancelled = False
         self.upload_started_at = time.monotonic()
+        self._last_progress_render_at = 0.0
 
         # These fields are referenced multiple times. They are pulled out to make code more readable.
         self.file_path = upload_request.observation.path
@@ -510,45 +500,29 @@ class FileUploader:
                                total_bytes: Optional[int] = None,
                                status: str = "uploading") -> None:
         """Render this upload's progress on a stable terminal row."""
-        if not sys.stdout.isatty():
-            # Not running in a terminal, so don't render progress
-            return
 
         bytes_sent = self.bytes_sent if bytes_sent is None else bytes_sent
         total_bytes = self.file_size if total_bytes is None else total_bytes
 
-        # Lock to make sure writers to the terminal aren't interfering with each other
-        async with FileUploader._progress_lock:
-            if self.transfer_id not in FileUploader._progress_rows:
-                FileUploader._progress_rows[self.transfer_id] = FileUploader._progress_row_count
-                FileUploader._progress_row_count += 1
-                print()
+        force_render = status != "uploading" or bytes_sent >= total_bytes
+        now = time.monotonic()
+        if not force_render and now - self._last_progress_render_at < 0.25:
+            return
+        self._last_progress_render_at = now
 
-            row = FileUploader._progress_rows[self.transfer_id]
-            rows_from_cursor = FileUploader._progress_row_count - row
+        percent = 100.0 if total_bytes == 0 else min((bytes_sent / total_bytes) * 100.0, 100.0)
+        elapsed = max(time.monotonic() - self.upload_started_at, 0.001)
+        rate = bytes_sent / elapsed
 
-            percent = 100.0 if total_bytes == 0 else min((bytes_sent / total_bytes) * 100.0, 100.0)
-            elapsed = max(time.monotonic() - self.upload_started_at, 0.001)
-            rate = bytes_sent / elapsed
+        line = (
+            f"{self.file_path.as_posix()} | "
+            f"{format_bytes(bytes_sent)} / {format_bytes(total_bytes)} | "
+            f"{percent:6.2f}% | "
+            f"{format_bytes(rate)}/s | "
+            f"{status}"
+        )
 
-            line = (
-                f"{self.file_path.as_posix()} | "
-                f"{_format_bytes(bytes_sent)} / {_format_bytes(total_bytes)} | "
-                f"{percent:6.2f}% | "
-                f"{_format_bytes(rate)}/s | "
-                f"{status}"
-            )
-
-            terminal_width = 120
-            if len(line) > terminal_width:
-                line = line[:terminal_width - 3] + "..."
-
-            sys.stdout.write("\033[s")
-            sys.stdout.write(f"\033[{rows_from_cursor}A")
-            sys.stdout.write("\r\033[K")
-            sys.stdout.write(line)
-            sys.stdout.write("\033[u")
-            sys.stdout.flush()
+        await TerminalProgress.render(self.transfer_id, line)
 
     def _calculate_md5(self, chunk_size=8192) -> str:
         """Calculate md5 hash of file"""
