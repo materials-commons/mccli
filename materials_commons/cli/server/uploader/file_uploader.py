@@ -74,7 +74,7 @@ class FileUploader:
         """
         try:
             if self.file_size == 0:
-                print(f"Skipping {self.file_path.as_posix()} (empty file)...")
+                await TerminalProgress.write_line(f"Skipping {self.file_path.as_posix()} (empty file)...")
                 return True
 
             await self._render_progress(status="starting")
@@ -522,7 +522,10 @@ class FileUploader:
             f"{status}"
         )
 
-        await TerminalProgress.render(self.transfer_id, line)
+        # Anything other than an in-flight status is terminal for this file, so
+        # the row is retired rather than held open for the rest of the run.
+        await TerminalProgress.render(self.transfer_id, line,
+                                      done=status not in ("uploading", "starting"))
 
     def _calculate_md5(self, chunk_size=8192) -> str:
         """Calculate md5 hash of file"""

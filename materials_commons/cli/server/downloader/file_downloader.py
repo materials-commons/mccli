@@ -368,4 +368,5 @@ class FileDownloader:
             f"{status}"
         )
 
-        await TerminalProgress.render(f"download:{self.transfer_id}", line)
+        await TerminalProgress.render(f"download:{self.transfer_id}", line,
+                                      done=status not in ("downloading", "starting"))

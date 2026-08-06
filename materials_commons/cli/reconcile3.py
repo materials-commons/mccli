@@ -472,5 +472,6 @@ class SingleFileReconciler:
 
         result = await asyncio.to_thread(checksum, path.as_posix(), 1024 * 1024, progress_callback)
 
-        await TerminalProgress.render(progress_id, make_line(total_bytes, "checksum complete"))
+        await TerminalProgress.render(progress_id, make_line(total_bytes, "checksum complete"),
+                                      done=True)
         return result
