@@ -68,7 +68,6 @@ setup(
         "python-dateutil~=2.8",
         "pyyaml~=6.0",
         "requests~=2.28",
-        "setuptools~=60.2",
         "sortedcontainers~=2.4",
         "tabulate~=0.9",
         "aiosqlite~=0.22",
