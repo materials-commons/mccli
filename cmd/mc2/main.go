@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 	"strings"
 
+	mclogging "github.com/materials-commons/mccli/pkg/logging"
 	"github.com/urfave/cli/v3"
 )
 
@@ -52,6 +53,18 @@ func newCommand() *cli.Command {
 		Name:                   "mc2",
 		Usage:                  "Materials Commons command-line client",
 		UseShortOptionHandling: true,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "log-level",
+				Usage: "Set logging level: debug, info, warn, or error",
+				Value: mclogging.DefaultLevelName,
+			},
+			&cli.StringFlag{
+				Name:  "log-file",
+				Usage: "Write logs to `FILE` instead of stderr",
+			},
+		},
+		Before: configureLogging,
 		Commands: []*cli.Command{
 			versionCommand(),
 			cloneCommand(),
@@ -268,8 +281,48 @@ func upCommand() *cli.Command {
 	}
 }
 
+func configureLogging(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+	logCtx, cleanup, err := mclogging.Configure(ctx, mclogging.Config{
+		Level: cmd.String("log-level"),
+		File:  cmd.String("log-file"),
+	})
+	if err != nil {
+		return ctx, err
+	}
+
+	if cleanup != nil {
+		deferCleanup := func() {
+			if err := cleanup(); err != nil {
+				mclogging.Logger(logCtx).Warn("failed to close log output", "error", err)
+			}
+		}
+		cmd.After = appendAfter(cmd.After, deferCleanup)
+	}
+
+	mclogging.Logger(logCtx).Debug("logging configured",
+		"level", cmd.String("log-level"),
+		"log_file", cmd.String("log-file"),
+	)
+
+	return logCtx, nil
+}
+
+func appendAfter(after cli.AfterFunc, cleanup func()) cli.AfterFunc {
+	return func(ctx context.Context, cmd *cli.Command) error {
+		var afterErr error
+		if after != nil {
+			afterErr = after(ctx, cmd)
+		}
+
+		cleanup()
+
+		return afterErr
+	}
+}
+
 func notYetImplemented(name string) cli.ActionFunc {
 	return func(ctx context.Context, cmd *cli.Command) error {
+		mclogging.Logger(ctx).Debug("command invoked", "command", name)
 		return fmt.Errorf("%s command is not implemented yet", name)
 	}
 }
