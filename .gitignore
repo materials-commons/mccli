@@ -136,3 +136,4 @@ dmypy.json
 
 # Executables
 cmd/mc2/mc2
+bin
