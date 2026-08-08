@@ -131,3 +131,8 @@ dmypy.json
 
 # Jetbrains
 .idea
+.idea-py
+.idea-go
+
+# Executables
+cmd/mc2/mc2
