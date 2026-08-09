@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 
 	mclogging "github.com/materials-commons/mccli/pkg/logging"
+	"github.com/materials-commons/mccli/pkg/projectpath"
 )
 
 const (
@@ -29,16 +30,16 @@ const (
 
 	// ConfigFileName is the JSON file name used for both global and project
 	// configuration.
-	ConfigFileName = "config.json"
+	ConfigFileName = projectpath.ConfigFileName
 
 	// ProjectConfigDirName is the local project metadata directory name.
-	ProjectConfigDirName = ".mc"
+	ProjectConfigDirName = projectpath.ProjectConfigDirName
 )
 
 var (
 	// ErrNoProject indicates that no local Materials Commons project could be
 	// found at or above the requested path.
-	ErrNoProject = errors.New("no Materials Commons project found")
+	ErrNoProject = projectpath.ErrNoProject
 
 	// ErrConfigNotFound indicates that the requested configuration file does
 	// not exist.
@@ -225,61 +226,25 @@ func (p Project) Path() string {
 // FindProjectRoot still walks from start itself, which is useful for commands
 // that are validating paths that may be created later.
 func FindProjectRoot(ctx context.Context, start string) (string, error) {
-	if start == "" {
-		start = "."
-	}
-
-	abs, err := filepath.Abs(start)
-	if err != nil {
-		return "", fmt.Errorf("resolve project search path %q: %w", start, err)
-	}
-
-	info, err := os.Stat(abs)
-	if err == nil && !info.IsDir() {
-		abs = filepath.Dir(abs)
-	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return "", fmt.Errorf("stat project search path %q: %w", abs, err)
-	}
-
-	logger := mclogging.Logger(ctx)
-	logger.Debug("searching for project config", "start", abs)
-
-	for {
-		configPath := filepath.Join(abs, ProjectConfigDirName, ConfigFileName)
-		info, err := os.Stat(configPath)
-		if err == nil && !info.IsDir() {
-			logger.Debug("found project config", "project_root", abs, "path", configPath)
-			return abs, nil
-		}
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return "", fmt.Errorf("stat project config %q: %w", configPath, err)
-		}
-
-		parent := filepath.Dir(abs)
-		if parent == abs {
-			return "", fmt.Errorf("%w at or above %s", ErrNoProject, start)
-		}
-
-		abs = parent
-	}
+	return projectpath.FindRoot(ctx, start)
 }
 
 // ProjectConfigPath returns the local project configuration path for
 // projectRoot.
 func ProjectConfigPath(projectRoot string) string {
-	return filepath.Join(projectRoot, ProjectConfigDirName, ConfigFileName)
+	return projectpath.ConfigPath(projectRoot)
 }
 
 // LoadProject reads the local project configuration associated with start.
 //
 // start may be the project root or any path beneath the project root.
 func LoadProject(ctx context.Context, start string) (Project, error) {
-	projectRoot, err := FindProjectRoot(ctx, start)
+	projectRoot, err := projectpath.FindRoot(ctx, start)
 	if err != nil {
 		return Project{}, err
 	}
 
-	path := ProjectConfigPath(projectRoot)
+	path := projectpath.ConfigPath(projectRoot)
 	logger := mclogging.Logger(ctx)
 	logger.Debug("loading project config", "project_root", projectRoot, "path", path)
 
@@ -324,7 +289,7 @@ func SaveProject(ctx context.Context, projectRoot string, cfg Project) error {
 		return fmt.Errorf("%w: project root is required", ErrInvalidConfig)
 	}
 
-	path := ProjectConfigPath(projectRoot)
+	path := projectpath.ConfigPath(projectRoot)
 
 	logger := mclogging.Logger(ctx)
 	logger.Debug("saving project config", "project_root", projectRoot, "path", path)

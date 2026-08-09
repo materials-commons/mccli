@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/materials-commons/mccli/pkg/projectpath"
 )
 
 func TestLoadGlobal(t *testing.T) {
@@ -200,8 +202,11 @@ func TestLoadProjectFromNestedDirectory(t *testing.T) {
 
 func TestFindProjectRootNoProject(t *testing.T) {
 	_, err := FindProjectRoot(context.Background(), t.TempDir())
-	if !errors.Is(err, ErrNoProject) {
+	if !errors.Is(err, projectpath.ErrNoProject) {
 		t.Fatalf("FindProjectRoot() error = %v, want ErrNoProject", err)
+	}
+	if !errors.Is(err, ErrNoProject) {
+		t.Fatalf("FindProjectRoot() error = %v, want config.ErrNoProject", err)
 	}
 }
 
