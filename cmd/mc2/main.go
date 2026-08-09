@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 	"strings"
 
+	mcapi "github.com/materials-commons/gomcapi"
 	mclogging "github.com/materials-commons/mccli/pkg/logging"
 	"github.com/urfave/cli/v3"
 )
@@ -36,6 +37,8 @@ var (
 
 // main runs the mc2 command.
 func main() {
+	var c mcapi.Client
+	_ = c
 	cmd := newCommand()
 
 	if err := cmd.Run(context.Background(), os.Args); err != nil {
