@@ -14,6 +14,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -24,6 +25,7 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 const (
@@ -116,6 +118,13 @@ func OpenPath(ctx context.Context, dbPath string) (*Store, error) {
 
 	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
 		TranslateError: true,
+		Logger: gormlogger.New(
+			log.New(os.Stderr, "", log.LstdFlags),
+			gormlogger.Config{
+				LogLevel:                  gormlogger.Warn,
+				IgnoreRecordNotFoundError: true,
+			},
+		),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("open file database %q: %w", dbPath, err)
