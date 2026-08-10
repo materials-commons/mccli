@@ -61,26 +61,13 @@ func (r *ObservationRunner) ObserveAndReconcile(ctx context.Context, localPath s
 	if err := ctx.Err(); err != nil {
 		return FileState{}, err
 	}
-	if r == nil {
-		return FileState{}, fmt.Errorf("observation runner is nil")
+
+	if err := r.observationRunnerProperlySetup(); err != nil {
+		return FileState{}, err
 	}
-	if r.Records == nil {
-		return FileState{}, fmt.Errorf("file record store is required")
-	}
-	if r.Remote == nil {
-		return FileState{}, fmt.Errorf("remote file getter is required")
-	}
-	if r.Reconciler == nil {
-		return FileState{}, fmt.Errorf("reconciler is required")
-	}
+
 	if localPath == "" {
 		return FileState{}, fmt.Errorf("%w: local path is required", ErrInvalidObservation)
-	}
-	if r.ProjectID <= 0 {
-		return FileState{}, fmt.Errorf("%w: project id must be positive", ErrInvalidObservation)
-	}
-	if r.Translator.ProjectRoot() == "" {
-		return FileState{}, fmt.Errorf("%w: project path translator is not configured", ErrInvalidObservation)
 	}
 
 	now := time.Now()
@@ -158,6 +145,28 @@ func (r *ObservationRunner) ObserveAndReconcile(ctx context.Context, localPath s
 		Observation: observation,
 		Decision:    decision,
 	}, nil
+}
+
+func (r *ObservationRunner) observationRunnerProperlySetup() error {
+	if r == nil {
+		return fmt.Errorf("observation runner is nil")
+	}
+	if r.Records == nil {
+		return fmt.Errorf("file record store is required")
+	}
+	if r.Remote == nil {
+		return fmt.Errorf("remote file getter is required")
+	}
+	if r.Reconciler == nil {
+		return fmt.Errorf("reconciler is required")
+	}
+	if r.ProjectID <= 0 {
+		return fmt.Errorf("%w: project id must be positive", ErrInvalidObservation)
+	}
+	if r.Translator.ProjectRoot() == "" {
+		return fmt.Errorf("%w: project path translator is not configured", ErrInvalidObservation)
+	}
+	return nil
 }
 
 func loadFileRecord(ctx context.Context, records FileRecordGetter, remotePath string) (filedb.FileRecord, bool, error) {
