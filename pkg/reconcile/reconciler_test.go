@@ -3,6 +3,7 @@ package reconcile
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/materials-commons/mccli/pkg/filedb"
@@ -198,6 +199,621 @@ func TestReconcileSyncUnsupported(t *testing.T) {
 	})
 	if !errors.Is(err, ErrSyncUnsupported) {
 		t.Fatalf("Reconcile() error = %v, want ErrSyncUnsupported", err)
+	}
+}
+
+func TestReconcileNoEntryObservedSkips(t *testing.T) {
+	ctx := context.Background()
+	r := New(ModeStatus)
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath: "/missing.txt",
+		Name:       "missing.txt",
+		Dir:        "/",
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionSkip, false)
+	if decision.Reason != "no local or remote entry observed" {
+		t.Fatalf("Reason = %q, want no local or remote entry observed", decision.Reason)
+	}
+}
+
+func TestReconcileUnknownEntryKindConflicts(t *testing.T) {
+	ctx := context.Background()
+	r := New(ModeStatus)
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath: "/unknown",
+		Name:       "unknown",
+		Dir:        "/",
+		LocalEntry: &LocalEntry{
+			Path:       "/tmp/project/unknown",
+			RemotePath: "/unknown",
+			Name:       "unknown",
+			Dir:        "/",
+			Kind:       KindUnknown,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionConflict, false)
+	if decision.Reason != "entry kind is unknown" {
+		t.Fatalf("Reason = %q, want entry kind is unknown", decision.Reason)
+	}
+}
+
+func TestReconcileLocalOnlyDirectorySkips(t *testing.T) {
+	ctx := context.Background()
+	r := New(ModeUpload)
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath: "/Dir1",
+		Name:       "Dir1",
+		Dir:        "/",
+		LocalEntry: localDirEntry("/tmp/project/Dir1", "/Dir1"),
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionSkip, false)
+	if decision.Reason != "local directory exists only locally" {
+		t.Fatalf("Reason = %q, want local directory exists only locally", decision.Reason)
+	}
+	if decision.UpdatedRecord.LocalSize != 0 {
+		t.Fatalf("LocalSize = %d, want 0 for directory", decision.UpdatedRecord.LocalSize)
+	}
+}
+
+func TestReconcileRemoteOnlyDirectorySkips(t *testing.T) {
+	ctx := context.Background()
+	r := New(ModeDownload)
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath:  "/Dir1",
+		Name:        "Dir1",
+		Dir:         "/",
+		RemoteEntry: remoteDirEntry("/Dir1", 44),
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionSkip, false)
+	if decision.Reason != "remote directory exists only remotely" {
+		t.Fatalf("Reason = %q, want remote directory exists only remotely", decision.Reason)
+	}
+}
+
+func TestReconcileDirectoryBothNoRecordSkips(t *testing.T) {
+	ctx := context.Background()
+	r := New(ModeStatus)
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath:  "/Dir1",
+		Name:        "Dir1",
+		Dir:         "/",
+		LocalEntry:  localDirEntry("/tmp/project/Dir1", "/Dir1"),
+		RemoteEntry: remoteDirEntry("/Dir1", 44),
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionSkip, false)
+	if decision.Reason != "directory exists locally and remotely" {
+		t.Fatalf("Reason = %q, want directory exists locally and remotely", decision.Reason)
+	}
+}
+
+func TestReconcileDirectoryBothWithStaleRecordUpdatesDatabase(t *testing.T) {
+	ctx := context.Background()
+	r := New(ModeStatus)
+
+	remoteID := int64(44)
+	record := filedb.FileRecord{
+		Path:         "/Dir1",
+		Dir:          "/",
+		Name:         "Dir1",
+		LocalSize:    99,
+		LocalMTimeNS: 98,
+		LocalCTimeNS: 97,
+		RemoteFileID: &remoteID,
+	}
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath:  "/Dir1",
+		Name:        "Dir1",
+		Dir:         "/",
+		FileRecord:  &record,
+		LocalEntry:  localDirEntry("/tmp/project/Dir1", "/Dir1"),
+		RemoteEntry: remoteDirEntry("/Dir1", 44),
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionDBUpdate, true)
+	if decision.Reason != "directory metadata changed" {
+		t.Fatalf("Reason = %q, want directory metadata changed", decision.Reason)
+	}
+}
+
+func TestReconcileLocalOnlyStatusNoRecordUploadsWithoutChecksum(t *testing.T) {
+	ctx := context.Background()
+	checksumCalls := 0
+	r := New(ModeStatus).WithChecksumFunc(func(ctx context.Context, localPath string) (string, error) {
+		checksumCalls++
+		return "should-not-be-used", nil
+	})
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath: "/Dir1/file.txt",
+		Name:       "file.txt",
+		Dir:        "/Dir1",
+		LocalEntry: localEntry("/tmp/project/Dir1/file.txt", "/Dir1/file.txt"),
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionUpload, true)
+	if checksumCalls != 0 {
+		t.Fatalf("checksumCalls = %d, want 0 in status mode", checksumCalls)
+	}
+	if decision.UpdatedRecord.LocalChecksum != nil {
+		t.Fatalf("LocalChecksum = %v, want nil in status mode", decision.UpdatedRecord.LocalChecksum)
+	}
+}
+
+func TestReconcileLocalOnlyUploadExistingMatchingRecordWithChecksumDoesNotRecompute(t *testing.T) {
+	ctx := context.Background()
+	existingChecksum := "existing-md5"
+	record := matchingLocalRecord("/Dir1/file.txt")
+	record.LocalChecksum = &existingChecksum
+
+	checksumCalls := 0
+	r := New(ModeUpload).WithChecksumFunc(func(ctx context.Context, localPath string) (string, error) {
+		checksumCalls++
+		return "new-md5", nil
+	})
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath: "/Dir1/file.txt",
+		Name:       "file.txt",
+		Dir:        "/Dir1",
+		FileRecord: &record,
+		LocalEntry: localEntry("/tmp/project/Dir1/file.txt", "/Dir1/file.txt"),
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionUpload, true)
+	if checksumCalls != 0 {
+		t.Fatalf("checksumCalls = %d, want 0 when matching record already has checksum", checksumCalls)
+	}
+	if decision.UpdatedRecord.LocalChecksum == nil || *decision.UpdatedRecord.LocalChecksum != existingChecksum {
+		t.Fatalf("LocalChecksum = %v, want existing checksum", decision.UpdatedRecord.LocalChecksum)
+	}
+}
+
+func TestReconcileLocalOnlyDownloadMatchingRecordSkipsAndClearsRemote(t *testing.T) {
+	ctx := context.Background()
+	remoteID := int64(88)
+	remoteChecksum := "remote-md5"
+	record := matchingLocalRecord("/Dir1/file.txt")
+	record.RemoteFileID = &remoteID
+	record.RemoteChecksum = &remoteChecksum
+
+	r := New(ModeDownload).WithChecksumFunc(fakeChecksum("should-not-be-used"))
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath: "/Dir1/file.txt",
+		Name:       "file.txt",
+		Dir:        "/Dir1",
+		FileRecord: &record,
+		LocalEntry: localEntry("/tmp/project/Dir1/file.txt", "/Dir1/file.txt"),
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionSkip, false)
+	if decision.UpdatedRecord.RemoteFileID != nil {
+		t.Fatalf("RemoteFileID = %v, want nil after clearRemote", decision.UpdatedRecord.RemoteFileID)
+	}
+	if decision.UpdatedRecord.RemoteChecksum != nil {
+		t.Fatalf("RemoteChecksum = %v, want nil after clearRemote", decision.UpdatedRecord.RemoteChecksum)
+	}
+}
+
+func TestReconcileLocalOnlyDownloadChangedRecordUpdatesDatabaseWithChecksum(t *testing.T) {
+	ctx := context.Background()
+	record := matchingLocalRecord("/Dir1/file.txt")
+	record.LocalSize = 1
+
+	r := New(ModeDownload).WithChecksumFunc(fakeChecksum("changed-md5"))
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath: "/Dir1/file.txt",
+		Name:       "file.txt",
+		Dir:        "/Dir1",
+		FileRecord: &record,
+		LocalEntry: localEntry("/tmp/project/Dir1/file.txt", "/Dir1/file.txt"),
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionDBUpdate, true)
+	if decision.UpdatedRecord.LocalChecksum == nil || *decision.UpdatedRecord.LocalChecksum != "changed-md5" {
+		t.Fatalf("LocalChecksum = %v, want changed-md5", decision.UpdatedRecord.LocalChecksum)
+	}
+}
+
+func TestReconcileRemoteOnlyStatusDownloads(t *testing.T) {
+	ctx := context.Background()
+	r := New(ModeStatus)
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath:  "/Dir1/file.txt",
+		Name:        "file.txt",
+		Dir:         "/Dir1",
+		RemoteEntry: remoteEntry("/Dir1/file.txt", 10, "remote-md5"),
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionDownload, true)
+}
+
+func TestReconcileBothStatusNoRecordSkipsUnknown(t *testing.T) {
+	ctx := context.Background()
+	r := New(ModeStatus)
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath:  "/Dir1/file.txt",
+		Name:        "file.txt",
+		Dir:         "/Dir1",
+		LocalEntry:  localEntry("/tmp/project/Dir1/file.txt", "/Dir1/file.txt"),
+		RemoteEntry: remoteEntry("/Dir1/file.txt", 10, "remote-md5"),
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionSkip, false)
+	if decision.Reason != "status unknown; run scan to reconcile with checksum" {
+		t.Fatalf("Reason = %q, want status unknown; run scan to reconcile with checksum", decision.Reason)
+	}
+}
+
+func TestReconcileBothStatusMatchingLocalDifferentRemoteDownloads(t *testing.T) {
+	ctx := context.Background()
+	remoteID := int64(9)
+	record := matchingLocalRecord("/Dir1/file.txt")
+	record.RemoteFileID = &remoteID
+
+	r := New(ModeStatus)
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath:  "/Dir1/file.txt",
+		Name:        "file.txt",
+		Dir:         "/Dir1",
+		FileRecord:  &record,
+		LocalEntry:  localEntry("/tmp/project/Dir1/file.txt", "/Dir1/file.txt"),
+		RemoteEntry: remoteEntry("/Dir1/file.txt", 10, "remote-md5"),
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionDownload, true)
+}
+
+func TestReconcileBothStatusChangedLocalSameRemoteUploads(t *testing.T) {
+	ctx := context.Background()
+	remoteID := int64(10)
+	record := matchingLocalRecord("/Dir1/file.txt")
+	record.LocalSize = 1
+	record.RemoteFileID = &remoteID
+
+	r := New(ModeStatus)
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath:  "/Dir1/file.txt",
+		Name:        "file.txt",
+		Dir:         "/Dir1",
+		FileRecord:  &record,
+		LocalEntry:  localEntry("/tmp/project/Dir1/file.txt", "/Dir1/file.txt"),
+		RemoteEntry: remoteEntry("/Dir1/file.txt", 10, "remote-md5"),
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionUpload, true)
+}
+
+func TestReconcileBothStatusChangedLocalDifferentRemoteSkipsUnknown(t *testing.T) {
+	ctx := context.Background()
+	remoteID := int64(9)
+	record := matchingLocalRecord("/Dir1/file.txt")
+	record.LocalSize = 1
+	record.RemoteFileID = &remoteID
+
+	r := New(ModeStatus)
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath:  "/Dir1/file.txt",
+		Name:        "file.txt",
+		Dir:         "/Dir1",
+		FileRecord:  &record,
+		LocalEntry:  localEntry("/tmp/project/Dir1/file.txt", "/Dir1/file.txt"),
+		RemoteEntry: remoteEntry("/Dir1/file.txt", 10, "remote-md5"),
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionSkip, false)
+}
+
+func TestReconcileBothUploadNoRecordChecksumMatchesRemoteUpdatesDatabase(t *testing.T) {
+	ctx := context.Background()
+	r := New(ModeUpload).WithChecksumFunc(fakeChecksum("same-md5"))
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath:  "/Dir1/file.txt",
+		Name:        "file.txt",
+		Dir:         "/Dir1",
+		LocalEntry:  localEntry("/tmp/project/Dir1/file.txt", "/Dir1/file.txt"),
+		RemoteEntry: remoteEntry("/Dir1/file.txt", 10, "same-md5"),
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionDBUpdate, true)
+	if decision.UpdatedRecord.LocalChecksum == nil || *decision.UpdatedRecord.LocalChecksum != "same-md5" {
+		t.Fatalf("LocalChecksum = %v, want same-md5", decision.UpdatedRecord.LocalChecksum)
+	}
+}
+
+func TestReconcileBothUploadNoRecordChecksumDiffersUploads(t *testing.T) {
+	ctx := context.Background()
+	r := New(ModeUpload).WithChecksumFunc(fakeChecksum("local-md5"))
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath:  "/Dir1/file.txt",
+		Name:        "file.txt",
+		Dir:         "/Dir1",
+		LocalEntry:  localEntry("/tmp/project/Dir1/file.txt", "/Dir1/file.txt"),
+		RemoteEntry: remoteEntry("/Dir1/file.txt", 10, "remote-md5"),
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionUpload, true)
+}
+
+func TestReconcileBothDownloadNoRecordChecksumMatchesRemoteUpdatesDatabase(t *testing.T) {
+	ctx := context.Background()
+	r := New(ModeDownload).WithChecksumFunc(fakeChecksum("same-md5"))
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath:  "/Dir1/file.txt",
+		Name:        "file.txt",
+		Dir:         "/Dir1",
+		LocalEntry:  localEntry("/tmp/project/Dir1/file.txt", "/Dir1/file.txt"),
+		RemoteEntry: remoteEntry("/Dir1/file.txt", 10, "same-md5"),
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionDBUpdate, true)
+}
+
+func TestReconcileBothDownloadNoRecordChecksumDiffersConflicts(t *testing.T) {
+	ctx := context.Background()
+	r := New(ModeDownload).WithChecksumFunc(fakeChecksum("local-md5"))
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath:  "/Dir1/file.txt",
+		Name:        "file.txt",
+		Dir:         "/Dir1",
+		LocalEntry:  localEntry("/tmp/project/Dir1/file.txt", "/Dir1/file.txt"),
+		RemoteEntry: remoteEntry("/Dir1/file.txt", 10, "remote-md5"),
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionConflict, false)
+}
+
+func TestReconcileBothDownloadMatchingRecordDifferentRemoteDownloads(t *testing.T) {
+	ctx := context.Background()
+	remoteID := int64(9)
+	record := matchingLocalRecord("/Dir1/file.txt")
+	record.RemoteFileID = &remoteID
+
+	r := New(ModeDownload)
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath:  "/Dir1/file.txt",
+		Name:        "file.txt",
+		Dir:         "/Dir1",
+		FileRecord:  &record,
+		LocalEntry:  localEntry("/tmp/project/Dir1/file.txt", "/Dir1/file.txt"),
+		RemoteEntry: remoteEntry("/Dir1/file.txt", 10, "remote-md5"),
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionDownload, true)
+}
+
+func TestReconcileBothDownloadChangedLocalChecksumMatchesRecordDownloads(t *testing.T) {
+	ctx := context.Background()
+	localChecksum := "known-local-md5"
+	remoteID := int64(9)
+	record := matchingLocalRecord("/Dir1/file.txt")
+	record.LocalSize = 1
+	record.LocalChecksum = &localChecksum
+	record.RemoteFileID = &remoteID
+
+	r := New(ModeDownload).WithChecksumFunc(fakeChecksum("known-local-md5"))
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath:  "/Dir1/file.txt",
+		Name:        "file.txt",
+		Dir:         "/Dir1",
+		FileRecord:  &record,
+		LocalEntry:  localEntry("/tmp/project/Dir1/file.txt", "/Dir1/file.txt"),
+		RemoteEntry: remoteEntry("/Dir1/file.txt", 10, "remote-md5"),
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionDownload, true)
+}
+
+func TestReconcileBothDownloadChangedLocalChecksumDiffersConflicts(t *testing.T) {
+	ctx := context.Background()
+	localChecksum := "known-local-md5"
+	remoteID := int64(9)
+	record := matchingLocalRecord("/Dir1/file.txt")
+	record.LocalSize = 1
+	record.LocalChecksum = &localChecksum
+	record.RemoteFileID = &remoteID
+
+	r := New(ModeDownload).WithChecksumFunc(fakeChecksum("new-local-md5"))
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath:  "/Dir1/file.txt",
+		Name:        "file.txt",
+		Dir:         "/Dir1",
+		FileRecord:  &record,
+		LocalEntry:  localEntry("/tmp/project/Dir1/file.txt", "/Dir1/file.txt"),
+		RemoteEntry: remoteEntry("/Dir1/file.txt", 10, "remote-md5"),
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionConflict, false)
+}
+
+func TestReconcileInvalidModeReturnsError(t *testing.T) {
+	ctx := context.Background()
+	r := New(Mode("invalid"))
+
+	_, err := r.Reconcile(ctx, Observation{
+		RemotePath: "/Dir1/file.txt",
+		Name:       "file.txt",
+		Dir:        "/Dir1",
+		LocalEntry: localEntry("/tmp/project/Dir1/file.txt", "/Dir1/file.txt"),
+	})
+	if !errors.Is(err, ErrInvalidMode) {
+		t.Fatalf("Reconcile() error = %v, want ErrInvalidMode", err)
+	}
+}
+
+func TestReconcileChecksumErrorIsReturned(t *testing.T) {
+	ctx := context.Background()
+	checksumErr := fmt.Errorf("checksum failed")
+	r := New(ModeUpload).WithChecksumFunc(func(ctx context.Context, localPath string) (string, error) {
+		return "", checksumErr
+	})
+
+	_, err := r.Reconcile(ctx, Observation{
+		RemotePath: "/Dir1/file.txt",
+		Name:       "file.txt",
+		Dir:        "/Dir1",
+		LocalEntry: localEntry("/tmp/project/Dir1/file.txt", "/Dir1/file.txt"),
+	})
+	if !errors.Is(err, checksumErr) {
+		t.Fatalf("Reconcile() error = %v, want checksumErr", err)
+	}
+}
+
+func TestReconcileContextCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	r := New(ModeUpload)
+
+	_, err := r.Reconcile(ctx, Observation{
+		RemotePath: "/Dir1/file.txt",
+		Name:       "file.txt",
+		Dir:        "/Dir1",
+		LocalEntry: localEntry("/tmp/project/Dir1/file.txt", "/Dir1/file.txt"),
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Reconcile() error = %v, want context.Canceled", err)
+	}
+}
+
+func assertDecision(t *testing.T, decision Decision, wantAction Action, wantUpdated bool) {
+	t.Helper()
+
+	if decision.Action != wantAction {
+		t.Fatalf("Action = %q, want %q; reason=%q", decision.Action, wantAction, decision.Reason)
+	}
+	if decision.Updated != wantUpdated {
+		t.Fatalf("Updated = %v, want %v; action=%q reason=%q", decision.Updated, wantUpdated, decision.Action, decision.Reason)
+	}
+}
+
+func matchingLocalRecord(recordPath string) filedb.FileRecord {
+	return filedb.FileRecord{
+		Path:             recordPath,
+		Dir:              "/Dir1",
+		Name:             "file.txt",
+		IsCleanLocalCopy: false,
+		LocalSize:        100,
+		LocalMTimeNS:     200,
+		LocalCTimeNS:     300,
+		LocalLastSeenTS:  400,
+	}
+}
+
+func localDirEntry(localPath string, remotePath string) *LocalEntry {
+	return &LocalEntry{
+		Path:       localPath,
+		RemotePath: remotePath,
+		Name:       "Dir1",
+		Dir:        "/",
+		Kind:       KindDir,
+		Size:       0,
+		MTimeNS:    200,
+		CTimeNS:    300,
+		LastSeenTS: 400,
+	}
+}
+
+func remoteDirEntry(remotePath string, id int64) *RemoteEntry {
+	return &RemoteEntry{
+		Path:         remotePath,
+		Name:         "Dir1",
+		Dir:          "/",
+		Kind:         KindDir,
+		RemoteFileID: id,
+		Size:         0,
+		CTimeNS:      500,
+		MTimeNS:      600,
 	}
 }
 
