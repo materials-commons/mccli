@@ -2,6 +2,8 @@ package reconcile
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -456,6 +458,200 @@ func TestMergedNodeListDirRecursesIntoRemoteOnlyDirectory(t *testing.T) {
 	}
 	if visited[1] != "/RemoteDir" {
 		t.Fatalf("visited[1] = %q, want /RemoteDir", visited[1])
+	}
+}
+
+func TestWalkNodesEmptyRootReturnsInvalidWalkNode(t *testing.T) {
+	err := WalkNodes(context.Background(), WalkNode{}, func(ctx context.Context, node WalkNode) ([]Observation, error) {
+		return nil, nil
+	}, WalkOptions{}, func(ctx context.Context, node WalkNode, observations []Observation) error {
+		return nil
+	})
+
+	if !errors.Is(err, ErrInvalidWalkNode) {
+		t.Fatalf("WalkNodes() error = %v, want ErrInvalidWalkNode", err)
+	}
+}
+
+func TestWalkNodesRelativeRemotePathReturnsInvalidWalkNode(t *testing.T) {
+	err := WalkNodes(context.Background(), WalkNode{
+		RemotePath: "Dir1",
+	}, func(ctx context.Context, node WalkNode) ([]Observation, error) {
+		return nil, nil
+	}, WalkOptions{}, func(ctx context.Context, node WalkNode, observations []Observation) error {
+		return nil
+	})
+
+	if !errors.Is(err, ErrInvalidWalkNode) {
+		t.Fatalf("WalkNodes() error = %v, want ErrInvalidWalkNode", err)
+	}
+}
+
+func TestWalkNodesSynthesizesLocalPathForRemoteOnlyNode(t *testing.T) {
+	ctx := context.Background()
+	projectRoot := t.TempDir()
+	translator := mustTranslator(t, projectRoot)
+
+	var gotNode WalkNode
+	err := WalkNodes(ctx, WalkNode{
+		RemotePath: "/RemoteDir",
+	}, func(ctx context.Context, node WalkNode) ([]Observation, error) {
+		return nil, nil
+	}, WalkOptions{
+		Translator: translator,
+	}, func(ctx context.Context, node WalkNode, observations []Observation) error {
+		gotNode = node
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("WalkNodes() error = %v", err)
+	}
+
+	wantLocalPath := filepath.Join(projectRoot, "RemoteDir")
+	if gotNode.LocalPath != wantLocalPath {
+		t.Fatalf("LocalPath = %q, want %q", gotNode.LocalPath, wantLocalPath)
+	}
+	if gotNode.RemotePath != "/RemoteDir" {
+		t.Fatalf("RemotePath = %q, want /RemoteDir", gotNode.RemotePath)
+	}
+}
+
+func TestWalkNodesIgnoreUsesSynthesizedLocalPathForRemoteOnlyEntry(t *testing.T) {
+	ctx := context.Background()
+	projectRoot := t.TempDir()
+	translator := mustTranslator(t, projectRoot)
+
+	listDir := func(ctx context.Context, node WalkNode) ([]Observation, error) {
+		return []Observation{
+			{
+				RemotePath: "/SkipMe",
+				Name:       "SkipMe",
+				Dir:        "/",
+				RemoteEntry: &RemoteEntry{
+					Path: "/SkipMe",
+					Name: "SkipMe",
+					Dir:  "/",
+					Kind: KindDir,
+				},
+			},
+			{
+				RemotePath: "/KeepMe",
+				Name:       "KeepMe",
+				Dir:        "/",
+				RemoteEntry: &RemoteEntry{
+					Path: "/KeepMe",
+					Name: "KeepMe",
+					Dir:  "/",
+					Kind: KindDir,
+				},
+			},
+		}, nil
+	}
+
+	var got []Observation
+	err := WalkNodes(ctx, WalkNode{
+		LocalPath:  projectRoot,
+		RemotePath: "/",
+	}, listDir, WalkOptions{
+		Recursive:  false,
+		Translator: translator,
+		Ignore: func(pathValue string, isDir bool) bool {
+			return filepath.Base(pathValue) == "SkipMe"
+		},
+	}, func(ctx context.Context, node WalkNode, observations []Observation) error {
+		got = observations
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("WalkNodes() error = %v", err)
+	}
+
+	if len(got) != 1 {
+		t.Fatalf("len(observations) = %d, want 1", len(got))
+	}
+	if got[0].Name != "KeepMe" {
+		t.Fatalf("remaining observation = %q, want KeepMe", got[0].Name)
+	}
+}
+
+func TestRemoteOnlyListDirRejectsMalformedRemoteEntry(t *testing.T) {
+	ctx := context.Background()
+	projectRoot := t.TempDir()
+	translator := mustTranslator(t, projectRoot)
+
+	remote := &fakeRemoteDirectoryLister{
+		filesByPath: map[string][]mcmodel.File{
+			"/": {
+				{
+					ID:   10,
+					Path: "relative/path.txt",
+					Name: "path.txt",
+				},
+			},
+		},
+	}
+
+	listDir := RemoteOnlyListDir(123, translator, remote)
+
+	_, err := listDir(ctx, WalkNode{
+		LocalPath:  projectRoot,
+		RemotePath: "/",
+	})
+	if !errors.Is(err, ErrInvalidObservation) {
+		t.Fatalf("RemoteOnlyListDir() error = %v, want ErrInvalidObservation", err)
+	}
+}
+
+func TestWalkNodesAndReconcileMissingRemotePathReturnsInvalidWalkNode(t *testing.T) {
+	ctx := context.Background()
+
+	err := WalkNodesAndReconcile(
+		ctx,
+		WalkNode{LocalPath: "/tmp/project"},
+		func(ctx context.Context, node WalkNode) ([]Observation, error) {
+			return nil, nil
+		},
+		fakeDirectoryRecordStore{},
+		New(ModeStatus),
+		WalkOptions{},
+		func(ctx context.Context, node WalkNode, states map[string]FileState) error {
+			return nil
+		},
+	)
+
+	if !errors.Is(err, ErrInvalidWalkNode) {
+		t.Fatalf("WalkNodesAndReconcile() error = %v, want ErrInvalidWalkNode", err)
+	}
+}
+
+func TestWalkNodesContextCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := WalkNodes(ctx, WalkNode{RemotePath: "/"}, func(ctx context.Context, node WalkNode) ([]Observation, error) {
+		t.Fatal("listDir should not be called after context cancellation")
+		return nil, nil
+	}, WalkOptions{}, func(ctx context.Context, node WalkNode, observations []Observation) error {
+		return nil
+	})
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("WalkNodes() error = %v, want context.Canceled", err)
+	}
+}
+
+func TestWalkNodesCallbackErrorIsReturned(t *testing.T) {
+	ctx := context.Background()
+	callbackErr := fmt.Errorf("callback failed")
+
+	err := WalkNodes(ctx, WalkNode{RemotePath: "/"}, func(ctx context.Context, node WalkNode) ([]Observation, error) {
+		return nil, nil
+	}, WalkOptions{}, func(ctx context.Context, node WalkNode, observations []Observation) error {
+		return callbackErr
+	})
+
+	if !errors.Is(err, callbackErr) {
+		t.Fatalf("WalkNodes() error = %v, want callbackErr", err)
 	}
 }
 

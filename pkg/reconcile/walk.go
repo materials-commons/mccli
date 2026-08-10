@@ -17,6 +17,12 @@ import (
 	"github.com/materials-commons/mccli/pkg/projectpath"
 )
 
+var (
+	// ErrInvalidWalkNode indicates that a walk node is missing the required local
+	// and/or remote path context.
+	ErrInvalidWalkNode = errors.New("invalid walk node")
+)
+
 // IgnoreFunc reports whether pathValue should be skipped.
 //
 // pathValue is a local filesystem path when one exists. For remote-only entries,
@@ -102,6 +108,11 @@ func WalkNodes(ctx context.Context, root WalkNode, listDir NodeListDirFunc, opti
 		return fmt.Errorf("walk node callback is required")
 	}
 
+	root, err := normalizeWalkNode(root, options.Translator)
+	if err != nil {
+		return err
+	}
+
 	stack := []WalkNode{root}
 
 	for len(stack) > 0 {
@@ -111,6 +122,11 @@ func WalkNodes(ctx context.Context, root WalkNode, listDir NodeListDirFunc, opti
 
 		current := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
+
+		current, err := normalizeWalkNode(current, options.Translator)
+		if err != nil {
+			return err
+		}
 
 		if options.Ignore != nil && current.LocalPath != "" && options.Ignore(current.LocalPath, true) {
 			continue
@@ -238,25 +254,21 @@ func RemoteOnlyListDir(projectID int, translator projectpath.Translator, remote 
 			return nil, err
 		}
 
-		remoteDir := node.RemotePath
-		if remoteDir == "" {
-			if node.LocalPath == "" {
-				return nil, fmt.Errorf("walk node requires local or remote path")
-			}
-
-			var err error
-			remoteDir, err = translator.LocalToRemote(node.LocalPath)
-			if err != nil {
-				return nil, err
-			}
+		node, err := normalizeWalkNode(node, translator)
+		if err != nil {
+			return nil, err
 		}
 
-		files, err := remote.ListDirectoryByPath(projectID, remoteDir)
+		if node.RemotePath == "" {
+			return nil, fmt.Errorf("%w: remote path is required for remote listing", ErrInvalidWalkNode)
+		}
+
+		files, err := remote.ListDirectoryByPath(projectID, node.RemotePath)
 		if err != nil {
 			if IsRemoteNotFound(err) {
 				return nil, nil
 			}
-			return nil, fmt.Errorf("list remote directory %q: %w", remoteDir, err)
+			return nil, fmt.Errorf("list remote directory %q: %w", node.RemotePath, err)
 		}
 
 		observations := make([]Observation, 0, len(files))
@@ -274,10 +286,7 @@ func RemoteOnlyListDir(projectID int, translator projectpath.Translator, remote 
 				Name:        remoteEntry.Name,
 				Dir:         remoteEntry.Dir,
 				RemoteEntry: remoteEntry,
-				// LocalEntry intentionally remains nil for remote-only entries.
-				// The corresponding local path is synthesized later in WalkNode
-				// traversal using WalkOptions.Translator.
-				LocalEntry: nil,
+				LocalEntry:  nil,
 			})
 		}
 
@@ -484,9 +493,14 @@ func WalkNodesAndReconcile(
 	}
 
 	return WalkNodes(ctx, root, listDir, options, func(ctx context.Context, node WalkNode, observations []Observation) error {
+		node, err := normalizeWalkNode(node, options.Translator)
+		if err != nil {
+			return err
+		}
+
 		remoteDir := node.RemotePath
 		if remoteDir == "" {
-			return fmt.Errorf("walk node missing remote path")
+			return fmt.Errorf("%w: remote path is required for reconciliation", ErrInvalidWalkNode)
 		}
 
 		fileRecords, err := records.ListByDir(ctx, remoteDir)
@@ -598,7 +612,35 @@ func walkNodeFromObservation(obs Observation, translator projectpath.Translator)
 		node.RemotePath = obs.RemoteEntry.Path
 	}
 
-	if node.LocalPath == "" && node.RemotePath != "" && translator.ProjectRoot() != "" {
+	return normalizeWalkNode(node, translator)
+}
+
+func normalizeWalkNode(node WalkNode, translator projectpath.Translator) (WalkNode, error) {
+	if node.LocalPath == "" && node.RemotePath == "" {
+		return WalkNode{}, fmt.Errorf("%w: local or remote path is required", ErrInvalidWalkNode)
+	}
+
+	if node.RemotePath != "" {
+		normalized, err := projectpath.NormalizeRemote(node.RemotePath)
+		if err != nil {
+			return WalkNode{}, fmt.Errorf("%w: %v", ErrInvalidWalkNode, err)
+		}
+		node.RemotePath = normalized
+	}
+
+	if translator.ProjectRoot() == "" {
+		return node, nil
+	}
+
+	if node.RemotePath == "" && node.LocalPath != "" {
+		remotePath, err := translator.LocalToRemote(node.LocalPath)
+		if err != nil {
+			return WalkNode{}, err
+		}
+		node.RemotePath = remotePath
+	}
+
+	if node.LocalPath == "" && node.RemotePath != "" {
 		localPath, err := translator.RemoteToLocal(node.RemotePath)
 		if err != nil {
 			return WalkNode{}, err
