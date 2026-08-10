@@ -69,7 +69,7 @@ type RemoteEntry struct {
 	Dir  string
 	Kind Kind
 
-	RemoteFileID int64
+	RemoteFileID *int64
 	Size         int64
 	CTimeNS      int64
 	MTimeNS      int64

@@ -86,7 +86,7 @@ func TestObservationRunnerRemoteOnlyDownload(t *testing.T) {
 	if state.Observation.RemoteEntry == nil {
 		t.Fatal("RemoteEntry = nil, want remote entry")
 	}
-	if state.Observation.RemoteEntry.RemoteFileID != 77 {
+	if state.Observation.RemoteEntry.RemoteFileID == nil || *state.Observation.RemoteEntry.RemoteFileID != 77 {
 		t.Fatalf("RemoteFileID = %d, want 77", state.Observation.RemoteEntry.RemoteFileID)
 	}
 	assertDecision(t, state.Decision, ActionDownload, true)
@@ -234,7 +234,7 @@ func TestRemoteEntryFromMCFileDirectory(t *testing.T) {
 	if entry.Dir != "/" {
 		t.Fatalf("Dir = %q, want /", entry.Dir)
 	}
-	if entry.RemoteFileID != 10 {
+	if entry.RemoteFileID == nil || *entry.RemoteFileID != 10 {
 		t.Fatalf("RemoteFileID = %d, want 10", entry.RemoteFileID)
 	}
 }

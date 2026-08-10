@@ -766,6 +766,183 @@ func TestReconcileContextCancelled(t *testing.T) {
 	}
 }
 
+func TestReconcileInvalidObservationWithoutRemotePathReturnsError(t *testing.T) {
+	ctx := context.Background()
+	r := New(ModeStatus)
+
+	_, err := r.Reconcile(ctx, Observation{})
+	if !errors.Is(err, ErrInvalidObservation) {
+		t.Fatalf("Reconcile() error = %v, want ErrInvalidObservation", err)
+	}
+}
+
+func TestReconcileInvalidExistingRecordWithoutPathReturnsError(t *testing.T) {
+	ctx := context.Background()
+	r := New(ModeStatus)
+
+	record := filedb.FileRecord{
+		Name: "file.txt",
+		Dir:  "/Dir1",
+	}
+
+	_, err := r.Reconcile(ctx, Observation{
+		FileRecord: &record,
+		LocalEntry: localEntry("/tmp/project/Dir1/file.txt", "/Dir1/file.txt"),
+	})
+	if !errors.Is(err, ErrInvalidObservation) {
+		t.Fatalf("Reconcile() error = %v, want ErrInvalidObservation", err)
+	}
+}
+
+func TestRemoteOnlyRecordDoesNotInventRemoteFileID(t *testing.T) {
+	ctx := context.Background()
+	r := New(ModeUpload)
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath:  "/Dir1/file.txt",
+		Name:        "file.txt",
+		Dir:         "/Dir1",
+		RemoteEntry: remoteEntryWithoutID("/Dir1/file.txt", "remote-md5"),
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionDBUpdate, true)
+	if decision.UpdatedRecord.RemoteFileID != nil {
+		t.Fatalf("RemoteFileID = %v, want nil", decision.UpdatedRecord.RemoteFileID)
+	}
+}
+
+func TestBothStatusRemoteEntryWithoutIDDoesNotMatchRecord(t *testing.T) {
+	ctx := context.Background()
+	remoteID := int64(10)
+	record := matchingLocalRecord("/Dir1/file.txt")
+	record.RemoteFileID = &remoteID
+
+	r := New(ModeStatus)
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath:  "/Dir1/file.txt",
+		Name:        "file.txt",
+		Dir:         "/Dir1",
+		FileRecord:  &record,
+		LocalEntry:  localEntry("/tmp/project/Dir1/file.txt", "/Dir1/file.txt"),
+		RemoteEntry: remoteEntryWithoutID("/Dir1/file.txt", "remote-md5"),
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionDownload, true)
+}
+
+func TestBothDownloadNoRecordPreviousVersionUploadedDownloads(t *testing.T) {
+	ctx := context.Background()
+	r := New(ModeDownload).
+		WithChecksumFunc(fakeChecksum("local-md5")).
+		WithRemoteHistory(fakeRemoteHistory{uploaded: true})
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath:  "/Dir1/file.txt",
+		Name:        "file.txt",
+		Dir:         "/Dir1",
+		LocalEntry:  localEntry("/tmp/project/Dir1/file.txt", "/Dir1/file.txt"),
+		RemoteEntry: remoteEntry("/Dir1/file.txt", 10, "remote-md5"),
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionDownload, true)
+	if decision.Reason != "local file already uploaded, remote changed" {
+		t.Fatalf("Reason = %q, want local file already uploaded, remote changed", decision.Reason)
+	}
+}
+
+func TestBothDownloadNoRecordPreviousVersionNotUploadedConflicts(t *testing.T) {
+	ctx := context.Background()
+	r := New(ModeDownload).
+		WithChecksumFunc(fakeChecksum("local-md5")).
+		WithRemoteHistory(fakeRemoteHistory{uploaded: false})
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath:  "/Dir1/file.txt",
+		Name:        "file.txt",
+		Dir:         "/Dir1",
+		LocalEntry:  localEntry("/tmp/project/Dir1/file.txt", "/Dir1/file.txt"),
+		RemoteEntry: remoteEntry("/Dir1/file.txt", 10, "remote-md5"),
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionConflict, false)
+	if decision.Reason != "local file changed, remote changed, local file never uploaded" {
+		t.Fatalf("Reason = %q, want local file changed, remote changed, local file never uploaded", decision.Reason)
+	}
+}
+
+func TestBothDownloadChangedLocalPreviousVersionUploadedDownloads(t *testing.T) {
+	ctx := context.Background()
+	localChecksum := "old-md5"
+	remoteID := int64(9)
+	record := matchingLocalRecord("/Dir1/file.txt")
+	record.LocalSize = 1
+	record.LocalChecksum = &localChecksum
+	record.RemoteFileID = &remoteID
+
+	r := New(ModeDownload).
+		WithChecksumFunc(fakeChecksum("new-md5")).
+		WithRemoteHistory(fakeRemoteHistory{uploaded: true})
+
+	decision, err := r.Reconcile(ctx, Observation{
+		RemotePath:  "/Dir1/file.txt",
+		Name:        "file.txt",
+		Dir:         "/Dir1",
+		FileRecord:  &record,
+		LocalEntry:  localEntry("/tmp/project/Dir1/file.txt", "/Dir1/file.txt"),
+		RemoteEntry: remoteEntry("/Dir1/file.txt", 10, "remote-md5"),
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	assertDecision(t, decision, ActionDownload, true)
+}
+
+func TestBothDownloadPreviousVersionLookupErrorIsReturned(t *testing.T) {
+	ctx := context.Background()
+	historyErr := fmt.Errorf("history failed")
+
+	r := New(ModeDownload).
+		WithChecksumFunc(fakeChecksum("local-md5")).
+		WithRemoteHistory(fakeRemoteHistory{err: historyErr})
+
+	_, err := r.Reconcile(ctx, Observation{
+		RemotePath:  "/Dir1/file.txt",
+		Name:        "file.txt",
+		Dir:         "/Dir1",
+		LocalEntry:  localEntry("/tmp/project/Dir1/file.txt", "/Dir1/file.txt"),
+		RemoteEntry: remoteEntry("/Dir1/file.txt", 10, "remote-md5"),
+	})
+	if !errors.Is(err, historyErr) {
+		t.Fatalf("Reconcile() error = %v, want historyErr", err)
+	}
+}
+
+type fakeRemoteHistory struct {
+	uploaded bool
+	err      error
+}
+
+func (h fakeRemoteHistory) HasVersionWithChecksum(ctx context.Context, obs Observation, checksum string) (bool, error) {
+	if h.err != nil {
+		return false, h.err
+	}
+	return h.uploaded, nil
+}
+
 func assertDecision(t *testing.T, decision Decision, wantAction Action, wantUpdated bool) {
 	t.Helper()
 
@@ -810,7 +987,7 @@ func remoteDirEntry(remotePath string, id int64) *RemoteEntry {
 		Name:         "Dir1",
 		Dir:          "/",
 		Kind:         KindDir,
-		RemoteFileID: id,
+		RemoteFileID: &id,
 		Size:         0,
 		CTimeNS:      500,
 		MTimeNS:      600,
@@ -843,7 +1020,21 @@ func remoteEntry(remotePath string, id int64, checksum string) *RemoteEntry {
 		Name:         "file.txt",
 		Dir:          "/Dir1",
 		Kind:         KindFile,
-		RemoteFileID: id,
+		RemoteFileID: &id,
+		Size:         100,
+		CTimeNS:      500,
+		MTimeNS:      600,
+		Checksum:     checksum,
+	}
+}
+
+func remoteEntryWithoutID(remotePath string, checksum string) *RemoteEntry {
+	return &RemoteEntry{
+		Path:         remotePath,
+		Name:         "file.txt",
+		Dir:          "/Dir1",
+		Kind:         KindFile,
+		RemoteFileID: nil,
 		Size:         100,
 		CTimeNS:      500,
 		MTimeNS:      600,

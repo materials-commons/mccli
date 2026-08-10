@@ -177,12 +177,18 @@ func RemoteEntryFromMCFile(file *mcmodel.File) *RemoteEntry {
 		kind = KindDir
 	}
 
+	var remoteFileID *int64
+	if file.ID != 0 {
+		id := int64(file.ID)
+		remoteFileID = &id
+	}
+
 	return &RemoteEntry{
 		Path:         remotePath,
 		Name:         file.Name,
 		Dir:          dir,
 		Kind:         kind,
-		RemoteFileID: int64(file.ID),
+		RemoteFileID: remoteFileID,
 		Size:         int64(file.Size),
 		CTimeNS:      file.CreatedAt.UnixNano(),
 		MTimeNS:      file.UpdatedAt.UnixNano(),

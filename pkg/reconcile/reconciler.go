@@ -16,15 +16,26 @@ var (
 
 	// ErrSyncUnsupported indicates that sync mode has not been implemented yet.
 	ErrSyncUnsupported = errors.New("sync reconcile mode is not supported")
+
+	// ErrInvalidObservation indicates that the reconciler was given incomplete
+	// or inconsistent observation data.
+	ErrInvalidObservation = errors.New("invalid reconcile observation")
 )
 
 // ChecksumFunc computes a checksum for a local path.
 type ChecksumFunc func(ctx context.Context, localPath string) (string, error)
 
+// RemoteHistory checks whether a local checksum is known to Materials Commons as
+// a previous version of the observed remote file.
+type RemoteHistory interface {
+	HasVersionWithChecksum(ctx context.Context, obs Observation, checksum string) (bool, error)
+}
+
 // Reconciler reconciles one observed project path.
 type Reconciler struct {
-	mode     Mode
-	checksum ChecksumFunc
+	mode          Mode
+	checksum      ChecksumFunc
+	remoteHistory RemoteHistory
 }
 
 // New creates a Reconciler.
@@ -47,6 +58,17 @@ func (r *Reconciler) WithChecksumFunc(fn ChecksumFunc) *Reconciler {
 	return r
 }
 
+// WithRemoteHistory sets the remote history lookup used by download
+// reconciliation.
+//
+// If no RemoteHistory is configured, download reconciliation remains
+// conservative and returns a conflict when it cannot prove that the local content
+// was previously uploaded.
+func (r *Reconciler) WithRemoteHistory(history RemoteHistory) *Reconciler {
+	r.remoteHistory = history
+	return r
+}
+
 // Reconcile reconciles one observation.
 func (r *Reconciler) Reconcile(ctx context.Context, obs Observation) (Decision, error) {
 	if err := ctx.Err(); err != nil {
@@ -54,7 +76,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, obs Observation) (Decision, 
 	}
 
 	state := classify(obs)
-	record := recordFromObservation(obs)
+	record, err := recordFromObservation(obs)
+	if err != nil {
+		return Decision{}, err
+	}
 
 	if state == ObservationNeither {
 		return skip(record, "no local or remote entry observed"), nil
@@ -116,9 +141,12 @@ func isFile(obs Observation) bool {
 	return obs.RemoteEntry != nil && obs.RemoteEntry.Kind == KindFile
 }
 
-func recordFromObservation(obs Observation) filedb.FileRecord {
+func recordFromObservation(obs Observation) (filedb.FileRecord, error) {
 	if obs.FileRecord != nil {
-		return *obs.FileRecord
+		if obs.FileRecord.Path == "" {
+			return filedb.FileRecord{}, fmt.Errorf("%w: file record path is empty", ErrInvalidObservation)
+		}
+		return *obs.FileRecord, nil
 	}
 
 	remotePath := obs.RemotePath
@@ -130,9 +158,16 @@ func recordFromObservation(obs Observation) filedb.FileRecord {
 		}
 	}
 
+	if remotePath == "" {
+		return filedb.FileRecord{}, fmt.Errorf("%w: remote path is required", ErrInvalidObservation)
+	}
+
 	name := obs.Name
 	if name == "" {
 		name = path.Base(remotePath)
+	}
+	if name == "" || name == "." {
+		return filedb.FileRecord{}, fmt.Errorf("%w: name is required for %q", ErrInvalidObservation, remotePath)
 	}
 
 	dir := obs.Dir
@@ -148,7 +183,7 @@ func recordFromObservation(obs Observation) filedb.FileRecord {
 		Dir:              dir,
 		Name:             name,
 		IsCleanLocalCopy: false,
-	}
+	}, nil
 }
 
 func (r *Reconciler) reconcileDirectory(obs Observation, record filedb.FileRecord) Decision {
@@ -347,9 +382,15 @@ func (r *Reconciler) reconcileBothDownload(ctx context.Context, obs Observation,
 			return dbUpdate(updatedRecord, "local file matches remote checksum"), nil
 		}
 
-		// Previous-version lookup needs the gomcapi integration. Until that is
-		// wired in, be conservative.
-		return conflict(updatedRecord, "local file changed, remote changed, previous version check unavailable"), nil
+		uploaded, err := r.previousVersionUploaded(ctx, obs, localChecksum)
+		if err != nil {
+			return Decision{}, err
+		}
+		if uploaded {
+			return download(updatedRecord, "local file already uploaded, remote changed"), nil
+		}
+
+		return conflict(updatedRecord, "local file changed, remote changed, local file never uploaded"), nil
 	}
 
 	if localEntryMatchesRecord(obs) {
@@ -369,9 +410,28 @@ func (r *Reconciler) reconcileBothDownload(ctx context.Context, obs Observation,
 		return download(updatedRecord, "local and remote versions differ"), nil
 	}
 
-	// Previous-version lookup needs the gomcapi integration. Until that is
-	// wired in, be conservative.
-	return conflict(updatedRecord, "local file has changed and previous version check is unavailable"), nil
+	uploaded, err := r.previousVersionUploaded(ctx, obs, localChecksum)
+	if err != nil {
+		return Decision{}, err
+	}
+	if uploaded {
+		return download(updatedRecord, "local and remote versions differ"), nil
+	}
+
+	return conflict(updatedRecord, "local file has changed and was never uploaded"), nil
+}
+
+func (r *Reconciler) previousVersionUploaded(ctx context.Context, obs Observation, localChecksum string) (bool, error) {
+	if r.remoteHistory == nil {
+		return false, nil
+	}
+
+	uploaded, err := r.remoteHistory.HasVersionWithChecksum(ctx, obs, localChecksum)
+	if err != nil {
+		return false, fmt.Errorf("check previous remote versions for %q: %w", obs.RemotePath, err)
+	}
+
+	return uploaded, nil
 }
 
 func (r *Reconciler) localChecksum(ctx context.Context, obs Observation) (string, error) {
@@ -399,7 +459,7 @@ func recordWithRemote(obs Observation, record filedb.FileRecord) filedb.FileReco
 		return record
 	}
 
-	record.RemoteFileID = &obs.RemoteEntry.RemoteFileID
+	record.RemoteFileID = obs.RemoteEntry.RemoteFileID
 	record.RemoteSize = &obs.RemoteEntry.Size
 	record.RemoteCTimeNS = &obs.RemoteEntry.CTimeNS
 	record.RemoteChecksum = stringPtr(obs.RemoteEntry.Checksum)
@@ -434,10 +494,14 @@ func localEntryMatchesRecord(obs Observation) bool {
 }
 
 func remoteIDMatchesRecord(obs Observation) bool {
-	if obs.RemoteEntry == nil || obs.FileRecord == nil || obs.FileRecord.RemoteFileID == nil {
+	if obs.RemoteEntry == nil ||
+		obs.RemoteEntry.RemoteFileID == nil ||
+		obs.FileRecord == nil ||
+		obs.FileRecord.RemoteFileID == nil {
 		return false
 	}
-	return obs.RemoteEntry.RemoteFileID == *obs.FileRecord.RemoteFileID
+
+	return *obs.RemoteEntry.RemoteFileID == *obs.FileRecord.RemoteFileID
 }
 
 func recordIsStale(obs Observation) bool {
