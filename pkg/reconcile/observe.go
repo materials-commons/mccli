@@ -4,12 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"path"
 	"strings"
 	"time"
 
-	mcapi "github.com/materials-commons/gomcapi"
 	"github.com/materials-commons/hydra/pkg/mcdb/mcmodel"
 	"github.com/materials-commons/mccli/pkg/filedb"
 	"github.com/materials-commons/mccli/pkg/projectpath"
@@ -98,7 +96,7 @@ func (r *ObservationRunner) ObserveAndReconcile(ctx context.Context, localPath s
 
 	remoteFile, err := r.Remote.GetFileByPath(r.ProjectID, remotePath)
 	if err != nil {
-		if isRemoteNotFound(err) {
+		if IsRemoteNotFound(err) {
 			remoteFile = nil
 		} else {
 			return FileState{}, fmt.Errorf("get remote file by path %q: %w", remotePath, err)
@@ -195,13 +193,4 @@ func RemoteEntryFromMCFile(file *mcmodel.File) *RemoteEntry {
 func isRemoteDirectory(file *mcmodel.File) bool {
 	mimeType := strings.ToLower(file.MimeType)
 	return mimeType == "directory" || mimeType == "inode/directory"
-}
-
-func isRemoteNotFound(err error) bool {
-	var apiErr *mcapi.APIError
-	if errors.As(err, &apiErr) {
-		return apiErr.StatusCode == http.StatusNotFound
-	}
-
-	return false
 }
