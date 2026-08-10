@@ -20,6 +20,10 @@ var (
 	// ErrInvalidObservation indicates that the reconciler was given incomplete
 	// or inconsistent observation data.
 	ErrInvalidObservation = errors.New("invalid reconcile observation")
+
+	// ErrInvalidChecksum indicates that a checksum operation returned an
+	// unusable checksum value.
+	ErrInvalidChecksum = errors.New("invalid checksum")
 )
 
 // ChecksumFunc computes a checksum for a local path.
@@ -81,6 +85,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, obs Observation) (Decision, 
 		return Decision{}, err
 	}
 
+	if err := validateObservationConsistency(obs, record); err != nil {
+		return Decision{}, err
+	}
+
 	if state == ObservationNeither {
 		return skip(record, "no local or remote entry observed"), nil
 	}
@@ -121,9 +129,7 @@ func hasKindConflict(obs Observation) bool {
 	if obs.LocalEntry == nil || obs.RemoteEntry == nil {
 		return false
 	}
-	if obs.LocalEntry.Kind == KindUnknown || obs.RemoteEntry.Kind == KindUnknown {
-		return false
-	}
+
 	return obs.LocalEntry.Kind != obs.RemoteEntry.Kind
 }
 
@@ -184,6 +190,59 @@ func recordFromObservation(obs Observation) (filedb.FileRecord, error) {
 		Name:             name,
 		IsCleanLocalCopy: false,
 	}, nil
+}
+
+func validateObservationConsistency(obs Observation, record filedb.FileRecord) error {
+	if obs.RemotePath != "" && obs.RemotePath != record.Path {
+		return fmt.Errorf("%w: observation remote path %q does not match record path %q",
+			ErrInvalidObservation, obs.RemotePath, record.Path)
+	}
+
+	if obs.Name != "" && obs.Name != record.Name {
+		return fmt.Errorf("%w: observation name %q does not match record name %q",
+			ErrInvalidObservation, obs.Name, record.Name)
+	}
+
+	if obs.Dir != "" && obs.Dir != record.Dir {
+		return fmt.Errorf("%w: observation dir %q does not match record dir %q",
+			ErrInvalidObservation, obs.Dir, record.Dir)
+	}
+
+	if obs.LocalEntry != nil {
+		if obs.LocalEntry.RemotePath != "" && obs.LocalEntry.RemotePath != record.Path {
+			return fmt.Errorf("%w: local entry remote path %q does not match record path %q",
+				ErrInvalidObservation, obs.LocalEntry.RemotePath, record.Path)
+		}
+
+		if obs.LocalEntry.Name != "" && obs.LocalEntry.Name != record.Name {
+			return fmt.Errorf("%w: local entry name %q does not match record name %q",
+				ErrInvalidObservation, obs.LocalEntry.Name, record.Name)
+		}
+
+		if obs.LocalEntry.Dir != "" && obs.LocalEntry.Dir != record.Dir {
+			return fmt.Errorf("%w: local entry dir %q does not match record dir %q",
+				ErrInvalidObservation, obs.LocalEntry.Dir, record.Dir)
+		}
+	}
+
+	if obs.RemoteEntry != nil {
+		if obs.RemoteEntry.Path != "" && obs.RemoteEntry.Path != record.Path {
+			return fmt.Errorf("%w: remote entry path %q does not match record path %q",
+				ErrInvalidObservation, obs.RemoteEntry.Path, record.Path)
+		}
+
+		if obs.RemoteEntry.Name != "" && obs.RemoteEntry.Name != record.Name {
+			return fmt.Errorf("%w: remote entry name %q does not match record name %q",
+				ErrInvalidObservation, obs.RemoteEntry.Name, record.Name)
+		}
+
+		if obs.RemoteEntry.Dir != "" && obs.RemoteEntry.Dir != record.Dir {
+			return fmt.Errorf("%w: remote entry dir %q does not match record dir %q",
+				ErrInvalidObservation, obs.RemoteEntry.Dir, record.Dir)
+		}
+	}
+
+	return nil
 }
 
 func (r *Reconciler) reconcileDirectory(obs Observation, record filedb.FileRecord) Decision {
@@ -438,7 +497,15 @@ func (r *Reconciler) localChecksum(ctx context.Context, obs Observation) (string
 	if obs.LocalEntry == nil {
 		return "", fmt.Errorf("cannot checksum missing local entry for %q", obs.RemotePath)
 	}
-	return r.checksum(ctx, obs.LocalEntry.Path)
+	localChecksum, err := r.checksum(ctx, obs.LocalEntry.Path)
+	if err != nil {
+		return "", err
+	}
+	if localChecksum == "" {
+		return "", fmt.Errorf("%w: empty checksum for %q", ErrInvalidChecksum, obs.LocalEntry.Path)
+	}
+
+	return localChecksum, nil
 }
 
 func recordWithLocal(obs Observation, record filedb.FileRecord) filedb.FileRecord {
@@ -550,5 +617,9 @@ func stringPtr(value string) *string {
 	if value == "" {
 		return nil
 	}
+	return &value
+}
+
+func int64Ptr(value int64) *int64 {
 	return &value
 }
