@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestOpenCreatesDatabase(t *testing.T) {
@@ -194,6 +195,316 @@ func TestConcurrentUpserts(t *testing.T) {
 		if err != nil {
 			t.Fatalf("concurrent Upsert() error = %v", err)
 		}
+	}
+}
+
+func TestUpsertRejectsRelativePath(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	record := testRecord("Dir1/file.txt")
+
+	err := store.Upsert(ctx, record)
+	if !errors.Is(err, ErrInvalidRecord) {
+		t.Fatalf("Upsert() error = %v, want ErrInvalidRecord", err)
+	}
+}
+
+func TestUpsertRejectsMismatchedDir(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	record := testRecord("/Dir1/file.txt")
+	record.Dir = "/Wrong"
+
+	err := store.Upsert(ctx, record)
+	if !errors.Is(err, ErrInvalidRecord) {
+		t.Fatalf("Upsert() error = %v, want ErrInvalidRecord", err)
+	}
+}
+
+func TestUpsertRejectsMismatchedName(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	record := testRecord("/Dir1/file.txt")
+	record.Name = "wrong.txt"
+
+	err := store.Upsert(ctx, record)
+	if !errors.Is(err, ErrInvalidRecord) {
+		t.Fatalf("Upsert() error = %v, want ErrInvalidRecord", err)
+	}
+}
+
+func TestUpsertRejectsEmptyLocalChecksum(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	record := testRecord("/Dir1/file.txt")
+	record.LocalChecksum = stringPtr("")
+
+	err := store.Upsert(ctx, record)
+	if !errors.Is(err, ErrInvalidRecord) {
+		t.Fatalf("Upsert() error = %v, want ErrInvalidRecord", err)
+	}
+}
+
+func TestUpsertRejectsEmptyRemoteChecksum(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	record := testRecord("/Dir1/file.txt")
+	record.RemoteChecksum = stringPtr("")
+
+	err := store.Upsert(ctx, record)
+	if !errors.Is(err, ErrInvalidRecord) {
+		t.Fatalf("Upsert() error = %v, want ErrInvalidRecord", err)
+	}
+}
+
+func TestGetByPathRejectsInvalidPath(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	_, err := store.GetByPath(ctx, "Dir1/file.txt")
+	if !errors.Is(err, ErrInvalidRecord) {
+		t.Fatalf("GetByPath() error = %v, want ErrInvalidRecord", err)
+	}
+}
+
+func TestListByDirRejectsInvalidDir(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	_, err := store.ListByDir(ctx, "Dir1")
+	if !errors.Is(err, ErrInvalidRecord) {
+		t.Fatalf("ListByDir() error = %v, want ErrInvalidRecord", err)
+	}
+}
+
+func TestMarkTransferRejectsMissingRecord(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	err := store.MarkTransfer(ctx, "/missing.txt", "uploading", "upload", "transfer-1")
+	if !errors.Is(err, ErrRecordNotFound) {
+		t.Fatalf("MarkTransfer() error = %v, want ErrRecordNotFound", err)
+	}
+}
+
+func TestMarkTransferRejectsEmptyStatus(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	if err := store.Upsert(ctx, testRecord("/Dir1/file.txt")); err != nil {
+		t.Fatalf("Upsert() error = %v", err)
+	}
+
+	err := store.MarkTransfer(ctx, "/Dir1/file.txt", "", "upload", "transfer-1")
+	if !errors.Is(err, ErrInvalidRecord) {
+		t.Fatalf("MarkTransfer() error = %v, want ErrInvalidRecord", err)
+	}
+}
+
+func TestMarkTransferRejectsEmptyOrigin(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	if err := store.Upsert(ctx, testRecord("/Dir1/file.txt")); err != nil {
+		t.Fatalf("Upsert() error = %v", err)
+	}
+
+	err := store.MarkTransfer(ctx, "/Dir1/file.txt", "uploading", "", "transfer-1")
+	if !errors.Is(err, ErrInvalidRecord) {
+		t.Fatalf("MarkTransfer() error = %v, want ErrInvalidRecord", err)
+	}
+}
+
+func TestMarkTransferRejectsEmptyTransferID(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	if err := store.Upsert(ctx, testRecord("/Dir1/file.txt")); err != nil {
+		t.Fatalf("Upsert() error = %v", err)
+	}
+
+	err := store.MarkTransfer(ctx, "/Dir1/file.txt", "uploading", "upload", "")
+	if !errors.Is(err, ErrInvalidRecord) {
+		t.Fatalf("MarkTransfer() error = %v, want ErrInvalidRecord", err)
+	}
+}
+
+func TestMarkTransferUpdatesExistingRecord(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	if err := store.Upsert(ctx, testRecord("/Dir1/file.txt")); err != nil {
+		t.Fatalf("Upsert() error = %v", err)
+	}
+
+	if err := store.MarkTransfer(ctx, "/Dir1/file.txt", "uploading", "upload", "transfer-1"); err != nil {
+		t.Fatalf("MarkTransfer() error = %v", err)
+	}
+
+	got, err := store.GetByPath(ctx, "/Dir1/file.txt")
+	if err != nil {
+		t.Fatalf("GetByPath() error = %v", err)
+	}
+
+	if got.Status == nil || *got.Status != "uploading" {
+		t.Fatalf("Status = %v, want uploading", got.Status)
+	}
+	if got.Origin == nil || *got.Origin != "upload" {
+		t.Fatalf("Origin = %v, want upload", got.Origin)
+	}
+	if got.TransferID == nil || *got.TransferID != "transfer-1" {
+		t.Fatalf("TransferID = %v, want transfer-1", got.TransferID)
+	}
+}
+
+func TestTouchLocalSeenRejectsMissingRecord(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	err := store.TouchLocalSeen(ctx, "/missing.txt", time.Unix(123, 0))
+	if !errors.Is(err, ErrRecordNotFound) {
+		t.Fatalf("TouchLocalSeen() error = %v, want ErrRecordNotFound", err)
+	}
+}
+
+func TestTouchLocalSeenRejectsZeroTime(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	if err := store.Upsert(ctx, testRecord("/Dir1/file.txt")); err != nil {
+		t.Fatalf("Upsert() error = %v", err)
+	}
+
+	err := store.TouchLocalSeen(ctx, "/Dir1/file.txt", time.Time{})
+	if !errors.Is(err, ErrInvalidRecord) {
+		t.Fatalf("TouchLocalSeen() error = %v, want ErrInvalidRecord", err)
+	}
+}
+
+func TestTouchLocalSeenUpdatesExistingRecord(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	if err := store.Upsert(ctx, testRecord("/Dir1/file.txt")); err != nil {
+		t.Fatalf("Upsert() error = %v", err)
+	}
+
+	if err := store.TouchLocalSeen(ctx, "/Dir1/file.txt", time.Unix(123, 0)); err != nil {
+		t.Fatalf("TouchLocalSeen() error = %v", err)
+	}
+
+	got, err := store.GetByPath(ctx, "/Dir1/file.txt")
+	if err != nil {
+		t.Fatalf("GetByPath() error = %v", err)
+	}
+
+	if got.LocalLastSeenTS != 123 {
+		t.Fatalf("LocalLastSeenTS = %d, want 123", got.LocalLastSeenTS)
+	}
+}
+
+func TestClearRemoteByPathClearsRemoteFields(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	record := testRecord("/Dir1/file.txt")
+	record.RemoteFileID = int64Ptr(123)
+	record.RemoteSize = int64Ptr(456)
+	record.RemoteCTimeNS = int64Ptr(789)
+	record.RemoteChecksum = stringPtr("remote-md5")
+	record.RemoteLastSeenTS = int64Ptr(111)
+	record.Status = stringPtr("uploaded")
+	record.Origin = stringPtr("upload")
+	record.TransferID = stringPtr("transfer-1")
+
+	if err := store.Upsert(ctx, record); err != nil {
+		t.Fatalf("Upsert() error = %v", err)
+	}
+
+	if err := store.ClearRemoteByPath(ctx, "/Dir1/file.txt"); err != nil {
+		t.Fatalf("ClearRemoteByPath() error = %v", err)
+	}
+
+	got, err := store.GetByPath(ctx, "/Dir1/file.txt")
+	if err != nil {
+		t.Fatalf("GetByPath() error = %v", err)
+	}
+
+	if got.RemoteFileID != nil {
+		t.Fatalf("RemoteFileID = %v, want nil", got.RemoteFileID)
+	}
+	if got.RemoteSize != nil {
+		t.Fatalf("RemoteSize = %v, want nil", got.RemoteSize)
+	}
+	if got.RemoteCTimeNS != nil {
+		t.Fatalf("RemoteCTimeNS = %v, want nil", got.RemoteCTimeNS)
+	}
+	if got.RemoteChecksum != nil {
+		t.Fatalf("RemoteChecksum = %v, want nil", got.RemoteChecksum)
+	}
+	if got.RemoteLastSeenTS != nil {
+		t.Fatalf("RemoteLastSeenTS = %v, want nil", got.RemoteLastSeenTS)
+	}
+	if got.Status != nil {
+		t.Fatalf("Status = %v, want nil", got.Status)
+	}
+	if got.Origin != nil {
+		t.Fatalf("Origin = %v, want nil", got.Origin)
+	}
+	if got.TransferID != nil {
+		t.Fatalf("TransferID = %v, want nil", got.TransferID)
+	}
+}
+
+func TestClearRemoteByPathRejectsMissingRecord(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	err := store.ClearRemoteByPath(ctx, "/missing.txt")
+	if !errors.Is(err, ErrRecordNotFound) {
+		t.Fatalf("ClearRemoteByPath() error = %v, want ErrRecordNotFound", err)
+	}
+}
+
+func TestUpsertNilRemoteFieldsPreservesExistingRemoteFields(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	first := testRecord("/Dir1/file.txt")
+	first.RemoteFileID = int64Ptr(123)
+	first.RemoteChecksum = stringPtr("remote-md5")
+
+	if err := store.Upsert(ctx, first); err != nil {
+		t.Fatalf("first Upsert() error = %v", err)
+	}
+
+	second := testRecord("/Dir1/file.txt")
+	second.RemoteFileID = nil
+	second.RemoteChecksum = nil
+	second.LocalSize = 999
+
+	if err := store.Upsert(ctx, second); err != nil {
+		t.Fatalf("second Upsert() error = %v", err)
+	}
+
+	got, err := store.GetByPath(ctx, "/Dir1/file.txt")
+	if err != nil {
+		t.Fatalf("GetByPath() error = %v", err)
+	}
+
+	if got.LocalSize != 999 {
+		t.Fatalf("LocalSize = %d, want 999", got.LocalSize)
+	}
+	if got.RemoteFileID == nil || *got.RemoteFileID != 123 {
+		t.Fatalf("RemoteFileID = %v, want 123", got.RemoteFileID)
+	}
+	if got.RemoteChecksum == nil || *got.RemoteChecksum != "remote-md5" {
+		t.Fatalf("RemoteChecksum = %v, want remote-md5", got.RemoteChecksum)
 	}
 }
 

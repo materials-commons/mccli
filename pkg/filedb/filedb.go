@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"time"
 
@@ -35,6 +36,9 @@ const (
 var (
 	// ErrRecordNotFound indicates that a file record does not exist.
 	ErrRecordNotFound = gorm.ErrRecordNotFound
+
+	// ErrInvalidRecord indicates that a file database record or path is invalid.
+	ErrInvalidRecord = errors.New("invalid file record")
 )
 
 // DBPath returns the project-local file database path:
@@ -89,6 +93,10 @@ type Store struct {
 
 // Open opens or creates the file database for projectRoot.
 func Open(ctx context.Context, projectRoot string) (*Store, error) {
+	if projectRoot == "" {
+		return nil, fmt.Errorf("%w: project root is required", ErrInvalidRecord)
+	}
+
 	dbPath := DBPath(projectRoot)
 	return OpenPath(ctx, dbPath)
 }
@@ -246,6 +254,10 @@ func (s *Store) UpsertMany(ctx context.Context, records []FileRecord) error {
 
 // GetByPath returns the file record for path.
 func (s *Store) GetByPath(ctx context.Context, filePath string) (FileRecord, error) {
+	if err := validateRemotePath(filePath, "file path"); err != nil {
+		return FileRecord{}, err
+	}
+
 	record, err := gorm.G[FileRecord](s.db).
 		Where("path = ?", filePath).
 		First(ctx)
@@ -261,6 +273,10 @@ func (s *Store) GetByPath(ctx context.Context, filePath string) (FileRecord, err
 
 // ListByDir returns all file records whose parent directory is dir.
 func (s *Store) ListByDir(ctx context.Context, dir string) ([]FileRecord, error) {
+	if err := validateRemotePath(dir, "directory path"); err != nil {
+		return nil, err
+	}
+
 	records, err := gorm.G[FileRecord](s.db).
 		Where("dir = ?", dir).
 		Order("name ASC").
@@ -274,6 +290,10 @@ func (s *Store) ListByDir(ctx context.Context, dir string) ([]FileRecord, error)
 
 // DeleteByPath deletes the file record for path.
 func (s *Store) DeleteByPath(ctx context.Context, filePath string) error {
+	if err := validateRemotePath(filePath, "file path"); err != nil {
+		return err
+	}
+
 	_, err := gorm.G[FileRecord](s.db).
 		Where("path = ?", filePath).
 		Delete(ctx)
@@ -286,19 +306,36 @@ func (s *Store) DeleteByPath(ctx context.Context, filePath string) error {
 
 // MarkTransfer records transfer metadata for a file path.
 func (s *Store) MarkTransfer(ctx context.Context, filePath, status, origin, transferID string) error {
+	if err := validateRemotePath(filePath, "file path"); err != nil {
+		return err
+	}
+	if status == "" {
+		return fmt.Errorf("%w: transfer status is required for %q", ErrInvalidRecord, filePath)
+	}
+	if origin == "" {
+		return fmt.Errorf("%w: transfer origin is required for %q", ErrInvalidRecord, filePath)
+	}
+	if transferID == "" {
+		return fmt.Errorf("%w: transfer id is required for %q", ErrInvalidRecord, filePath)
+	}
+
 	updates := map[string]any{
 		"status":      status,
 		"origin":      origin,
 		"transfer_id": transferID,
 	}
 
-	err := s.db.WithContext(ctx).
+	result := s.db.WithContext(ctx).
 		Model(&FileRecord{}).
 		Where("path = ?", filePath).
-		Updates(updates).
-		Error
-	if err != nil {
-		return fmt.Errorf("mark transfer for %q: %w", filePath, err)
+		Updates(updates)
+
+	if result.Error != nil {
+		return fmt.Errorf("mark transfer for %q: %w", filePath, result.Error)
+	}
+
+	if result.RowsAffected == 0 {
+		return ErrRecordNotFound
 	}
 
 	return nil
@@ -306,25 +343,112 @@ func (s *Store) MarkTransfer(ctx context.Context, filePath, status, origin, tran
 
 // TouchLocalSeen updates the local_last_seen_ts timestamp for a file path.
 func (s *Store) TouchLocalSeen(ctx context.Context, filePath string, seen time.Time) error {
-	_, err := gorm.G[FileRecord](s.db).
+	if err := validateRemotePath(filePath, "file path"); err != nil {
+		return err
+	}
+	if seen.IsZero() {
+		return fmt.Errorf("%w: seen time is required for %q", ErrInvalidRecord, filePath)
+	}
+
+	rowsAffected, err := gorm.G[FileRecord](s.db).
 		Where("path = ?", filePath).
 		Update(ctx, "local_last_seen_ts", seen.Unix())
+
 	if err != nil {
 		return fmt.Errorf("touch local seen for %q: %w", filePath, err)
+	}
+
+	if rowsAffected == 0 {
+		return ErrRecordNotFound
+	}
+
+	return nil
+}
+
+// ClearRemoteByPath clears remote metadata for a file record while preserving
+// local metadata.
+//
+// Upsert intentionally preserves existing nullable remote fields when the
+// incoming value is nil. Use ClearRemoteByPath when remote state must be
+// explicitly removed.
+func (s *Store) ClearRemoteByPath(ctx context.Context, filePath string) error {
+	if err := validateRemotePath(filePath, "file path"); err != nil {
+		return err
+	}
+
+	result := s.db.WithContext(ctx).
+		Model(&FileRecord{}).
+		Where("path = ?", filePath).
+		Updates(map[string]any{
+			"remote_file_id":      nil,
+			"remote_size":         nil,
+			"remote_ctime_ns":     nil,
+			"remote_checksum":     nil,
+			"remote_last_seen_ts": nil,
+			"status":              nil,
+			"origin":              nil,
+			"transfer_id":         nil,
+		})
+	if result.Error != nil {
+		return fmt.Errorf("clear remote metadata for %q: %w", filePath, result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return ErrRecordNotFound
 	}
 
 	return nil
 }
 
 func validateRecord(record FileRecord) error {
-	if record.Path == "" {
-		return fmt.Errorf("file record path is required")
+	if err := validateRemotePath(record.Path, "file record path"); err != nil {
+		return err
 	}
-	if record.Dir == "" {
-		return fmt.Errorf("file record dir is required for %q", record.Path)
+	if err := validateRemotePath(record.Dir, "file record dir"); err != nil {
+		return err
 	}
 	if record.Name == "" {
-		return fmt.Errorf("file record name is required for %q", record.Path)
+		return fmt.Errorf("%w: file record name is required for %q", ErrInvalidRecord, record.Path)
+	}
+
+	expectedDir := path.Dir(record.Path)
+	if expectedDir == "." {
+		expectedDir = "/"
+	}
+
+	expectedName := path.Base(record.Path)
+
+	if record.Path == "/" {
+		expectedDir = "/"
+		expectedName = "/"
+	}
+
+	if record.Dir != expectedDir {
+		return fmt.Errorf("%w: dir %q does not match path %q; expected %q",
+			ErrInvalidRecord, record.Dir, record.Path, expectedDir)
+	}
+
+	if record.Name != expectedName {
+		return fmt.Errorf("%w: name %q does not match path %q; expected %q",
+			ErrInvalidRecord, record.Name, record.Path, expectedName)
+	}
+
+	if record.LocalChecksum != nil && *record.LocalChecksum == "" {
+		return fmt.Errorf("%w: local checksum is empty for %q", ErrInvalidRecord, record.Path)
+	}
+
+	if record.RemoteChecksum != nil && *record.RemoteChecksum == "" {
+		return fmt.Errorf("%w: remote checksum is empty for %q", ErrInvalidRecord, record.Path)
+	}
+
+	return nil
+}
+
+func validateRemotePath(value string, label string) error {
+	if value == "" {
+		return fmt.Errorf("%w: %s is required", ErrInvalidRecord, label)
+	}
+	if value[0] != '/' {
+		return fmt.Errorf("%w: %s %q must start with /", ErrInvalidRecord, label, value)
 	}
 	return nil
 }
