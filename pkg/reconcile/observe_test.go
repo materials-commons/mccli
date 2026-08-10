@@ -215,7 +215,7 @@ func TestObservationRunnerRecordErrorIsFatal(t *testing.T) {
 }
 
 func TestRemoteEntryFromMCFileDirectory(t *testing.T) {
-	entry := RemoteEntryFromMCFile(&mcmodel.File{
+	entry, err := RemoteEntryFromMCFile(&mcmodel.File{
 		ID:        10,
 		Path:      "/Dir1",
 		Name:      "Dir1",
@@ -224,6 +224,9 @@ func TestRemoteEntryFromMCFileDirectory(t *testing.T) {
 		CreatedAt: time.Unix(10, 0),
 		UpdatedAt: time.Unix(20, 0),
 	})
+	if err != nil {
+		t.Fatalf("RemoteEntryFromMCFile() error = %v", err)
+	}
 
 	if entry == nil {
 		t.Fatal("RemoteEntryFromMCFile() = nil, want entry")
@@ -240,8 +243,163 @@ func TestRemoteEntryFromMCFileDirectory(t *testing.T) {
 }
 
 func TestRemoteEntryFromMCFileNil(t *testing.T) {
-	if got := RemoteEntryFromMCFile(nil); got != nil {
+	got, err := RemoteEntryFromMCFile(nil)
+	if err != nil {
+		t.Fatalf("RemoteEntryFromMCFile(nil) error = %v", err)
+	}
+	if got != nil {
 		t.Fatalf("RemoteEntryFromMCFile(nil) = %#v, want nil", got)
+	}
+}
+
+func TestObservationRunnerEmptyLocalPathReturnsInvalidObservation(t *testing.T) {
+	ctx := context.Background()
+	projectRoot := t.TempDir()
+
+	runner := NewObservationRunner(
+		123,
+		mustTranslator(t, projectRoot),
+		fakeRecordStore{},
+		&fakeRemoteGetter{},
+		ModeStatus,
+	)
+
+	_, err := runner.ObserveAndReconcile(ctx, "")
+	if !errors.Is(err, ErrInvalidObservation) {
+		t.Fatalf("ObserveAndReconcile() error = %v, want ErrInvalidObservation", err)
+	}
+}
+
+func TestObservationRunnerInvalidProjectIDReturnsInvalidObservation(t *testing.T) {
+	ctx := context.Background()
+	projectRoot := t.TempDir()
+	localPath := filepath.Join(projectRoot, "file.txt")
+	writeTestFile(t, localPath, "hello")
+
+	runner := NewObservationRunner(
+		0,
+		mustTranslator(t, projectRoot),
+		fakeRecordStore{},
+		&fakeRemoteGetter{},
+		ModeStatus,
+	)
+
+	_, err := runner.ObserveAndReconcile(ctx, localPath)
+	if !errors.Is(err, ErrInvalidObservation) {
+		t.Fatalf("ObserveAndReconcile() error = %v, want ErrInvalidObservation", err)
+	}
+}
+
+func TestObservationRunnerUnconfiguredTranslatorReturnsInvalidObservation(t *testing.T) {
+	ctx := context.Background()
+
+	runner := NewObservationRunner(
+		123,
+		projectpath.Translator{},
+		fakeRecordStore{},
+		&fakeRemoteGetter{},
+		ModeStatus,
+	)
+
+	_, err := runner.ObserveAndReconcile(ctx, "/tmp/file.txt")
+	if !errors.Is(err, ErrInvalidObservation) {
+		t.Fatalf("ObserveAndReconcile() error = %v, want ErrInvalidObservation", err)
+	}
+}
+
+func TestObservationRunnerRemoteReturnedDifferentPathReturnsInvalidObservation(t *testing.T) {
+	ctx := context.Background()
+	projectRoot := t.TempDir()
+	localPath := filepath.Join(projectRoot, "Dir1", "file.txt")
+	writeTestFile(t, localPath, "hello")
+
+	runner := NewObservationRunner(
+		123,
+		mustTranslator(t, projectRoot),
+		fakeRecordStore{},
+		&fakeRemoteGetter{
+			file: &mcmodel.File{
+				ID:        77,
+				Path:      "/Other/file.txt",
+				Name:      "file.txt",
+				Size:      5,
+				MimeType:  "text/plain",
+				Checksum:  "remote-md5",
+				CreatedAt: time.Unix(10, 0),
+				UpdatedAt: time.Unix(20, 0),
+			},
+		},
+		ModeStatus,
+	)
+	runner.Now = fixedNow
+
+	_, err := runner.ObserveAndReconcile(ctx, localPath)
+	if !errors.Is(err, ErrInvalidObservation) {
+		t.Fatalf("ObserveAndReconcile() error = %v, want ErrInvalidObservation", err)
+	}
+}
+
+func TestRemoteEntryFromMCFileEmptyPathReturnsInvalidObservation(t *testing.T) {
+	_, err := RemoteEntryFromMCFile(&mcmodel.File{
+		ID:   10,
+		Name: "file.txt",
+	})
+	if !errors.Is(err, ErrInvalidObservation) {
+		t.Fatalf("RemoteEntryFromMCFile() error = %v, want ErrInvalidObservation", err)
+	}
+}
+
+func TestRemoteEntryFromMCFileRelativePathReturnsInvalidObservation(t *testing.T) {
+	_, err := RemoteEntryFromMCFile(&mcmodel.File{
+		ID:   10,
+		Path: "Dir1/file.txt",
+		Name: "file.txt",
+	})
+	if !errors.Is(err, ErrInvalidObservation) {
+		t.Fatalf("RemoteEntryFromMCFile() error = %v, want ErrInvalidObservation", err)
+	}
+}
+
+func TestRemoteEntryFromMCFileDerivesMissingNameFromPath(t *testing.T) {
+	entry, err := RemoteEntryFromMCFile(&mcmodel.File{
+		ID:        10,
+		Path:      "/Dir1/file.txt",
+		Name:      "",
+		Size:      5,
+		MimeType:  "text/plain",
+		Checksum:  "remote-md5",
+		CreatedAt: time.Unix(10, 0),
+		UpdatedAt: time.Unix(20, 0),
+	})
+	if err != nil {
+		t.Fatalf("RemoteEntryFromMCFile() error = %v", err)
+	}
+
+	if entry.Name != "file.txt" {
+		t.Fatalf("Name = %q, want file.txt", entry.Name)
+	}
+	if entry.Dir != "/Dir1" {
+		t.Fatalf("Dir = %q, want /Dir1", entry.Dir)
+	}
+}
+
+func TestRemoteEntryFromMCFileZeroIDKeepsRemoteFileIDNil(t *testing.T) {
+	entry, err := RemoteEntryFromMCFile(&mcmodel.File{
+		ID:        0,
+		Path:      "/Dir1/file.txt",
+		Name:      "file.txt",
+		Size:      5,
+		MimeType:  "text/plain",
+		Checksum:  "remote-md5",
+		CreatedAt: time.Unix(10, 0),
+		UpdatedAt: time.Unix(20, 0),
+	})
+	if err != nil {
+		t.Fatalf("RemoteEntryFromMCFile() error = %v", err)
+	}
+
+	if entry.RemoteFileID != nil {
+		t.Fatalf("RemoteFileID = %v, want nil for zero id", entry.RemoteFileID)
 	}
 }
 

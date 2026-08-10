@@ -73,6 +73,15 @@ func (r *ObservationRunner) ObserveAndReconcile(ctx context.Context, localPath s
 	if r.Reconciler == nil {
 		return FileState{}, fmt.Errorf("reconciler is required")
 	}
+	if localPath == "" {
+		return FileState{}, fmt.Errorf("%w: local path is required", ErrInvalidObservation)
+	}
+	if r.ProjectID <= 0 {
+		return FileState{}, fmt.Errorf("%w: project id must be positive", ErrInvalidObservation)
+	}
+	if r.Translator.ProjectRoot() == "" {
+		return FileState{}, fmt.Errorf("%w: project path translator is not configured", ErrInvalidObservation)
+	}
 
 	now := time.Now()
 	if r.Now != nil {
@@ -103,7 +112,14 @@ func (r *ObservationRunner) ObserveAndReconcile(ctx context.Context, localPath s
 		}
 	}
 
-	remoteEntry := RemoteEntryFromMCFile(remoteFile)
+	remoteEntry, err := RemoteEntryFromMCFile(remoteFile)
+	if err != nil {
+		return FileState{}, err
+	}
+	if remoteEntry != nil && remoteEntry.Path != remotePath {
+		return FileState{}, fmt.Errorf("%w: remote returned path %q for requested path %q",
+			ErrInvalidObservation, remoteEntry.Path, remotePath)
+	}
 
 	name := path.Base(remotePath)
 	dir := path.Dir(remotePath)
@@ -161,15 +177,30 @@ func loadFileRecord(ctx context.Context, records FileRecordGetter, remotePath st
 // the reconciler's remote observation model.
 //
 // A nil file returns nil.
-func RemoteEntryFromMCFile(file *mcmodel.File) *RemoteEntry {
+func RemoteEntryFromMCFile(file *mcmodel.File) (*RemoteEntry, error) {
 	if file == nil {
-		return nil
+		return nil, nil
 	}
 
 	remotePath := file.Path
+	if remotePath == "" {
+		return nil, fmt.Errorf("%w: remote file path is empty", ErrInvalidObservation)
+	}
+	if !strings.HasPrefix(remotePath, "/") {
+		return nil, fmt.Errorf("%w: remote file path %q must start with /", ErrInvalidObservation, remotePath)
+	}
+
 	dir := path.Dir(remotePath)
 	if dir == "." {
 		dir = "/"
+	}
+
+	name := file.Name
+	if name == "" {
+		name = path.Base(remotePath)
+	}
+	if name == "" || name == "." {
+		return nil, fmt.Errorf("%w: remote file name is empty for path %q", ErrInvalidObservation, remotePath)
 	}
 
 	kind := KindFile
@@ -185,7 +216,7 @@ func RemoteEntryFromMCFile(file *mcmodel.File) *RemoteEntry {
 
 	return &RemoteEntry{
 		Path:         remotePath,
-		Name:         file.Name,
+		Name:         name,
 		Dir:          dir,
 		Kind:         kind,
 		RemoteFileID: remoteFileID,
@@ -193,7 +224,7 @@ func RemoteEntryFromMCFile(file *mcmodel.File) *RemoteEntry {
 		CTimeNS:      file.CreatedAt.UnixNano(),
 		MTimeNS:      file.UpdatedAt.UnixNano(),
 		Checksum:     file.Checksum,
-	}
+	}, nil
 }
 
 func isRemoteDirectory(file *mcmodel.File) bool {

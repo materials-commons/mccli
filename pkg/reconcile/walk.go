@@ -261,7 +261,10 @@ func RemoteOnlyListDir(projectID int, translator projectpath.Translator, remote 
 
 		observations := make([]Observation, 0, len(files))
 		for i := range files {
-			remoteEntry := RemoteEntryFromMCFile(&files[i])
+			remoteEntry, err := RemoteEntryFromMCFile(&files[i])
+			if err != nil {
+				return nil, err
+			}
 			if remoteEntry == nil {
 				continue
 			}
