@@ -508,6 +508,24 @@ func TestUpsertNilRemoteFieldsPreservesExistingRemoteFields(t *testing.T) {
 	}
 }
 
+func TestCloseIsIdempotent(t *testing.T) {
+	ctx := context.Background()
+	projectRoot := t.TempDir()
+
+	store, err := Open(ctx, projectRoot)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+
+	if err := store.Close(ctx); err != nil {
+		t.Fatalf("first Close() error = %v", err)
+	}
+
+	if err := store.Close(ctx); err != nil {
+		t.Fatalf("second Close() error = %v, want nil", err)
+	}
+}
+
 func openTestStore(t *testing.T, ctx context.Context) *Store {
 	t.Helper()
 

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	mcapi "github.com/materials-commons/gomcapi"
+	lscmd "github.com/materials-commons/mccli/pkg/cmd/ls"
 	mclogging "github.com/materials-commons/mccli/pkg/logging"
 	"github.com/urfave/cli/v3"
 )
@@ -165,7 +166,24 @@ func lsCommand() *cli.Command {
 				Usage: "Show the action that would be taken for each path and the reason",
 			},
 		},
-		Action: notYetImplemented("ls"),
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			paths := make([]string, 0, cmd.Args().Len())
+			for i := 0; i < cmd.Args().Len(); i++ {
+				paths = append(paths, cmd.Args().Get(i))
+			}
+
+			workingDir, err := os.Getwd()
+			if err != nil {
+				return fmt.Errorf("get working directory: %w", err)
+			}
+
+			return lscmd.Run(ctx, lscmd.Options{
+				WorkingDir: workingDir,
+				Paths:      paths,
+				Action:     cmd.Bool("action"),
+				Out:        os.Stdout,
+			})
+		},
 	}
 }
 

@@ -177,14 +177,26 @@ func (s *Store) Close(ctx context.Context) error {
 
 	mclogging.Logger(ctx).Debug("closing file database", "path", s.path)
 
+	sqlDB := s.sql
+	gormDB := s.db
+
+	// Mark closed before returning so a second Close call is a no-op even if
+	// checkpoint or close returns an error.
+	s.sql = nil
+	s.db = nil
+
 	// Best effort checkpoint. If this fails, still close the DB and return the
 	// close error if any.
-	checkpointErr := s.db.Exec("PRAGMA wal_checkpoint(TRUNCATE);").Error
-	closeErr := s.sql.Close()
+	var checkpointErr error
+	if gormDB != nil {
+		checkpointErr = gormDB.Exec("PRAGMA wal_checkpoint(TRUNCATE);").Error
+	}
 
+	closeErr := sqlDB.Close()
 	if closeErr != nil {
 		return fmt.Errorf("close file database %q: %w", s.path, closeErr)
 	}
+
 	if checkpointErr != nil {
 		return fmt.Errorf("checkpoint file database %q: %w", s.path, checkpointErr)
 	}
