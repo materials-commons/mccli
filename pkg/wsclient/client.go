@@ -87,7 +87,7 @@ func (c *Client) Run(ctx context.Context) error {
 			return err
 		}
 
-		err := c.runOnce(ctx)
+		err := c.setupConnectionAndStartTasks(ctx)
 		if err == nil {
 			return nil
 		}
@@ -137,7 +137,7 @@ func (c *Client) ensureDefaults() error {
 	return nil
 }
 
-func (c *Client) runOnce(ctx context.Context) error {
+func (c *Client) setupConnectionAndStartTasks(ctx context.Context) error {
 	headers := c.buildHeaders()
 
 	conn, _, err := websocket.Dial(ctx, c.URL, &websocket.DialOptions{
