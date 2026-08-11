@@ -14,7 +14,7 @@ import (
 // Keeping this as a small interface makes Manager unit-testable without running
 // the file upload protocol.
 type uploaderRunner interface {
-	Upload(ctx context.Context) bool
+	Upload(ctx context.Context) error
 	HandleResponse(msg wsclient.TextMessage)
 	TransferIDValue() string
 	SetTransferID(id string)
@@ -160,11 +160,11 @@ func (m *Manager) worker(ctx context.Context, workerID int) {
 		m.activeUploads[transferID] = uploader
 		m.mu.Unlock()
 
-		success := uploader.Upload(ctx)
+		uploadErr := uploader.Upload(ctx)
 
 		m.mu.Lock()
 		delete(m.activeUploads, transferID)
-		m.results[transferID] = success
+		m.results[transferID] = uploadErr == nil
 		m.mu.Unlock()
 	}
 }

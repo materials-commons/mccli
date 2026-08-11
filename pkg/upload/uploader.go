@@ -3,6 +3,7 @@ package upload
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +12,37 @@ import (
 
 	"github.com/materials-commons/mccli/pkg/filedb"
 	"github.com/materials-commons/mccli/pkg/wsclient"
+)
+
+var (
+	// ErrAlreadyUploaded indicates the server rejected the transfer because the
+	// file content is already present.
+	ErrAlreadyUploaded = errors.New("file already uploaded")
+
+	// ErrTransferRejected indicates the server rejected the transfer.
+	ErrTransferRejected = errors.New("transfer rejected")
+
+	// ErrUnexpectedResponse indicates that the server sent a protocol message
+	// that was not valid for the uploader's current state.
+	ErrUnexpectedResponse = errors.New("unexpected upload protocol response")
+
+	// ErrUploadCancelled indicates that the upload was cancelled by the caller.
+	ErrUploadCancelled = errors.New("upload cancelled")
+
+	// ErrQueueClosed indicates that an outbound or DB-write queue was closed.
+	ErrQueueClosed = errors.New("queue closed")
+
+	// ErrInvalidUploadRequest indicates that the upload request is incomplete or
+	// internally inconsistent.
+	ErrInvalidUploadRequest = errors.New("invalid upload request")
+)
+
+const (
+	defaultChunkSize           int64 = 1024 * 1024
+	defaultWindowSize                = 10
+	defaultAcceptanceTimeout         = 30 * time.Second
+	defaultACKTimeout                = 30 * time.Second
+	defaultFinalizationTimeout       = 30 * time.Second
 )
 
 // ProgressFunc receives upload progress.
@@ -26,6 +58,10 @@ type UploaderConfig struct {
 
 	ChunkSize  int64
 	WindowSize int
+
+	AcceptanceTimeout   time.Duration
+	ACKTimeout          time.Duration
+	FinalizationTimeout time.Duration
 
 	Progress ProgressFunc
 }
@@ -43,6 +79,10 @@ type Uploader struct {
 	ChunkSize  int64
 	WindowSize int
 
+	AcceptanceTimeout   time.Duration
+	ACKTimeout          time.Duration
+	FinalizationTimeout time.Duration
+
 	Progress ProgressFunc
 
 	responseQueue *wsclient.Queue[wsclient.TextMessage]
@@ -52,6 +92,7 @@ type Uploader struct {
 	nextChunkToSend int64
 	inFlightChunks  int
 	lastAckedChunk  int64
+	ackedChunks     map[int64]bool
 	cancelled       bool
 	paused          bool
 	alreadyUploaded bool
@@ -60,22 +101,35 @@ type Uploader struct {
 // NewUploader creates a Uploader.
 func NewUploader(cfg UploaderConfig) *Uploader {
 	if cfg.ChunkSize <= 0 {
-		cfg.ChunkSize = 1024 * 1024
+		cfg.ChunkSize = defaultChunkSize
 	}
 	if cfg.WindowSize <= 0 {
-		cfg.WindowSize = 10
+		cfg.WindowSize = defaultWindowSize
+	}
+	if cfg.AcceptanceTimeout <= 0 {
+		cfg.AcceptanceTimeout = defaultAcceptanceTimeout
+	}
+	if cfg.ACKTimeout <= 0 {
+		cfg.ACKTimeout = defaultACKTimeout
+	}
+	if cfg.FinalizationTimeout <= 0 {
+		cfg.FinalizationTimeout = defaultFinalizationTimeout
 	}
 
 	return &Uploader{
-		SendQueue:      cfg.SendQueue,
-		DBWriteQueue:   cfg.DBWriteQueue,
-		Request:        cfg.Request,
-		ClientID:       cfg.ClientID,
-		ChunkSize:      cfg.ChunkSize,
-		WindowSize:     cfg.WindowSize,
-		Progress:       cfg.Progress,
-		responseQueue:  wsclient.NewQueue[wsclient.TextMessage](),
-		lastAckedChunk: -1,
+		SendQueue:           cfg.SendQueue,
+		DBWriteQueue:        cfg.DBWriteQueue,
+		Request:             cfg.Request,
+		ClientID:            cfg.ClientID,
+		ChunkSize:           cfg.ChunkSize,
+		WindowSize:          cfg.WindowSize,
+		AcceptanceTimeout:   cfg.AcceptanceTimeout,
+		ACKTimeout:          cfg.ACKTimeout,
+		FinalizationTimeout: cfg.FinalizationTimeout,
+		Progress:            cfg.Progress,
+		ackedChunks:         make(map[int64]bool),
+		responseQueue:       wsclient.NewQueue[wsclient.TextMessage](),
+		lastAckedChunk:      -1,
 	}
 }
 
@@ -95,38 +149,116 @@ func (u *Uploader) HandleResponse(msg wsclient.TextMessage) {
 }
 
 // Upload performs the websocket upload protocol.
-func (u *Uploader) Upload(ctx context.Context) bool {
+func (u *Uploader) Upload(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	local := u.Request.Observation.LocalEntry
 	if local == nil {
-		return false
+		return fmt.Errorf("local entry is required")
 	}
+
+	if local.Path == "" {
+		return fmt.Errorf("local path is required")
+	}
+
 	if local.Size == 0 {
-		return true
+		return nil
 	}
 
-	if !u.sendTransferInit() {
-		return false
-	}
-	if !u.waitForAcceptance(ctx) {
-		return u.alreadyUploaded
-	}
-	if !u.sendChunksWindowed(ctx) {
-		return false
-	}
-	if !u.sendTransferComplete() {
-		return false
-	}
-	if !u.waitForFinalization(ctx) {
-		return false
+	if err := u.validate(); err != nil {
+		return err
 	}
 
-	return true
+	u.resetTransferState()
+
+	if err := u.sendTransferInit(ctx); err != nil {
+		return err
+	}
+
+	if err := u.waitForAcceptance(ctx); err != nil {
+		if errors.Is(err, ErrAlreadyUploaded) {
+			return nil
+		}
+		return err
+	}
+
+	if err := u.sendChunksWindowed(ctx); err != nil {
+		return err
+	}
+
+	if err := u.sendTransferComplete(ctx); err != nil {
+		return err
+	}
+
+	if err := u.waitForFinalization(ctx); err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func (u *Uploader) sendTransferInit() bool {
+func (u *Uploader) validate() error {
+	if u.SendQueue == nil {
+		return fmt.Errorf("send queue is required")
+	}
+	if u.DBWriteQueue == nil {
+		return fmt.Errorf("db write queue is required")
+	}
+	if u.ClientID == "" {
+		return fmt.Errorf("client id is required")
+	}
+	if u.TransferID == "" {
+		return fmt.Errorf("transfer id is required")
+	}
+	if u.Request.ProjectID <= 0 {
+		return fmt.Errorf("project id must be positive")
+	}
+	if u.Request.Observation.RemotePath == "" {
+		return fmt.Errorf("remote path is required")
+	}
+	if u.Request.Observation.LocalEntry == nil {
+		return fmt.Errorf("local entry is required")
+	}
+	if u.Request.Observation.LocalEntry.Path == "" {
+		return fmt.Errorf("local path is required")
+	}
+	if u.Request.Observation.LocalEntry.Size > 0 {
+		if u.Request.UpdatedRecord.LocalChecksum == nil || *u.Request.UpdatedRecord.LocalChecksum == "" {
+			return fmt.Errorf("%w: local checksum is required for non-empty upload %q",
+				ErrInvalidUploadRequest, u.Request.Observation.LocalEntry.Path)
+		}
+	}
+	if u.ChunkSize <= 0 {
+		return fmt.Errorf("chunk size must be positive")
+	}
+	if u.WindowSize <= 0 {
+		return fmt.Errorf("window size must be positive")
+	}
+	return nil
+}
+
+func (u *Uploader) resetTransferState() {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	u.bytesSent = 0
+	u.nextChunkToSend = 0
+	u.inFlightChunks = 0
+	u.lastAckedChunk = -1
+	u.ackedChunks = map[int64]bool{}
+	u.alreadyUploaded = false
+}
+
+func (u *Uploader) sendTransferInit(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	local := u.Request.Observation.LocalEntry
 	if local == nil {
-		return false
+		return fmt.Errorf("local entry is required")
 	}
 
 	msg := wsclient.TextMessage{
@@ -145,66 +277,111 @@ func (u *Uploader) sendTransferInit() bool {
 		},
 	}
 
-	return u.SendQueue.Push(msg)
+	if ok := u.SendQueue.Push(msg); !ok {
+		return fmt.Errorf("%w: send transfer init", ErrQueueClosed)
+	}
+
+	return nil
 }
 
-func (u *Uploader) waitForAcceptance(ctx context.Context) bool {
-	msg, ok, err := u.responseQueue.Pop(ctx)
-	if err != nil || !ok {
-		return false
+func (u *Uploader) waitForAcceptance(ctx context.Context) error {
+	waitCtx, cancel := context.WithTimeout(ctx, u.AcceptanceTimeout)
+	defer cancel()
+
+	msg, ok, err := u.responseQueue.Pop(waitCtx)
+	if err != nil {
+		return fmt.Errorf("wait for transfer acceptance: %w", err)
+	}
+	if !ok {
+		return fmt.Errorf("%w: response queue closed while waiting for acceptance", ErrQueueClosed)
 	}
 
 	command, _ := msg["command"].(string)
-	payload, _ := msg["payload"].(map[string]any)
+	payload, err := payloadMap(msg)
+	if err != nil {
+		return err
+	}
+
+	if err := u.validateResponseTransferID(payload); err != nil {
+		return err
+	}
 
 	switch command {
 	case "TRANSFER_ACCEPT":
 		if chunkSize, ok := numberAsInt64(payload["chunk_size"]); ok && chunkSize > 0 {
 			u.ChunkSize = chunkSize
 		}
-		return true
+		return nil
+
 	case "TRANSFER_REJECT":
 		reason, _ := payload["reason"].(string)
 		if reason == "file already uploaded" {
 			u.alreadyUploaded = true
+			return ErrAlreadyUploaded
 		}
-		return false
+		if reason == "" {
+			reason = "unknown"
+		}
+		return fmt.Errorf("%w: %s", ErrTransferRejected, reason)
+
 	default:
-		return false
+		return fmt.Errorf("%w: got %q while waiting for TRANSFER_ACCEPT", ErrUnexpectedResponse, command)
 	}
 }
 
-func (u *Uploader) sendChunksWindowed(ctx context.Context) bool {
+func (u *Uploader) sendChunksWindowed(ctx context.Context) error {
 	local := u.Request.Observation.LocalEntry
 	if local == nil {
-		return false
+		return fmt.Errorf("local entry is required")
 	}
 
 	file, err := os.Open(local.Path)
 	if err != nil {
-		return false
+		return fmt.Errorf("open file for upload %q: %w", local.Path, err)
 	}
 	defer file.Close()
 
 	totalChunks := (local.Size + u.ChunkSize - 1) / u.ChunkSize
+	u.resetChunkState(0)
+
+	uploadCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	errCh := make(chan error, 2)
 
 	go func() {
-		errCh <- u.processACKs(ctx, totalChunks)
+		errCh <- u.processACKs(uploadCtx, totalChunks)
 	}()
 
 	go func() {
-		errCh <- u.sendChunks(ctx, file, totalChunks)
+		errCh <- u.sendChunks(uploadCtx, file, totalChunks)
 	}()
 
+	var firstErr error
 	for i := 0; i < 2; i++ {
-		if err := <-errCh; err != nil {
-			return false
+		err := <-errCh
+		if err != nil && firstErr == nil {
+			firstErr = err
+			cancel()
 		}
 	}
 
-	return true
+	if firstErr != nil {
+		return firstErr
+	}
+
+	return nil
+}
+
+func (u *Uploader) resetChunkState(startChunk int64) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	u.bytesSent = startChunk * u.ChunkSize
+	u.nextChunkToSend = startChunk
+	u.inFlightChunks = 0
+	u.lastAckedChunk = startChunk - 1
+	u.ackedChunks = make(map[int64]bool)
 }
 
 func (u *Uploader) sendChunks(ctx context.Context, file *os.File, totalChunks int64) error {
@@ -218,7 +395,7 @@ func (u *Uploader) sendChunks(ctx context.Context, file *os.File, totalChunks in
 		u.mu.Lock()
 		if u.cancelled {
 			u.mu.Unlock()
-			return fmt.Errorf("upload cancelled")
+			return ErrUploadCancelled
 		}
 		if u.nextChunkToSend >= totalChunks {
 			u.mu.Unlock()
@@ -226,7 +403,13 @@ func (u *Uploader) sendChunks(ctx context.Context, file *os.File, totalChunks in
 		}
 		if u.paused || u.inFlightChunks >= u.WindowSize {
 			u.mu.Unlock()
-			time.Sleep(10 * time.Millisecond)
+
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(10 * time.Millisecond):
+			}
+
 			continue
 		}
 
@@ -240,7 +423,7 @@ func (u *Uploader) sendChunks(ctx context.Context, file *os.File, totalChunks in
 		if err == io.ErrUnexpectedEOF || err == io.EOF {
 			chunk = chunk[:n]
 		} else if err != nil {
-			return err
+			return fmt.Errorf("read upload chunk %d: %w", sequence, err)
 		}
 
 		if len(chunk) == 0 {
@@ -258,58 +441,104 @@ func (u *Uploader) sendChunks(ctx context.Context, file *os.File, totalChunks in
 		}
 
 		if ok := u.SendQueue.Push(frame); !ok {
-			return fmt.Errorf("send queue closed")
+			return fmt.Errorf("%w: send chunk %d", ErrQueueClosed, sequence)
 		}
 	}
 }
 
 func (u *Uploader) processACKs(ctx context.Context, totalChunks int64) error {
+	if totalChunks <= 0 {
+		return nil
+	}
+
 	for {
 		u.mu.Lock()
-		if u.lastAckedChunk >= totalChunks-1 {
-			u.mu.Unlock()
-			return nil
-		}
+		ackedCount := len(u.ackedChunks)
 		u.mu.Unlock()
 
-		msg, ok, err := u.responseQueue.Pop(ctx)
+		if int64(ackedCount) >= totalChunks {
+			return nil
+		}
+
+		waitCtx, cancel := context.WithTimeout(ctx, u.ACKTimeout)
+		msg, ok, err := u.responseQueue.Pop(waitCtx)
+		cancel()
+
 		if err != nil {
-			return err
+			return fmt.Errorf("wait for chunk ack: %w", err)
 		}
 		if !ok {
-			return fmt.Errorf("response queue closed")
+			return fmt.Errorf("%w: response queue closed while waiting for chunk ack", ErrQueueClosed)
 		}
 
 		command, _ := msg["command"].(string)
-		payload, _ := msg["payload"].(map[string]any)
+		payload, err := payloadMap(msg)
+		if err != nil {
+			return err
+		}
+
+		if err := u.validateResponseTransferID(payload); err != nil {
+			return err
+		}
 
 		switch command {
 		case "CHUNK_ACK":
-			chunkSeq, _ := numberAsInt64(payload["chunk_sequence"])
-			bytesReceived, _ := numberAsInt64(payload["bytes_received"])
+			chunkSeq, ok := numberAsInt64(payload["chunk_sequence"])
+			if !ok {
+				return fmt.Errorf("%w: missing chunk_sequence", ErrUnexpectedResponse)
+			}
+			bytesReceived, ok := numberAsInt64(payload["bytes_received"])
+			if !ok {
+				return fmt.Errorf("%w: missing bytes_received", ErrUnexpectedResponse)
+			}
+			if chunkSeq < 0 || chunkSeq >= totalChunks {
+				return fmt.Errorf("%w: invalid chunk_sequence %d", ErrUnexpectedResponse, chunkSeq)
+			}
 
 			u.mu.Lock()
-			if chunkSeq > u.lastAckedChunk {
-				u.lastAckedChunk = chunkSeq
-				u.inFlightChunks = int((u.nextChunkToSend - 1) - u.lastAckedChunk)
+			if u.ackedChunks == nil {
+				u.ackedChunks = map[int64]bool{}
 			}
-			u.bytesSent = bytesReceived
+
+			if !u.ackedChunks[chunkSeq] {
+				u.ackedChunks[chunkSeq] = true
+				if u.inFlightChunks > 0 {
+					u.inFlightChunks--
+				}
+			}
+
+			for u.ackedChunks[u.lastAckedChunk+1] {
+				u.lastAckedChunk++
+			}
+
+			if bytesReceived > u.bytesSent {
+				u.bytesSent = bytesReceived
+			}
+			currentBytesSent := u.bytesSent
 			u.mu.Unlock()
 
 			if u.Progress != nil {
-				u.Progress(bytesReceived, u.Request.Observation.LocalEntry.Size)
+				u.Progress(currentBytesSent, u.Request.Observation.LocalEntry.Size)
 			}
 
 		case "CHUNK_ERROR":
-			return fmt.Errorf("chunk error")
+			reason, _ := payload["error"].(string)
+			if reason == "" {
+				reason = "unknown"
+			}
+			return fmt.Errorf("chunk error: %s", reason)
 
 		default:
-			return fmt.Errorf("unexpected response %q while waiting for chunk ack", command)
+			return fmt.Errorf("%w: got %q while waiting for CHUNK_ACK", ErrUnexpectedResponse, command)
 		}
 	}
 }
 
-func (u *Uploader) sendTransferComplete() bool {
+func (u *Uploader) sendTransferComplete(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	msg := wsclient.TextMessage{
 		"command":   "TRANSFER_COMPLETE",
 		"id":        u.TransferID,
@@ -321,17 +550,34 @@ func (u *Uploader) sendTransferComplete() bool {
 		},
 	}
 
-	return u.SendQueue.Push(msg)
+	if ok := u.SendQueue.Push(msg); !ok {
+		return fmt.Errorf("%w: send transfer complete", ErrQueueClosed)
+	}
+
+	return nil
 }
 
-func (u *Uploader) waitForFinalization(ctx context.Context) bool {
-	msg, ok, err := u.responseQueue.Pop(ctx)
-	if err != nil || !ok {
-		return false
+func (u *Uploader) waitForFinalization(ctx context.Context) error {
+	waitCtx, cancel := context.WithTimeout(ctx, u.FinalizationTimeout)
+	defer cancel()
+
+	msg, ok, err := u.responseQueue.Pop(waitCtx)
+	if err != nil {
+		return fmt.Errorf("wait for transfer finalization: %w", err)
+	}
+	if !ok {
+		return fmt.Errorf("%w: response queue closed while waiting for finalization", ErrQueueClosed)
 	}
 
 	command, _ := msg["command"].(string)
-	payload, _ := msg["payload"].(map[string]any)
+	payload, err := payloadMap(msg)
+	if err != nil {
+		return err
+	}
+
+	if err := u.validateResponseTransferID(payload); err != nil {
+		return err
+	}
 
 	switch command {
 	case "TRANSFER_FINALIZE":
@@ -351,13 +597,21 @@ func (u *Uploader) waitForFinalization(ctx context.Context) bool {
 			record.RemoteCTimeNS = &createdNS
 		}
 
-		return u.DBWriteQueue.Push(DBWriteRequest{Record: record})
+		if ok := u.DBWriteQueue.Push(DBWriteRequest{Record: record}); !ok {
+			return fmt.Errorf("%w: queue db write", ErrQueueClosed)
+		}
+
+		return nil
 
 	case "UPLOAD_FAILED":
-		return false
+		reason, _ := payload["error"].(string)
+		if reason == "" {
+			reason = "unknown"
+		}
+		return fmt.Errorf("upload failed: %s", reason)
 
 	default:
-		return false
+		return fmt.Errorf("%w: got %q while waiting for TRANSFER_FINALIZE", ErrUnexpectedResponse, command)
 	}
 }
 
@@ -382,6 +636,25 @@ func (u *Uploader) Cancel() {
 	u.cancelled = true
 }
 
+func (u *Uploader) validateResponseTransferID(payload map[string]any) error {
+	transferID, _ := payload["transfer_id"].(string)
+	if transferID == "" {
+		return fmt.Errorf("%w: response missing transfer_id", ErrUnexpectedResponse)
+	}
+	if transferID != u.TransferID {
+		return fmt.Errorf("%w: response transfer_id %q does not match %q", ErrUnexpectedResponse, transferID, u.TransferID)
+	}
+	return nil
+}
+
+func payloadMap(msg wsclient.TextMessage) (map[string]any, error) {
+	payload, ok := msg["payload"].(map[string]any)
+	if !ok || payload == nil {
+		return nil, fmt.Errorf("%w: response payload is missing or invalid", ErrUnexpectedResponse)
+	}
+	return payload, nil
+}
+
 func checksumValue(record filedb.FileRecord) string {
 	if record.LocalChecksum == nil {
 		return ""
@@ -395,7 +668,13 @@ func numberAsInt64(value any) (int64, bool) {
 		return int64(v), true
 	case int64:
 		return v, true
+	case int32:
+		return int64(v), true
+	case uint64:
+		return int64(v), true
 	case float64:
+		return int64(v), true
+	case float32:
 		return int64(v), true
 	default:
 		return 0, false

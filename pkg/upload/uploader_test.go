@@ -2,8 +2,10 @@ package upload
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,8 +18,8 @@ func TestUploaderSendTransferInit(t *testing.T) {
 	uploader, sendQueue, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
 	uploader.TransferID = "transfer-1"
 
-	if ok := uploader.sendTransferInit(); !ok {
-		t.Fatal("sendTransferInit() = false, want true")
+	if err := uploader.sendTransferInit(context.Background()); err != nil {
+		t.Fatalf("sendTransferInit() error = %v, want nil", err)
 	}
 
 	msg := popOutbound[wsclient.TextMessage](t, sendQueue)
@@ -43,6 +45,7 @@ func TestUploaderSendTransferInit(t *testing.T) {
 
 func TestUploaderWaitForAcceptanceAcceptAdjustsChunkSize(t *testing.T) {
 	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader.TransferID = "transfer-1"
 
 	uploader.HandleResponse(wsclient.TextMessage{
 		"command": "TRANSFER_ACCEPT",
@@ -52,8 +55,8 @@ func TestUploaderWaitForAcceptanceAcceptAdjustsChunkSize(t *testing.T) {
 		},
 	})
 
-	if ok := uploader.waitForAcceptance(context.Background()); !ok {
-		t.Fatal("waitForAcceptance() = false, want true")
+	if err := uploader.waitForAcceptance(context.Background()); err != nil {
+		t.Fatalf("waitForAcceptance() error = %v, want nil", err)
 	}
 
 	if uploader.ChunkSize != 7 {
@@ -63,6 +66,7 @@ func TestUploaderWaitForAcceptanceAcceptAdjustsChunkSize(t *testing.T) {
 
 func TestUploaderWaitForAcceptanceRejectAlreadyUploaded(t *testing.T) {
 	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader.TransferID = "transfer-1"
 
 	uploader.HandleResponse(wsclient.TextMessage{
 		"command": "TRANSFER_REJECT",
@@ -72,8 +76,9 @@ func TestUploaderWaitForAcceptanceRejectAlreadyUploaded(t *testing.T) {
 		},
 	})
 
-	if ok := uploader.waitForAcceptance(context.Background()); ok {
-		t.Fatal("waitForAcceptance() = true, want false")
+	err := uploader.waitForAcceptance(context.Background())
+	if !errors.Is(err, ErrAlreadyUploaded) {
+		t.Fatalf("waitForAcceptance() error = %v, want ErrAlreadyUploaded", err)
 	}
 
 	if !uploader.alreadyUploaded {
@@ -91,8 +96,8 @@ func TestUploaderSendChunksWindowedSendsBinaryFrames(t *testing.T) {
 		uploader.HandleResponse(chunkACK("transfer-1", 2, 11))
 	}()
 
-	if ok := uploader.sendChunksWindowed(context.Background()); !ok {
-		t.Fatal("sendChunksWindowed() = false, want true")
+	if err := uploader.sendChunksWindowed(context.Background()); err != nil {
+		t.Fatalf("sendChunksWindowed() error = %v, want nil", err)
 	}
 
 	frames := sendQueue.Drain()
@@ -159,8 +164,8 @@ func TestUploaderSendTransferComplete(t *testing.T) {
 	uploader.TransferID = "transfer-1"
 	uploader.bytesSent = 11
 
-	if ok := uploader.sendTransferComplete(); !ok {
-		t.Fatal("sendTransferComplete() = false, want true")
+	if err := uploader.sendTransferComplete(context.Background()); err != nil {
+		t.Fatalf("sendTransferComplete() error = %v, want nil", err)
 	}
 
 	msg := popOutbound[wsclient.TextMessage](t, sendQueue)
@@ -190,8 +195,8 @@ func TestUploaderWaitForFinalizationQueuesDBWrite(t *testing.T) {
 		},
 	})
 
-	if ok := uploader.waitForFinalization(context.Background()); !ok {
-		t.Fatal("waitForFinalization() = false, want true")
+	if err := uploader.waitForFinalization(context.Background()); err != nil {
+		t.Fatalf("waitForFinalization() error = %v, want nil", err)
 	}
 
 	reqs := dbQueue.Drain()
@@ -217,8 +222,8 @@ func TestUploaderWaitForFinalizationQueuesDBWrite(t *testing.T) {
 func TestUploaderUploadZeroSizeSkips(t *testing.T) {
 	uploader, sendQueue, dbQueue := makeUploader(t, nil, 5, 10, nil)
 
-	if ok := uploader.Upload(context.Background()); !ok {
-		t.Fatal("Upload() = false, want true for empty file")
+	if err := uploader.Upload(context.Background()); err != nil {
+		t.Fatalf("Upload() error = %v, want nil for empty file", err)
 	}
 
 	if sendQueue.Len() != 0 {
@@ -226,6 +231,312 @@ func TestUploaderUploadZeroSizeSkips(t *testing.T) {
 	}
 	if dbQueue.Len() != 0 {
 		t.Fatalf("dbQueue.Len() = %d, want 0", dbQueue.Len())
+	}
+}
+
+func TestUploaderWaitForAcceptanceRejectsWrongTransferID(t *testing.T) {
+	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader.TransferID = "transfer-1"
+
+	uploader.HandleResponse(wsclient.TextMessage{
+		"command": "TRANSFER_ACCEPT",
+		"payload": map[string]any{
+			"transfer_id": "other-transfer",
+		},
+	})
+
+	err := uploader.waitForAcceptance(context.Background())
+	if !errors.Is(err, ErrUnexpectedResponse) {
+		t.Fatalf("waitForAcceptance() error = %v, want ErrUnexpectedResponse", err)
+	}
+}
+
+func TestUploaderWaitForAcceptanceTimesOut(t *testing.T) {
+	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader.TransferID = "transfer-1"
+	uploader.AcceptanceTimeout = 10 * time.Millisecond
+
+	err := uploader.waitForAcceptance(context.Background())
+	if err == nil {
+		t.Fatal("waitForAcceptance() error = nil, want timeout")
+	}
+	if !strings.Contains(err.Error(), "deadline exceeded") {
+		t.Fatalf("waitForAcceptance() error = %v, want deadline exceeded", err)
+	}
+}
+
+func TestUploaderProcessACKsRejectsWrongTransferID(t *testing.T) {
+	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader.TransferID = "transfer-1"
+	uploader.nextChunkToSend = 1
+	uploader.inFlightChunks = 1
+
+	uploader.HandleResponse(wsclient.TextMessage{
+		"command": "CHUNK_ACK",
+		"payload": map[string]any{
+			"transfer_id":    "other-transfer",
+			"chunk_sequence": int64(0),
+			"bytes_received": int64(5),
+		},
+	})
+
+	err := uploader.processACKs(context.Background(), 1)
+	if !errors.Is(err, ErrUnexpectedResponse) {
+		t.Fatalf("processACKs() error = %v, want ErrUnexpectedResponse", err)
+	}
+}
+
+func TestUploaderProcessACKsRejectsMissingPayload(t *testing.T) {
+	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader.TransferID = "transfer-1"
+	uploader.nextChunkToSend = 1
+	uploader.inFlightChunks = 1
+
+	uploader.HandleResponse(wsclient.TextMessage{
+		"command": "CHUNK_ACK",
+	})
+
+	err := uploader.processACKs(context.Background(), 1)
+	if !errors.Is(err, ErrUnexpectedResponse) {
+		t.Fatalf("processACKs() error = %v, want ErrUnexpectedResponse", err)
+	}
+}
+
+func TestUploaderProcessACKsReturnsChunkError(t *testing.T) {
+	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader.TransferID = "transfer-1"
+	uploader.nextChunkToSend = 1
+	uploader.inFlightChunks = 1
+
+	uploader.HandleResponse(wsclient.TextMessage{
+		"command": "CHUNK_ERROR",
+		"payload": map[string]any{
+			"transfer_id": "transfer-1",
+			"error":       "bad chunk",
+		},
+	})
+
+	err := uploader.processACKs(context.Background(), 1)
+	if err == nil {
+		t.Fatal("processACKs() error = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "bad chunk") {
+		t.Fatalf("processACKs() error = %v, want bad chunk", err)
+	}
+}
+
+func TestUploaderSendChunksWindowedReturnsWhenACKProcessorFails(t *testing.T) {
+	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader.TransferID = "transfer-1"
+
+	uploader.HandleResponse(wsclient.TextMessage{
+		"command": "CHUNK_ERROR",
+		"payload": map[string]any{
+			"transfer_id": "transfer-1",
+			"error":       "bad chunk",
+		},
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	err := uploader.sendChunksWindowed(ctx)
+	if err == nil {
+		t.Fatal("sendChunksWindowed() error = nil, want error")
+	}
+}
+
+func TestUploaderSendTransferInitFailsWhenSendQueueClosed(t *testing.T) {
+	uploader, sendQueue, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader.TransferID = "transfer-1"
+	sendQueue.Close()
+
+	err := uploader.sendTransferInit(context.Background())
+	if !errors.Is(err, ErrQueueClosed) {
+		t.Fatalf("sendTransferInit() error = %v, want ErrQueueClosed", err)
+	}
+}
+
+func TestUploaderWaitForFinalizationFailsWhenDBQueueClosed(t *testing.T) {
+	uploader, _, dbQueue := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader.TransferID = "transfer-1"
+	dbQueue.Close()
+
+	uploader.HandleResponse(wsclient.TextMessage{
+		"command": "TRANSFER_FINALIZE",
+		"payload": map[string]any{
+			"transfer_id": "transfer-1",
+			"file_id":     456,
+		},
+	})
+
+	err := uploader.waitForFinalization(context.Background())
+	if !errors.Is(err, ErrQueueClosed) {
+		t.Fatalf("waitForFinalization() error = %v, want ErrQueueClosed", err)
+	}
+}
+
+func TestUploaderUploadZeroSizeDoesNotRequireTransferID(t *testing.T) {
+	uploader, sendQueue, dbQueue := makeUploader(t, nil, 5, 10, nil)
+	uploader.TransferID = ""
+
+	if err := uploader.Upload(context.Background()); err != nil {
+		t.Fatalf("Upload() error = %v, want nil for empty file", err)
+	}
+
+	if sendQueue.Len() != 0 {
+		t.Fatalf("sendQueue.Len() = %d, want 0", sendQueue.Len())
+	}
+	if dbQueue.Len() != 0 {
+		t.Fatalf("dbQueue.Len() = %d, want 0", dbQueue.Len())
+	}
+}
+
+func TestUploaderUploadRejectsBlankChecksumForNonEmptyFile(t *testing.T) {
+	uploader, sendQueue, dbQueue := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader.TransferID = "transfer-1"
+
+	blank := ""
+	uploader.Request.UpdatedRecord.LocalChecksum = &blank
+
+	err := uploader.Upload(context.Background())
+	if !errors.Is(err, ErrInvalidUploadRequest) {
+		t.Fatalf("Upload() error = %v, want ErrInvalidUploadRequest", err)
+	}
+
+	if sendQueue.Len() != 0 {
+		t.Fatalf("sendQueue.Len() = %d, want 0", sendQueue.Len())
+	}
+	if dbQueue.Len() != 0 {
+		t.Fatalf("dbQueue.Len() = %d, want 0", dbQueue.Len())
+	}
+}
+
+func TestUploaderUploadRejectsMissingChecksumForNonEmptyFile(t *testing.T) {
+	uploader, sendQueue, dbQueue := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader.TransferID = "transfer-1"
+	uploader.Request.UpdatedRecord.LocalChecksum = nil
+
+	err := uploader.Upload(context.Background())
+	if !errors.Is(err, ErrInvalidUploadRequest) {
+		t.Fatalf("Upload() error = %v, want ErrInvalidUploadRequest", err)
+	}
+
+	if sendQueue.Len() != 0 {
+		t.Fatalf("sendQueue.Len() = %d, want 0", sendQueue.Len())
+	}
+	if dbQueue.Len() != 0 {
+		t.Fatalf("dbQueue.Len() = %d, want 0", dbQueue.Len())
+	}
+}
+
+func TestUploaderProcessACKsHandlesOutOfOrderACKs(t *testing.T) {
+	var progress []int64
+
+	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, func(sent int64, total int64) {
+		progress = append(progress, sent)
+	})
+	uploader.TransferID = "transfer-1"
+	uploader.ackedChunks = map[int64]bool{}
+	uploader.nextChunkToSend = 3
+	uploader.inFlightChunks = 3
+
+	uploader.HandleResponse(chunkACK("transfer-1", 2, 11))
+	uploader.HandleResponse(chunkACK("transfer-1", 0, 5))
+	uploader.HandleResponse(chunkACK("transfer-1", 1, 10))
+
+	if err := uploader.processACKs(context.Background(), 3); err != nil {
+		t.Fatalf("processACKs() error = %v", err)
+	}
+
+	if len(uploader.ackedChunks) != 3 {
+		t.Fatalf("len(ackedChunks) = %d, want 3", len(uploader.ackedChunks))
+	}
+	if uploader.lastAckedChunk != 2 {
+		t.Fatalf("lastAckedChunk = %d, want 2", uploader.lastAckedChunk)
+	}
+	if uploader.bytesSent != 11 {
+		t.Fatalf("bytesSent = %d, want 11", uploader.bytesSent)
+	}
+	if uploader.inFlightChunks != 0 {
+		t.Fatalf("inFlightChunks = %d, want 0", uploader.inFlightChunks)
+	}
+	if len(progress) != 3 {
+		t.Fatalf("len(progress) = %d, want 3", len(progress))
+	}
+}
+
+func TestUploaderProcessACKsDoesNotCompleteOnHighestACKOnly(t *testing.T) {
+	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader.TransferID = "transfer-1"
+	uploader.ACKTimeout = 10 * time.Millisecond
+	uploader.ackedChunks = map[int64]bool{}
+	uploader.nextChunkToSend = 3
+	uploader.inFlightChunks = 3
+
+	uploader.HandleResponse(chunkACK("transfer-1", 2, 11))
+
+	err := uploader.processACKs(context.Background(), 3)
+	if err == nil {
+		t.Fatal("processACKs() error = nil, want timeout waiting for missing ACKs")
+	}
+
+	if len(uploader.ackedChunks) != 1 {
+		t.Fatalf("len(ackedChunks) = %d, want 1", len(uploader.ackedChunks))
+	}
+	if uploader.lastAckedChunk != -1 {
+		t.Fatalf("lastAckedChunk = %d, want -1 because chunks 0 and 1 were not ACKed", uploader.lastAckedChunk)
+	}
+}
+
+func TestUploaderProcessACKsIgnoresDuplicateACKForCompletion(t *testing.T) {
+	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader.TransferID = "transfer-1"
+	uploader.ackedChunks = map[int64]bool{}
+	uploader.nextChunkToSend = 3
+	uploader.inFlightChunks = 3
+
+	uploader.HandleResponse(chunkACK("transfer-1", 0, 5))
+	uploader.HandleResponse(chunkACK("transfer-1", 0, 5))
+	uploader.HandleResponse(chunkACK("transfer-1", 1, 10))
+	uploader.HandleResponse(chunkACK("transfer-1", 2, 11))
+
+	if err := uploader.processACKs(context.Background(), 3); err != nil {
+		t.Fatalf("processACKs() error = %v", err)
+	}
+
+	if len(uploader.ackedChunks) != 3 {
+		t.Fatalf("len(ackedChunks) = %d, want 3", len(uploader.ackedChunks))
+	}
+	if uploader.inFlightChunks != 0 {
+		t.Fatalf("inFlightChunks = %d, want 0", uploader.inFlightChunks)
+	}
+}
+
+func TestUploaderSendChunksWindowedResetsStaleACKState(t *testing.T) {
+	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader.TransferID = "transfer-1"
+
+	uploader.ackedChunks[0] = true
+	uploader.ackedChunks[1] = true
+	uploader.ackedChunks[2] = true
+	uploader.lastAckedChunk = 2
+	uploader.nextChunkToSend = 3
+	uploader.inFlightChunks = 0
+
+	uploader.HandleResponse(chunkACK("transfer-1", 0, 5))
+	uploader.HandleResponse(chunkACK("transfer-1", 1, 10))
+	uploader.HandleResponse(chunkACK("transfer-1", 2, 11))
+
+	if err := uploader.sendChunksWindowed(context.Background()); err != nil {
+		t.Fatalf("sendChunksWindowed() error = %v, want nil", err)
+	}
+
+	if len(uploader.ackedChunks) != 3 {
+		t.Fatalf("len(ackedChunks) = %d, want 3 fresh ACKs", len(uploader.ackedChunks))
+	}
+	if uploader.lastAckedChunk != 2 {
+		t.Fatalf("lastAckedChunk = %d, want 2", uploader.lastAckedChunk)
 	}
 }
 

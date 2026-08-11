@@ -293,11 +293,14 @@ type fakeUploader struct {
 	messages   []wsclient.TextMessage
 }
 
-func (f *fakeUploader) Upload(ctx context.Context) bool {
+func (f *fakeUploader) Upload(ctx context.Context) error {
 	if f.onUpload != nil {
 		f.onUpload()
 	}
-	return f.result
+	if f.result {
+		return nil
+	}
+	return fmt.Errorf("upload failed")
 }
 
 func (f *fakeUploader) HandleResponse(msg wsclient.TextMessage) {
