@@ -139,12 +139,12 @@ func TestManagerWorkerRecordsSuccessfulResult(t *testing.T) {
 		return ok
 	})
 
-	got, ok := manager.Result(transferID)
+	result, ok := manager.Result(transferID)
 	if !ok {
 		t.Fatal("Result() ok = false, want true")
 	}
-	if !got {
-		t.Fatal("Result() = false, want true")
+	if !result.Success {
+		t.Fatalf("Result() error = %v, wanted Success == true", result.Err)
 	}
 }
 
@@ -174,12 +174,12 @@ func TestManagerWorkerRecordsFailedResult(t *testing.T) {
 		return ok
 	})
 
-	got, ok := manager.Result(transferID)
+	result, ok := manager.Result(transferID)
 	if !ok {
 		t.Fatal("Result() ok = false, want true")
 	}
-	if got {
-		t.Fatal("Result() = true, want false")
+	if result.Success {
+		t.Fatal("result.Success = true, wanted false")
 	}
 }
 
@@ -264,6 +264,235 @@ func TestManagerHandleMessageIgnoresUnknownTransfer(t *testing.T) {
 	manager.HandleMessage(msg)
 }
 
+func TestManagerStartWorkersIsIdempotent(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	started := make(chan struct{}, 10)
+	release := make(chan struct{})
+
+	manager := newTestManager(t, Config{
+		MaxConcurrent: 1,
+		Factory: func(req Request) uploaderRunner {
+			return &fakeUploader{
+				transferID: fmt.Sprintf("transfer-%d", req.ProjectID),
+				result:     true,
+				onUpload: func() {
+					started <- struct{}{}
+					<-release
+				},
+			}
+		},
+	})
+
+	manager.StartWorkers(ctx)
+	manager.StartWorkers(ctx)
+	manager.StartWorkers(ctx)
+
+	for i := 0; i < 3; i++ {
+		if _, err := manager.QueueUpload(Request{ProjectID: i}); err != nil {
+			t.Fatalf("QueueUpload(%d) error = %v", i, err)
+		}
+	}
+
+	<-started
+
+	select {
+	case <-started:
+		t.Fatal("second upload started; StartWorkers likely started duplicate workers")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(release)
+	manager.StopWorkers()
+}
+
+func TestManagerStopWorkersStopsWorkers(t *testing.T) {
+	ctx := context.Background()
+
+	manager := newTestManager(t, Config{
+		MaxConcurrent: 1,
+		Factory: func(req Request) uploaderRunner {
+			return &fakeUploader{
+				transferID: "transfer-1",
+				result:     true,
+			}
+		},
+	})
+
+	manager.StartWorkers(ctx)
+	if !manager.Running() {
+		t.Fatal("Running() = false, want true")
+	}
+
+	manager.StopWorkers()
+
+	if manager.Running() {
+		t.Fatal("Running() = true after StopWorkers, want false")
+	}
+}
+
+func TestManagerWorkerStoresUploadError(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	uploadErr := fmt.Errorf("network exploded")
+
+	manager := newTestManager(t, Config{
+		MaxConcurrent: 1,
+		Factory: func(req Request) uploaderRunner {
+			return &fakeUploader{
+				transferID: "transfer-1",
+				err:        uploadErr,
+			}
+		},
+	})
+
+	manager.StartWorkers(ctx)
+
+	transferID, err := manager.QueueUpload(Request{})
+	if err != nil {
+		t.Fatalf("QueueUpload() error = %v", err)
+	}
+
+	waitFor(t, time.Second, func() bool {
+		_, ok := manager.Result(transferID)
+		return ok
+	})
+
+	result, ok := manager.Result(transferID)
+	if !ok {
+		t.Fatal("Result() ok = false, want true")
+	}
+	if result.Success {
+		t.Fatal("Result.Success = true, want false")
+	}
+	if result.Err == nil || result.Err.Error() != "network exploded" {
+		t.Fatalf("Result.Err = %v, want network exploded", result.Err)
+	}
+}
+
+func TestManagerWorkerRecoversPanic(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	manager := newTestManager(t, Config{
+		MaxConcurrent: 1,
+		Factory: func(req Request) uploaderRunner {
+			return &fakeUploader{
+				transferID: "transfer-1",
+				onUpload: func() {
+					panic("boom")
+				},
+			}
+		},
+	})
+
+	manager.StartWorkers(ctx)
+
+	transferID, err := manager.QueueUpload(Request{})
+	if err != nil {
+		t.Fatalf("QueueUpload() error = %v", err)
+	}
+
+	waitFor(t, time.Second, func() bool {
+		_, ok := manager.Result(transferID)
+		return ok
+	})
+
+	result, ok := manager.Result(transferID)
+	if !ok {
+		t.Fatal("Result() ok = false, want true")
+	}
+	if result.Success {
+		t.Fatal("Result.Success = true, want false")
+	}
+	if result.Err == nil || result.Err.Error() != "upload panic: boom" {
+		t.Fatalf("Result.Err = %v, want upload panic: boom", result.Err)
+	}
+}
+
+func TestManagerHandleMessageIgnoresNonUploadCommand(t *testing.T) {
+	manager := newTestManager(t, Config{})
+
+	uploader := &fakeUploader{transferID: "transfer-1"}
+
+	manager.mu.Lock()
+	manager.activeUploads["transfer-1"] = uploader
+	manager.mu.Unlock()
+
+	manager.HandleMessage(wsclient.TextMessage{
+		"command": "SOME_OTHER_COMMAND",
+		"payload": map[string]any{
+			"transfer_id": "transfer-1",
+		},
+	})
+
+	if len(uploader.messages) != 0 {
+		t.Fatalf("len(messages) = %d, want 0", len(uploader.messages))
+	}
+}
+
+func TestManagerPauseResumeCancelActiveUpload(t *testing.T) {
+	manager := newTestManager(t, Config{})
+
+	uploader := &fakeUploader{transferID: "transfer-1"}
+
+	manager.mu.Lock()
+	manager.activeUploads["transfer-1"] = uploader
+	manager.mu.Unlock()
+
+	if !manager.PauseUpload("transfer-1") {
+		t.Fatal("PauseUpload() = false, want true")
+	}
+	if !manager.ResumeUpload("transfer-1") {
+		t.Fatal("ResumeUpload() = false, want true")
+	}
+	if !manager.CancelUpload("transfer-1") {
+		t.Fatal("CancelUpload() = false, want true")
+	}
+
+	uploader.mu.Lock()
+	defer uploader.mu.Unlock()
+
+	if !uploader.paused {
+		t.Fatal("paused = false, want true")
+	}
+	if !uploader.resumed {
+		t.Fatal("resumed = false, want true")
+	}
+	if !uploader.cancelled {
+		t.Fatal("cancelled = false, want true")
+	}
+}
+
+func TestManagerPauseResumeCancelMissingUpload(t *testing.T) {
+	manager := newTestManager(t, Config{})
+
+	if manager.PauseUpload("missing") {
+		t.Fatal("PauseUpload(missing) = true, want false")
+	}
+	if manager.ResumeUpload("missing") {
+		t.Fatal("ResumeUpload(missing) = true, want false")
+	}
+	if manager.CancelUpload("missing") {
+		t.Fatal("CancelUpload(missing) = true, want false")
+	}
+}
+
+func TestManagerQueueUploadRejectsNilUploader(t *testing.T) {
+	manager := newTestManager(t, Config{
+		Factory: func(req Request) uploaderRunner {
+			return nil
+		},
+	})
+
+	_, err := manager.QueueUpload(Request{})
+	if err == nil {
+		t.Fatal("QueueUpload() error = nil, want error")
+	}
+}
+
 func newTestManager(t *testing.T, cfg Config) *Manager {
 	t.Helper()
 
@@ -285,17 +514,38 @@ func newTestManager(t *testing.T, cfg Config) *Manager {
 	return manager
 }
 
+func waitFor(t *testing.T, timeout time.Duration, fn func() bool) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if fn() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	t.Fatal("condition not met before timeout")
+}
+
 type fakeUploader struct {
 	mu         sync.Mutex
 	transferID string
 	result     bool
+	err        error
 	onUpload   func()
 	messages   []wsclient.TextMessage
+	paused     bool
+	resumed    bool
+	cancelled  bool
 }
 
 func (f *fakeUploader) Upload(ctx context.Context) error {
 	if f.onUpload != nil {
 		f.onUpload()
+	}
+	if f.err != nil {
+		return f.err
 	}
 	if f.result {
 		return nil
@@ -318,16 +568,20 @@ func (f *fakeUploader) SetTransferID(id string) {
 	f.transferID = id
 }
 
-func waitFor(t *testing.T, timeout time.Duration, fn func() bool) {
-	t.Helper()
+func (f *fakeUploader) Pause() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.paused = true
+}
 
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if fn() {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+func (f *fakeUploader) Resume() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.resumed = true
+}
 
-	t.Fatal("condition not met before timeout")
+func (f *fakeUploader) Cancel() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.cancelled = true
 }

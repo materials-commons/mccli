@@ -18,10 +18,20 @@ type uploaderRunner interface {
 	HandleResponse(msg wsclient.TextMessage)
 	TransferIDValue() string
 	SetTransferID(id string)
+	Pause()
+	Resume()
+	Cancel()
 }
 
 // UploaderFactory creates uploaders. It is injectable for tests.
 type UploaderFactory func(req Request) uploaderRunner
+
+// Result describes the outcome of one transfer.
+type Result struct {
+	TransferID string
+	Success    bool
+	Err        error
+}
 
 // Manager manages queued concurrent uploads.
 type Manager struct {
@@ -35,7 +45,12 @@ type Manager struct {
 
 	mu            sync.Mutex
 	activeUploads map[string]uploaderRunner
-	results       map[string]bool
+	results       map[string]Result
+
+	started bool
+	cancel  context.CancelFunc
+	done    chan struct{}
+	wg      sync.WaitGroup
 
 	factory UploaderFactory
 }
@@ -71,7 +86,7 @@ func NewManager(cfg Config) (*Manager, error) {
 		maxConcurrent: cfg.MaxConcurrent,
 		uploadQueue:   wsclient.NewQueue[uploaderRunner](),
 		activeUploads: map[string]uploaderRunner{},
-		results:       map[string]bool{},
+		results:       map[string]Result{},
 		factory:       cfg.Factory,
 	}
 
@@ -90,10 +105,60 @@ func NewManager(cfg Config) (*Manager, error) {
 }
 
 // StartWorkers starts background upload workers.
+//
+// It is safe to call StartWorkers more than once; only the first call starts
+// workers.
 func (m *Manager) StartWorkers(ctx context.Context) {
-	for i := 0; i < m.maxConcurrent; i++ {
-		go m.worker(ctx, i)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.started {
+		return
 	}
+
+	workerCtx, cancel := context.WithCancel(ctx)
+	m.cancel = cancel
+	m.done = make(chan struct{})
+	m.started = true
+
+	for i := 0; i < m.maxConcurrent; i++ {
+		m.wg.Add(1)
+		go m.worker(workerCtx, i)
+	}
+
+	go func() {
+		m.wg.Wait()
+		close(m.done)
+
+		m.mu.Lock()
+		m.started = false
+		m.cancel = nil
+		m.mu.Unlock()
+	}()
+}
+
+// StopWorkers stops workers and waits for them to exit.
+func (m *Manager) StopWorkers() {
+	m.mu.Lock()
+	cancel := m.cancel
+	done := m.done
+	m.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+
+	if done != nil {
+		<-done
+	}
+}
+
+// Running reports whether workers are running.
+func (m *Manager) Running() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.started
 }
 
 // QueueUpload enqueues one upload and returns its transfer ID.
@@ -106,6 +171,10 @@ func (m *Manager) QueueUpload(req Request) (string, error) {
 	}
 
 	uploader := m.factory(req)
+	if uploader == nil {
+		return "", fmt.Errorf("uploader factory returned nil")
+	}
+
 	if uploader.TransferIDValue() == "" {
 		uploader.SetTransferID(uuid.NewString())
 	}
@@ -119,6 +188,11 @@ func (m *Manager) QueueUpload(req Request) (string, error) {
 
 // HandleMessage routes an incoming websocket message to its active uploader.
 func (m *Manager) HandleMessage(msg wsclient.TextMessage) {
+	command, _ := msg["command"].(string)
+	if !isUploadResponseCommand(command) {
+		return
+	}
+
 	payload, _ := msg["payload"].(map[string]any)
 	if payload == nil {
 		return
@@ -138,8 +212,8 @@ func (m *Manager) HandleMessage(msg wsclient.TextMessage) {
 	}
 }
 
-// Result returns whether a transfer completed successfully.
-func (m *Manager) Result(transferID string) (bool, bool) {
+// Result returns the result for a transfer.
+func (m *Manager) Result(transferID string) (Result, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -147,24 +221,120 @@ func (m *Manager) Result(transferID string) (bool, bool) {
 	return result, ok
 }
 
+// Success returns whether a transfer completed successfully.
+//
+// This is a convenience wrapper for older call sites/tests that only care about
+// success.
+func (m *Manager) Success(transferID string) (bool, bool) {
+	result, ok := m.Result(transferID)
+	if !ok {
+		return false, false
+	}
+	return result.Success, true
+}
+
+// ActiveCount returns the number of currently active uploads.
+func (m *Manager) ActiveCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return len(m.activeUploads)
+}
+
+// PauseUpload pauses an active upload.
+func (m *Manager) PauseUpload(transferID string) bool {
+	m.mu.Lock()
+	uploader := m.activeUploads[transferID]
+	m.mu.Unlock()
+
+	if uploader == nil {
+		return false
+	}
+
+	uploader.Pause()
+	return true
+}
+
+// ResumeUpload resumes an active upload.
+func (m *Manager) ResumeUpload(transferID string) bool {
+	m.mu.Lock()
+	uploader := m.activeUploads[transferID]
+	m.mu.Unlock()
+
+	if uploader == nil {
+		return false
+	}
+
+	uploader.Resume()
+	return true
+}
+
+// CancelUpload cancels an active upload.
+func (m *Manager) CancelUpload(transferID string) bool {
+	m.mu.Lock()
+	uploader := m.activeUploads[transferID]
+	m.mu.Unlock()
+
+	if uploader == nil {
+		return false
+	}
+
+	uploader.Cancel()
+	return true
+}
+
 func (m *Manager) worker(ctx context.Context, workerID int) {
+	defer m.wg.Done()
+
 	for {
 		uploader, ok, err := m.uploadQueue.Pop(ctx)
 		if err != nil || !ok {
 			return
 		}
 
-		transferID := uploader.TransferIDValue()
+		m.runUploader(ctx, uploader)
+	}
+}
 
-		m.mu.Lock()
-		m.activeUploads[transferID] = uploader
-		m.mu.Unlock()
+func (m *Manager) runUploader(ctx context.Context, uploader uploaderRunner) {
+	transferID := uploader.TransferIDValue()
 
-		uploadErr := uploader.Upload(ctx)
+	m.mu.Lock()
+	m.activeUploads[transferID] = uploader
+	m.mu.Unlock()
 
-		m.mu.Lock()
-		delete(m.activeUploads, transferID)
-		m.results[transferID] = uploadErr == nil
-		m.mu.Unlock()
+	var uploadErr error
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				uploadErr = fmt.Errorf("upload panic: %v", r)
+			}
+		}()
+
+		uploadErr = uploader.Upload(ctx)
+	}()
+
+	m.mu.Lock()
+	delete(m.activeUploads, transferID)
+	m.results[transferID] = Result{
+		TransferID: transferID,
+		Success:    uploadErr == nil,
+		Err:        uploadErr,
+	}
+	m.mu.Unlock()
+}
+
+func isUploadResponseCommand(command string) bool {
+	switch command {
+	case "TRANSFER_ACCEPT",
+		"TRANSFER_REJECT",
+		"CHUNK_ACK",
+		"CHUNK_ERROR",
+		"TRANSFER_FINALIZE",
+		"UPLOAD_FAILED",
+		"TRANSFER_RESUME_RESPONSE":
+		return true
+	default:
+		return false
 	}
 }
