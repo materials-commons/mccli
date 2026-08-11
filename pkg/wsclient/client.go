@@ -20,6 +20,14 @@ var (
 	// ErrRequeueFailed indicates that a message could not be restored to the
 	// outbound queue after a websocket send failure.
 	ErrRequeueFailed = errors.New("failed to requeue outbound websocket message")
+
+	// ErrReconnect indicates that the websocket connection was lost or could not
+	// be established and should be retried after backoff.
+	ErrReconnect = errors.New("websocket reconnect required")
+
+	// ErrInvalidOutboundMessage indicates that an outbound message could not be
+	// serialized and should not be retried.
+	ErrInvalidOutboundMessage = errors.New("invalid outbound websocket message")
 )
 
 // websocketConn is the subset of *websocket.Conn used by Client.
@@ -84,6 +92,10 @@ func (c *Client) Run(ctx context.Context) error {
 			return nil
 		}
 
+		if !errors.Is(err, ErrReconnect) {
+			return err
+		}
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -132,7 +144,10 @@ func (c *Client) runOnce(ctx context.Context) error {
 		HTTPHeader: headers,
 	})
 	if err != nil {
-		return err
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		return fmt.Errorf("%w: dial websocket: %v", ErrReconnect, err)
 	}
 
 	runCtx, cancel := context.WithCancel(ctx)
@@ -180,7 +195,7 @@ func (c *Client) runOnce(ctx context.Context) error {
 		return ctx.Err()
 	}
 
-	return firstErr
+	return classifyRunError(firstErr)
 }
 
 func (c *Client) buildHeaders() http.Header {
@@ -232,6 +247,10 @@ func (c *Client) senderLoop(ctx context.Context, conn websocketConn) error {
 		}
 
 		if err := c.send(ctx, conn, msg); err != nil {
+			if errors.Is(err, ErrInvalidOutboundMessage) {
+				return err
+			}
+
 			// Requeue so reconnect can retry.
 			if ok := c.Outbound.Push(msg); !ok {
 				return fmt.Errorf("%w: original send error: %v", ErrRequeueFailed, err)
@@ -250,14 +269,14 @@ func (c *Client) send(ctx context.Context, conn websocketConn, msg OutboundMessa
 	case TextMessage:
 		data, err := json.Marshal(m)
 		if err != nil {
-			return fmt.Errorf("marshal websocket text message: %w", err)
+			return fmt.Errorf("%w: marshal websocket text message: %v", ErrInvalidOutboundMessage, err)
 		}
 		return conn.Write(ctx, websocket.MessageText, data)
 
 	case BinaryFrame:
 		header, err := json.Marshal(m.Header)
 		if err != nil {
-			return fmt.Errorf("marshal websocket binary frame header: %w", err)
+			return fmt.Errorf("%w: marshal websocket binary frame header: %v", ErrInvalidOutboundMessage, err)
 		}
 
 		var frame bytes.Buffer
@@ -268,7 +287,7 @@ func (c *Client) send(ctx context.Context, conn websocketConn, msg OutboundMessa
 		return conn.Write(ctx, websocket.MessageBinary, frame.Bytes())
 
 	default:
-		return fmt.Errorf("unknown outbound message type %T", msg)
+		return fmt.Errorf("%w: unknown outbound message type %T", ErrInvalidOutboundMessage, msg)
 	}
 }
 
@@ -282,7 +301,7 @@ func (c *Client) receiverLoop(ctx context.Context, conn websocketConn) error {
 			continue
 		}
 
-		if err := c.dispatchRaw(ctx, data); err != nil {
+		if err := c.dispatchRaw(data); err != nil {
 			continue
 		}
 	}
@@ -328,10 +347,10 @@ func (c *Client) safeHandle(ctx context.Context, msg TextMessage) {
 	c.Handle(ctx, msg)
 }
 
-func (c *Client) dispatchRaw(ctx context.Context, data []byte) error {
+func (c *Client) dispatchRaw(data []byte) error {
 	var one TextMessage
 	if err := json.Unmarshal(data, &one); err == nil {
-		c.dispatch(ctx, one)
+		c.dispatch(one)
 		return nil
 	}
 
@@ -341,13 +360,13 @@ func (c *Client) dispatchRaw(ctx context.Context, data []byte) error {
 	}
 
 	for _, msg := range many {
-		c.dispatch(ctx, msg)
+		c.dispatch(msg)
 	}
 
 	return nil
 }
 
-func (c *Client) dispatch(ctx context.Context, msg TextMessage) {
+func (c *Client) dispatch(msg TextMessage) {
 	kind, _ := msg["type"].(string)
 	if kind == "" {
 		kind, _ = msg["command"].(string)
@@ -363,6 +382,22 @@ func (c *Client) dispatch(ctx context.Context, msg TextMessage) {
 	}
 
 	c.Inbound.Push(msg)
+}
+
+func classifyRunError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	if errors.Is(err, ErrRequeueFailed) {
+		return err
+	}
+
+	// Most receiver read errors and sender write errors mean the websocket
+	// connection is no longer usable and should be re-established.
+	return fmt.Errorf("%w: %v", ErrReconnect, err)
 }
 
 func numberAsInt(value any) (int, bool) {

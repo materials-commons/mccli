@@ -381,7 +381,7 @@ func TestClientDispatchRawQueuesArray(t *testing.T) {
 		Inbound: NewQueue[TextMessage](),
 	}
 
-	err := client.dispatchRaw(context.Background(), []byte(`[
+	err := client.dispatchRaw([]byte(`[
 		{"command":"ONE"},
 		{"command":"TWO"}
 	]`))
@@ -409,7 +409,7 @@ func TestClientDispatchConnectedStoresUserID(t *testing.T) {
 		},
 	}
 
-	client.dispatch(context.Background(), TextMessage{
+	client.dispatch(TextMessage{
 		"command": "connected",
 		"payload": map[string]any{
 			"user_id": float64(42),
@@ -597,6 +597,45 @@ func TestClientHandlerLoopRecoversPanic(t *testing.T) {
 		}
 	case <-ctx.Done():
 		t.Fatal("timed out waiting for handler after panic")
+	}
+}
+
+func TestClassifyRunError(t *testing.T) {
+	err := classifyRunError(errors.New("read failed"))
+	if !errors.Is(err, ErrReconnect) {
+		t.Fatalf("classifyRunError() = %v, want ErrReconnect", err)
+	}
+
+	err = classifyRunError(context.Canceled)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("classifyRunError() = %v, want context.Canceled", err)
+	}
+
+	err = classifyRunError(ErrRequeueFailed)
+	if !errors.Is(err, ErrRequeueFailed) {
+		t.Fatalf("classifyRunError() = %v, want ErrRequeueFailed", err)
+	}
+}
+
+func TestClientSenderLoopDoesNotRequeueInvalidOutboundMessage(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	queue := NewQueue[OutboundMessage]()
+	queue.Push(TextMessage{
+		"command": "PING",
+		"bad":     func() {},
+	})
+
+	client := &Client{Outbound: queue}
+
+	err := client.senderLoop(ctx, &fakeWebsocketConn{})
+	if !errors.Is(err, ErrInvalidOutboundMessage) {
+		t.Fatalf("senderLoop() error = %v, want ErrInvalidOutboundMessage", err)
+	}
+
+	if queue.Len() != 0 {
+		t.Fatalf("queue.Len() = %d, want 0 because invalid message should not be retried", queue.Len())
 	}
 }
 
