@@ -290,6 +290,7 @@ func newRemoteClient(project config.Project, global config.Global) (RemoteClient
 		return nil, fmt.Errorf("remote %s %s is missing an API key", project.Remote.Email, project.Remote.MCURL)
 	}
 
+	fmt.Printf("APIKey %s, BaseURL %s\n", remoteCfg.APIKey, remoteCfg.MCURL)
 	return mcapi.NewClient(&mcapi.ClientArgs{
 		APIKey:  remoteCfg.APIKey,
 		BaseURL: remoteCfg.MCURL,

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/materials-commons/mccli/pkg/filedb"
 	"github.com/materials-commons/mccli/pkg/reconcile"
 	"github.com/olekukonko/tablewriter"
 	"github.com/olekukonko/tablewriter/tw"
@@ -101,6 +102,11 @@ func fullRow(state reconcile.FileState) []string {
 		rSize = humanize(obs.RemoteEntry.Size)
 		rType = kindCode(obs.RemoteEntry.Kind)
 		rID = remoteFileIDString(obs.RemoteEntry)
+	} else if record, ok := recordForDisplay(state); ok {
+		rUpdated = formatOptionalUnixNano(record.RemoteCTimeNS)
+		rSize = humanizeOptional(record.RemoteSize)
+		rType = remoteRecordKindCode(record)
+		rID = int64PtrString(record.RemoteFileID)
 	}
 
 	return []string{
@@ -154,11 +160,25 @@ func actionRow(state reconcile.FileState) []string {
 	}
 }
 
+func formatOptionalUnixNano(ns *int64) string {
+	if ns == nil {
+		return "-"
+	}
+	return formatUnixNano(*ns)
+}
+
 func formatUnixNano(ns int64) string {
 	if ns == 0 {
 		return "-"
 	}
 	return time.Unix(0, ns).Local().Format("Jan 02  2006")
+}
+
+func humanizeOptional(size *int64) string {
+	if size == nil {
+		return "-"
+	}
+	return humanize(*size)
 }
 
 func humanize(size int64) string {
@@ -185,4 +205,28 @@ func humanize(size int64) string {
 	}
 
 	return fmt.Sprintf("%dB", size)
+}
+
+func int64PtrString(value *int64) string {
+	if value == nil {
+		return "-"
+	}
+	return strconv.FormatInt(*value, 10)
+}
+
+func recordForDisplay(state reconcile.FileState) (filedb.FileRecord, bool) {
+	if state.Observation.FileRecord != nil {
+		return *state.Observation.FileRecord, true
+	}
+	if state.Decision.UpdatedRecord.Path != "" {
+		return state.Decision.UpdatedRecord, true
+	}
+	return filedb.FileRecord{}, false
+}
+
+func remoteRecordKindCode(record filedb.FileRecord) string {
+	if record.RemoteFileID != nil || record.RemoteSize != nil || record.RemoteCTimeNS != nil {
+		return "F"
+	}
+	return "-"
 }
