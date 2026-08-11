@@ -41,8 +41,22 @@ type Client struct {
 	Token    string
 	ClientID string
 	Headers  http.Header
+
+	// Outbound is the queue used by application code to send websocket messages.
 	Outbound *Queue[OutboundMessage]
-	Handle   Handler
+
+	// Inbound is the queue used by receiverLoop to hand messages to handler
+	// workers without blocking websocket reads.
+	Inbound *Queue[TextMessage]
+
+	// Handle processes inbound websocket messages. It is called by handler
+	// workers, not by the websocket receiver loop.
+	Handle Handler
+
+	// HandlerConcurrency controls how many goroutines process inbound messages.
+	// If zero, it defaults to 1 to preserve message order while keeping the
+	// receiver loop non-blocking.
+	HandlerConcurrency int
 
 	Hostname   string
 	ProjectIDs []int
@@ -54,15 +68,7 @@ type Client struct {
 
 // Run connects and reconnects until ctx is cancelled.
 func (c *Client) Run(ctx context.Context) error {
-	if c.Outbound == nil {
-		c.Outbound = NewQueue[OutboundMessage]()
-	}
-	if c.ReconnectMin == 0 {
-		c.ReconnectMin = time.Second
-	}
-	if c.ReconnectMax == 0 {
-		c.ReconnectMax = 30 * time.Second
-	}
+	c.ensureDefaults()
 
 	backoff := c.ReconnectMin
 
@@ -89,7 +95,27 @@ func (c *Client) Run(ctx context.Context) error {
 	}
 }
 
+func (c *Client) ensureDefaults() {
+	if c.Outbound == nil {
+		c.Outbound = NewQueue[OutboundMessage]()
+	}
+	if c.Inbound == nil {
+		c.Inbound = NewQueue[TextMessage]()
+	}
+	if c.HandlerConcurrency <= 0 {
+		c.HandlerConcurrency = 1
+	}
+	if c.ReconnectMin == 0 {
+		c.ReconnectMin = time.Second
+	}
+	if c.ReconnectMax == 0 {
+		c.ReconnectMax = 30 * time.Second
+	}
+}
+
 func (c *Client) runOnce(ctx context.Context) error {
+	c.ensureDefaults()
+
 	headers := c.buildHeaders()
 
 	conn, _, err := websocket.Dial(ctx, c.URL, &websocket.DialOptions{
@@ -102,10 +128,10 @@ func (c *Client) runOnce(ctx context.Context) error {
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	errCh := make(chan error, 3)
+	errCh := make(chan error, 3+c.HandlerConcurrency)
 
 	var wg sync.WaitGroup
-	wg.Add(3)
+	wg.Add(3 + c.HandlerConcurrency)
 
 	go func() {
 		defer wg.Done()
@@ -119,6 +145,13 @@ func (c *Client) runOnce(ctx context.Context) error {
 		defer wg.Done()
 		errCh <- c.heartbeatLoop(runCtx)
 	}()
+
+	for i := 0; i < c.HandlerConcurrency; i++ {
+		go func() {
+			defer wg.Done()
+			errCh <- c.handlerLoop(runCtx)
+		}()
+	}
 
 	firstErr := <-errCh
 	cancel()
@@ -230,6 +263,8 @@ func (c *Client) send(ctx context.Context, conn websocketConn, msg OutboundMessa
 }
 
 func (c *Client) receiverLoop(ctx context.Context, conn websocketConn) error {
+	c.ensureDefaults()
+
 	for {
 		messageType, data, err := conn.Read(ctx)
 		if err != nil {
@@ -254,14 +289,37 @@ func (c *Client) heartbeatLoop(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			c.Outbound.Push(TextMessage{
-				"command":   "HEARTBEAT",
-				"clientId":  c.ClientID,
-				"client_id": c.ClientID,
-				"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
-			})
+			c.Outbound.Push(c.heartbeatMessage())
 		}
 	}
+}
+
+func (c *Client) handlerLoop(ctx context.Context) error {
+	c.ensureDefaults()
+
+	for {
+		msg, ok, err := c.Inbound.Pop(ctx)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return nil
+		}
+
+		c.safeHandle(ctx, msg)
+	}
+}
+
+func (c *Client) safeHandle(ctx context.Context, msg TextMessage) {
+	if c.Handle == nil {
+		return
+	}
+
+	defer func() {
+		_ = recover()
+	}()
+
+	c.Handle(ctx, msg)
 }
 
 func (c *Client) dispatchRaw(ctx context.Context, data []byte) error {
@@ -284,6 +342,8 @@ func (c *Client) dispatchRaw(ctx context.Context, data []byte) error {
 }
 
 func (c *Client) dispatch(ctx context.Context, msg TextMessage) {
+	c.ensureDefaults()
+
 	kind, _ := msg["type"].(string)
 	if kind == "" {
 		kind, _ = msg["command"].(string)
@@ -298,9 +358,7 @@ func (c *Client) dispatch(ctx context.Context, msg TextMessage) {
 		return
 	}
 
-	if c.Handle != nil {
-		c.Handle(ctx, msg)
-	}
+	c.Inbound.Push(msg)
 }
 
 func numberAsInt(value any) (int, bool) {

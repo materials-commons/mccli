@@ -132,10 +132,18 @@ func TestClientReceiverLoopDispatchesTextMessage(t *testing.T) {
 
 	got := make(chan TextMessage, 1)
 	client := &Client{
+		Inbound: NewQueue[TextMessage](),
 		Handle: func(ctx context.Context, msg TextMessage) {
 			got <- msg
 		},
 	}
+
+	handlerCtx, handlerCancel := context.WithCancel(ctx)
+	defer handlerCancel()
+
+	go func() {
+		_ = client.handlerLoop(handlerCtx)
+	}()
 
 	go func() {
 		_ = client.receiverLoop(ctx, conn)
@@ -323,11 +331,8 @@ func TestClientReceiverLoopWithFakeConn(t *testing.T) {
 		readErrAfterMessages: context.Canceled,
 	}
 
-	got := make(chan TextMessage, 1)
 	client := &Client{
-		Handle: func(ctx context.Context, msg TextMessage) {
-			got <- msg
-		},
+		Inbound: NewQueue[TextMessage](),
 	}
 
 	err := client.receiverLoop(ctx, conn)
@@ -335,13 +340,12 @@ func TestClientReceiverLoopWithFakeConn(t *testing.T) {
 		t.Fatalf("receiverLoop() error = %v, want context.Canceled", err)
 	}
 
-	select {
-	case msg := <-got:
-		if msg["command"] != "TRANSFER_ACCEPT" {
-			t.Fatalf("command = %v, want TRANSFER_ACCEPT", msg["command"])
-		}
-	default:
-		t.Fatal("handler was not called")
+	items := client.Inbound.Drain()
+	if len(items) != 1 {
+		t.Fatalf("len(Inbound.Drain()) = %d, want 1", len(items))
+	}
+	if items[0]["command"] != "TRANSFER_ACCEPT" {
+		t.Fatalf("command = %v, want TRANSFER_ACCEPT", items[0]["command"])
 	}
 }
 
@@ -372,14 +376,9 @@ func TestClientBuildHeadersIncludesHostnameAndProjects(t *testing.T) {
 	}
 }
 
-func TestClientDispatchRawDispatchesArray(t *testing.T) {
-	var got []string
-
+func TestClientDispatchRawQueuesArray(t *testing.T) {
 	client := &Client{
-		Handle: func(ctx context.Context, msg TextMessage) {
-			command, _ := msg["command"].(string)
-			got = append(got, command)
-		},
+		Inbound: NewQueue[TextMessage](),
 	}
 
 	err := client.dispatchRaw(context.Background(), []byte(`[
@@ -390,11 +389,13 @@ func TestClientDispatchRawDispatchesArray(t *testing.T) {
 		t.Fatalf("dispatchRaw() error = %v", err)
 	}
 
-	if len(got) != 2 {
-		t.Fatalf("len(got) = %d, want 2", len(got))
+	items := client.Inbound.Drain()
+	if len(items) != 2 {
+		t.Fatalf("len(items) = %d, want 2", len(items))
 	}
-	if got[0] != "ONE" || got[1] != "TWO" {
-		t.Fatalf("got = %#v, want [ONE TWO]", got)
+
+	if items[0]["command"] != "ONE" || items[1]["command"] != "TWO" {
+		t.Fatalf("items = %#v, want ONE then TWO", items)
 	}
 }
 
@@ -402,6 +403,7 @@ func TestClientDispatchConnectedStoresUserID(t *testing.T) {
 	called := false
 
 	client := &Client{
+		Inbound: NewQueue[TextMessage](),
 		Handle: func(ctx context.Context, msg TextMessage) {
 			called = true
 		},
@@ -419,6 +421,9 @@ func TestClientDispatchConnectedStoresUserID(t *testing.T) {
 	}
 	if called {
 		t.Fatal("handler called for connected message, want not called")
+	}
+	if client.Inbound.Len() != 0 {
+		t.Fatalf("Inbound.Len() = %d, want 0", client.Inbound.Len())
 	}
 }
 
@@ -464,6 +469,134 @@ func TestClientSenderLoopReturnsRequeueFailedWhenQueueClosed(t *testing.T) {
 	err := client.senderLoop(ctx, nil)
 	if err == nil {
 		t.Fatal("senderLoop() error = nil, want error")
+	}
+}
+
+func TestClientReceiverLoopDoesNotBlockOnHandler(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	conn := &fakeWebsocketConn{
+		readMessages: []fakeReadMessage{
+			{
+				typ:  websocket.MessageText,
+				data: []byte(`{"command":"ONE"}`),
+			},
+			{
+				typ:  websocket.MessageText,
+				data: []byte(`{"command":"TWO"}`),
+			},
+		},
+		readErrAfterMessages: context.Canceled,
+	}
+
+	blockHandler := make(chan struct{})
+	handlerStarted := make(chan string, 1)
+
+	client := &Client{
+		Inbound: NewQueue[TextMessage](),
+		Handle: func(ctx context.Context, msg TextMessage) {
+			command, _ := msg["command"].(string)
+			handlerStarted <- command
+			<-blockHandler
+		},
+	}
+
+	handlerCtx, handlerCancel := context.WithCancel(ctx)
+	defer handlerCancel()
+
+	go func() {
+		_ = client.handlerLoop(handlerCtx)
+	}()
+
+	err := client.receiverLoop(ctx, conn)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("receiverLoop() error = %v, want context.Canceled", err)
+	}
+
+	select {
+	case first := <-handlerStarted:
+		if first != "ONE" {
+			t.Fatalf("first handler command = %q, want ONE", first)
+		}
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for handler to start")
+	}
+
+	if client.Inbound.Len() != 1 {
+		t.Fatalf("Inbound.Len() = %d, want 1 queued message while handler is blocked", client.Inbound.Len())
+	}
+
+	close(blockHandler)
+}
+
+func TestClientHandlerLoopProcessesInboundMessages(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	client := &Client{
+		Inbound: NewQueue[TextMessage](),
+	}
+
+	got := make(chan string, 2)
+	client.Handle = func(ctx context.Context, msg TextMessage) {
+		command, _ := msg["command"].(string)
+		got <- command
+	}
+
+	client.Inbound.Push(TextMessage{"command": "ONE"})
+	client.Inbound.Push(TextMessage{"command": "TWO"})
+
+	go func() {
+		_ = client.handlerLoop(ctx)
+	}()
+
+	for _, want := range []string{"ONE", "TWO"} {
+		select {
+		case gotCommand := <-got:
+			if gotCommand != want {
+				t.Fatalf("handler command = %q, want %q", gotCommand, want)
+			}
+		case <-ctx.Done():
+			t.Fatalf("timed out waiting for handler command %q", want)
+		}
+	}
+}
+
+func TestClientHandlerLoopRecoversPanic(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	client := &Client{
+		Inbound: NewQueue[TextMessage](),
+	}
+
+	handled := make(chan string, 1)
+	count := 0
+
+	client.Handle = func(ctx context.Context, msg TextMessage) {
+		count++
+		if count == 1 {
+			panic("boom")
+		}
+		command, _ := msg["command"].(string)
+		handled <- command
+	}
+
+	client.Inbound.Push(TextMessage{"command": "PANIC"})
+	client.Inbound.Push(TextMessage{"command": "AFTER"})
+
+	go func() {
+		_ = client.handlerLoop(ctx)
+	}()
+
+	select {
+	case got := <-handled:
+		if got != "AFTER" {
+			t.Fatalf("handled command = %q, want AFTER", got)
+		}
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for handler after panic")
 	}
 }
 
