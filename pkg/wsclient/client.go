@@ -68,7 +68,9 @@ type Client struct {
 
 // Run connects and reconnects until ctx is cancelled.
 func (c *Client) Run(ctx context.Context) error {
-	c.ensureDefaults()
+	if err := c.ensureDefaults(); err != nil {
+		return err
+	}
 
 	backoff := c.ReconnectMin
 
@@ -95,27 +97,35 @@ func (c *Client) Run(ctx context.Context) error {
 	}
 }
 
-func (c *Client) ensureDefaults() {
+func (c *Client) ensureDefaults() error {
+	if c.URL == "" {
+		return fmt.Errorf("websocket url is required")
+	}
+
 	if c.Outbound == nil {
 		c.Outbound = NewQueue[OutboundMessage]()
 	}
+
 	if c.Inbound == nil {
 		c.Inbound = NewQueue[TextMessage]()
 	}
+
 	if c.HandlerConcurrency <= 0 {
 		c.HandlerConcurrency = 1
 	}
+
 	if c.ReconnectMin == 0 {
 		c.ReconnectMin = time.Second
 	}
+
 	if c.ReconnectMax == 0 {
 		c.ReconnectMax = 30 * time.Second
 	}
+
+	return nil
 }
 
 func (c *Client) runOnce(ctx context.Context) error {
-	c.ensureDefaults()
-
 	headers := c.buildHeaders()
 
 	conn, _, err := websocket.Dial(ctx, c.URL, &websocket.DialOptions{
@@ -263,8 +273,6 @@ func (c *Client) send(ctx context.Context, conn websocketConn, msg OutboundMessa
 }
 
 func (c *Client) receiverLoop(ctx context.Context, conn websocketConn) error {
-	c.ensureDefaults()
-
 	for {
 		messageType, data, err := conn.Read(ctx)
 		if err != nil {
@@ -295,8 +303,6 @@ func (c *Client) heartbeatLoop(ctx context.Context) error {
 }
 
 func (c *Client) handlerLoop(ctx context.Context) error {
-	c.ensureDefaults()
-
 	for {
 		msg, ok, err := c.Inbound.Pop(ctx)
 		if err != nil {
@@ -342,8 +348,6 @@ func (c *Client) dispatchRaw(ctx context.Context, data []byte) error {
 }
 
 func (c *Client) dispatch(ctx context.Context, msg TextMessage) {
-	c.ensureDefaults()
-
 	kind, _ := msg["type"].(string)
 	if kind == "" {
 		kind, _ = msg["command"].(string)
