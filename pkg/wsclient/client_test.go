@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -210,17 +211,16 @@ func TestClientSenderLoopRequeuesOnSendFailure(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	badMessage := TextMessage{
-		"command": "PING",
-		"bad":     func() {},
-	}
-
 	queue := NewQueue[OutboundMessage]()
-	queue.Push(badMessage)
+	queue.Push(TextMessage{"command": "PING"})
+
+	conn := &fakeWebsocketConn{
+		writeErr: errors.New("write failed"),
+	}
 
 	client := &Client{Outbound: queue}
 
-	err := client.senderLoop(ctx, nil)
+	err := client.senderLoop(ctx, conn)
 	if err == nil {
 		t.Fatal("senderLoop() error = nil, want error")
 	}
@@ -243,6 +243,230 @@ func TestClientSenderLoopRequeuesOnSendFailure(t *testing.T) {
 	}
 }
 
+func TestClientSendTextMessageWithFakeConn(t *testing.T) {
+	ctx := context.Background()
+
+	conn := &fakeWebsocketConn{}
+	client := &Client{}
+
+	err := client.send(ctx, conn, TextMessage{
+		"command": "PING",
+	})
+	if err != nil {
+		t.Fatalf("send() error = %v, want nil", err)
+	}
+
+	if conn.lastWriteType != websocket.MessageText {
+		t.Fatalf("lastWriteType = %v, want MessageText", conn.lastWriteType)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(conn.lastWriteData, &got); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+
+	if got["command"] != "PING" {
+		t.Fatalf("command = %v, want PING", got["command"])
+	}
+}
+
+func TestClientSendBinaryFrameWithFakeConn(t *testing.T) {
+	ctx := context.Background()
+
+	conn := &fakeWebsocketConn{}
+	client := &Client{}
+
+	err := client.send(ctx, conn, BinaryFrame{
+		Header: map[string]any{
+			"transfer_id": "transfer-1",
+			"sequence":    0,
+		},
+		Data: []byte("hello"),
+	})
+	if err != nil {
+		t.Fatalf("send() error = %v, want nil", err)
+	}
+
+	if conn.lastWriteType != websocket.MessageBinary {
+		t.Fatalf("lastWriteType = %v, want MessageBinary", conn.lastWriteType)
+	}
+
+	parts := bytes.SplitN(conn.lastWriteData, []byte("\n"), 2)
+	if len(parts) != 2 {
+		t.Fatalf("binary frame missing separator: %q", string(conn.lastWriteData))
+	}
+
+	var header map[string]any
+	if err := json.Unmarshal(parts[0], &header); err != nil {
+		t.Fatalf("Unmarshal(header) error = %v", err)
+	}
+
+	if header["transfer_id"] != "transfer-1" {
+		t.Fatalf("transfer_id = %v, want transfer-1", header["transfer_id"])
+	}
+	if string(parts[1]) != "hello" {
+		t.Fatalf("data = %q, want hello", string(parts[1]))
+	}
+}
+
+func TestClientReceiverLoopWithFakeConn(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	conn := &fakeWebsocketConn{
+		readMessages: []fakeReadMessage{
+			{
+				typ:  websocket.MessageText,
+				data: []byte(`{"command":"TRANSFER_ACCEPT","payload":{"transfer_id":"t1"}}`),
+			},
+		},
+		readErrAfterMessages: context.Canceled,
+	}
+
+	got := make(chan TextMessage, 1)
+	client := &Client{
+		Handle: func(ctx context.Context, msg TextMessage) {
+			got <- msg
+		},
+	}
+
+	err := client.receiverLoop(ctx, conn)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("receiverLoop() error = %v, want context.Canceled", err)
+	}
+
+	select {
+	case msg := <-got:
+		if msg["command"] != "TRANSFER_ACCEPT" {
+			t.Fatalf("command = %v, want TRANSFER_ACCEPT", msg["command"])
+		}
+	default:
+		t.Fatal("handler was not called")
+	}
+}
+
+func TestClientBuildHeadersIncludesHostnameAndProjects(t *testing.T) {
+	client := &Client{
+		Token:      "token-123",
+		ClientID:   "client-123",
+		Hostname:   "host-123",
+		ProjectIDs: []int{1, 2, 3},
+	}
+
+	headers := client.buildHeaders()
+
+	if got := headers.Get("Authorization"); got != "Bearer token-123" {
+		t.Fatalf("Authorization = %q", got)
+	}
+	if got := headers.Get("MC-Client-ID"); got != "client-123" {
+		t.Fatalf("MC-Client-ID = %q", got)
+	}
+	if got := headers.Get("MC-Client-Hostname"); got != "host-123" {
+		t.Fatalf("MC-Client-Hostname = %q", got)
+	}
+	if got := headers.Get("MC-Client-Projects"); got != "1,2,3" {
+		t.Fatalf("MC-Client-Projects = %q", got)
+	}
+	if got := headers.Get("MC-Connection-Type"); got != "cli" {
+		t.Fatalf("MC-Connection-Type = %q", got)
+	}
+}
+
+func TestClientDispatchRawDispatchesArray(t *testing.T) {
+	var got []string
+
+	client := &Client{
+		Handle: func(ctx context.Context, msg TextMessage) {
+			command, _ := msg["command"].(string)
+			got = append(got, command)
+		},
+	}
+
+	err := client.dispatchRaw(context.Background(), []byte(`[
+		{"command":"ONE"},
+		{"command":"TWO"}
+	]`))
+	if err != nil {
+		t.Fatalf("dispatchRaw() error = %v", err)
+	}
+
+	if len(got) != 2 {
+		t.Fatalf("len(got) = %d, want 2", len(got))
+	}
+	if got[0] != "ONE" || got[1] != "TWO" {
+		t.Fatalf("got = %#v, want [ONE TWO]", got)
+	}
+}
+
+func TestClientDispatchConnectedStoresUserID(t *testing.T) {
+	called := false
+
+	client := &Client{
+		Handle: func(ctx context.Context, msg TextMessage) {
+			called = true
+		},
+	}
+
+	client.dispatch(context.Background(), TextMessage{
+		"command": "connected",
+		"payload": map[string]any{
+			"user_id": float64(42),
+		},
+	})
+
+	if client.UserID != 42 {
+		t.Fatalf("UserID = %d, want 42", client.UserID)
+	}
+	if called {
+		t.Fatal("handler called for connected message, want not called")
+	}
+}
+
+func TestClientHeartbeatMessage(t *testing.T) {
+	client := &Client{ClientID: "client-123"}
+
+	msg := client.heartbeatMessage()
+
+	if msg["command"] != "HEARTBEAT" {
+		t.Fatalf("command = %v, want HEARTBEAT", msg["command"])
+	}
+	if msg["clientId"] != "client-123" {
+		t.Fatalf("clientId = %v, want client-123", msg["clientId"])
+	}
+	if msg["client_id"] != "client-123" {
+		t.Fatalf("client_id = %v, want client-123", msg["client_id"])
+	}
+	if msg["timestamp"] == "" {
+		t.Fatal("timestamp is empty")
+	}
+}
+
+func TestClientSenderLoopReturnsRequeueFailedWhenQueueClosed(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	badMessage := TextMessage{
+		"command": "PING",
+		"bad":     func() {},
+	}
+
+	queue := NewQueue[OutboundMessage]()
+	queue.Push(badMessage)
+
+	client := &Client{Outbound: queue}
+
+	// Close after Pop succeeds but before requeue.
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		queue.Close()
+	}()
+
+	err := client.senderLoop(ctx, nil)
+	if err == nil {
+		t.Fatal("senderLoop() error = nil, want error")
+	}
+}
+
 func newWSTestServer(t *testing.T, handler func(ctx context.Context, conn *websocket.Conn)) *httptest.Server {
 	t.Helper()
 
@@ -259,4 +483,55 @@ func newWSTestServer(t *testing.T, handler func(ctx context.Context, conn *webso
 
 	server.URL = "ws" + strings.TrimPrefix(server.URL, "http")
 	return server
+}
+
+type fakeReadMessage struct {
+	typ  websocket.MessageType
+	data []byte
+}
+
+type fakeWebsocketConn struct {
+	writeErr error
+	readErr  error
+
+	lastWriteType websocket.MessageType
+	lastWriteData []byte
+
+	readMessages         []fakeReadMessage
+	readErrAfterMessages error
+
+	closed bool
+}
+
+func (f *fakeWebsocketConn) Write(ctx context.Context, typ websocket.MessageType, data []byte) error {
+	if f.writeErr != nil {
+		return f.writeErr
+	}
+
+	f.lastWriteType = typ
+	f.lastWriteData = append([]byte(nil), data...)
+	return nil
+}
+
+func (f *fakeWebsocketConn) Read(ctx context.Context) (websocket.MessageType, []byte, error) {
+	if f.readErr != nil {
+		return 0, nil, f.readErr
+	}
+
+	if len(f.readMessages) == 0 {
+		if f.readErrAfterMessages != nil {
+			return 0, nil, f.readErrAfterMessages
+		}
+		return 0, nil, context.Canceled
+	}
+
+	msg := f.readMessages[0]
+	f.readMessages = f.readMessages[1:]
+
+	return msg.typ, msg.data, nil
+}
+
+func (f *fakeWebsocketConn) Close(code websocket.StatusCode, reason string) error {
+	f.closed = true
+	return nil
 }
