@@ -96,6 +96,8 @@ func (c *Client) Run(ctx context.Context) error {
 			return err
 		}
 
+		// If we are here, then setupConnectionAndStartTasks failed. Check if we are done, otherwise
+		// start a backoff and then attempt to reconnect.
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
