@@ -9,8 +9,19 @@ import (
 	"github.com/materials-commons/mccli/pkg/wsclient"
 )
 
+// uploaderRunner is the behavior Manager needs from an uploader.
+//
+// Keeping this as a small interface makes Manager unit-testable without running
+// the file upload protocol.
+type uploaderRunner interface {
+	Upload(ctx context.Context) bool
+	HandleResponse(msg wsclient.TextMessage)
+	TransferIDValue() string
+	SetTransferID(id string)
+}
+
 // UploaderFactory creates uploaders. It is injectable for tests.
-type UploaderFactory func(req Request) *Uploader
+type UploaderFactory func(req Request) uploaderRunner
 
 // Manager manages queued concurrent uploads.
 type Manager struct {
@@ -20,10 +31,10 @@ type Manager struct {
 	clientID      string
 	maxConcurrent int
 
-	uploadQueue *wsclient.Queue[*Uploader]
+	uploadQueue *wsclient.Queue[uploaderRunner]
 
 	mu            sync.Mutex
-	activeUploads map[string]*Uploader
+	activeUploads map[string]uploaderRunner
 	results       map[string]bool
 
 	factory UploaderFactory
@@ -58,14 +69,14 @@ func NewManager(cfg Config) (*Manager, error) {
 		dbQueue:       cfg.DBWriteQueue,
 		clientID:      cfg.ClientID,
 		maxConcurrent: cfg.MaxConcurrent,
-		uploadQueue:   wsclient.NewQueue[*Uploader](),
-		activeUploads: map[string]*Uploader{},
+		uploadQueue:   wsclient.NewQueue[uploaderRunner](),
+		activeUploads: map[string]uploaderRunner{},
 		results:       map[string]bool{},
 		factory:       cfg.Factory,
 	}
 
 	if m.factory == nil {
-		m.factory = func(req Request) *Uploader {
+		m.factory = func(req Request) uploaderRunner {
 			return NewUploader(UploaderConfig{
 				SendQueue:    m.sendQueue,
 				DBWriteQueue: m.dbQueue,
@@ -95,15 +106,15 @@ func (m *Manager) QueueUpload(req Request) (string, error) {
 	}
 
 	uploader := m.factory(req)
-	if uploader.TransferID == "" {
-		uploader.TransferID = uuid.NewString()
+	if uploader.TransferIDValue() == "" {
+		uploader.SetTransferID(uuid.NewString())
 	}
 
 	if ok := m.uploadQueue.Push(uploader); !ok {
 		return "", fmt.Errorf("upload queue is closed")
 	}
 
-	return uploader.TransferID, nil
+	return uploader.TransferIDValue(), nil
 }
 
 // HandleMessage routes an incoming websocket message to its active uploader.
@@ -143,15 +154,17 @@ func (m *Manager) worker(ctx context.Context, workerID int) {
 			return
 		}
 
+		transferID := uploader.TransferIDValue()
+
 		m.mu.Lock()
-		m.activeUploads[uploader.TransferID] = uploader
+		m.activeUploads[transferID] = uploader
 		m.mu.Unlock()
 
 		success := uploader.Upload(ctx)
 
 		m.mu.Lock()
-		delete(m.activeUploads, uploader.TransferID)
-		m.results[uploader.TransferID] = success
+		delete(m.activeUploads, transferID)
+		m.results[transferID] = success
 		m.mu.Unlock()
 	}
 }

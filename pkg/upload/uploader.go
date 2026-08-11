@@ -79,6 +79,16 @@ func NewUploader(cfg UploaderConfig) *Uploader {
 	}
 }
 
+// TransferIDValue returns this uploader's transfer ID.
+func (u *Uploader) TransferIDValue() string {
+	return u.TransferID
+}
+
+// SetTransferID sets this uploader's transfer ID.
+func (u *Uploader) SetTransferID(id string) {
+	u.TransferID = id
+}
+
 // HandleResponse queues a response for this uploader.
 func (u *Uploader) HandleResponse(msg wsclient.TextMessage) {
 	u.responseQueue.Push(msg)
