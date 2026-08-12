@@ -191,7 +191,7 @@ func LocalListDir(translator projectpath.Translator, now func() time.Time) ListD
 		for _, entry := range entries {
 			localPath := filepath.Join(localDir, entry.Name())
 
-			localEntry, err := ObserveLocal(ctx, translator, localPath, now())
+			localEntry, err := observeLocal(ctx, translator, localPath, now())
 			if err != nil {
 				return nil, err
 			}

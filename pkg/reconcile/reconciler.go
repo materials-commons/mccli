@@ -38,7 +38,10 @@ type RemoteHistory interface {
 
 // Reconciler reconciles one observed project path.
 type Reconciler struct {
-	mode          Mode
+	mode Mode
+
+	// We inject the ChecksumFun used by the reconciler so that how
+	// its computed can be changed. This also helps with testing.
 	checksum      ChecksumFunc
 	remoteHistory RemoteHistory
 }
@@ -80,7 +83,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, obs Observation) (Decision, 
 		return Decision{}, err
 	}
 
-	state := classify(obs)
+	// Classify what type of observation this is
+	state := classifyObservation(obs)
 	record, err := recordFromObservation(obs)
 	if err != nil {
 		return Decision{}, err
@@ -94,6 +98,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, obs Observation) (Decision, 
 		return skip(record, "no local or remote entry observed"), nil
 	}
 
+	// Currently we don't support symlinks. This may change in the future.
 	if obs.LocalEntry != nil && obs.LocalEntry.IsSymlink {
 		return conflict(record, "local path is a symlink"), nil
 	}
@@ -113,20 +118,29 @@ func (r *Reconciler) Reconcile(ctx context.Context, obs Observation) (Decision, 
 	return conflict(record, "entry kind is unknown"), nil
 }
 
-func classify(obs Observation) ObservationState {
+// classifyObservation classifies the observation into one of the ObservationState values.
+// Although there are theoretically 4 states, practically there are 3 with
+// a catch-all ObservationNeither that should never happen.
+func classifyObservation(obs Observation) ObservationState {
 	if obs.LocalEntry != nil && obs.RemoteEntry != nil {
+		// Both local and remote entries exist
 		return ObservationBoth
 	}
 	if obs.LocalEntry != nil {
+		// Only a local entry exists
 		return ObservationLocalOnly
 	}
 	if obs.RemoteEntry != nil {
+		// Only a remote entry exists
 		return ObservationRemoteOnly
 	}
+
+	// This should be impossible.
 	return ObservationNeither
 }
 
 func hasKindConflict(obs Observation) bool {
+	// Local or Remote entries are nil then kind cannot match.
 	if obs.LocalEntry == nil || obs.RemoteEntry == nil {
 		return false
 	}
@@ -148,6 +162,13 @@ func isFile(obs Observation) bool {
 	return obs.RemoteEntry != nil && obs.RemoteEntry.Kind == KindFile
 }
 
+// recordFromObservation takes an observation and returns a filedb.FileRecord.
+// It does this by checking if there is a file record associated with the
+// observation. If so it does some sanity checking on it and returns the
+// record if the file record is valid.
+//
+// If there is no record associated with the observation, then it builds one
+// from the observation. Again it applies some sanity checks before constructing.
 func recordFromObservation(obs Observation) (filedb.FileRecord, error) {
 	if obs.FileRecord != nil {
 		if obs.FileRecord.Path == "" {
@@ -156,6 +177,7 @@ func recordFromObservation(obs Observation) (filedb.FileRecord, error) {
 		return *obs.FileRecord, nil
 	}
 
+	// Attempt to construct the remote path
 	remotePath := obs.RemotePath
 	if remotePath == "" {
 		if obs.LocalEntry != nil {
@@ -165,18 +187,22 @@ func recordFromObservation(obs Observation) (filedb.FileRecord, error) {
 		}
 	}
 
+	// No remote path so return error
 	if remotePath == "" {
 		return filedb.FileRecord{}, fmt.Errorf("%w: remote path is required", ErrInvalidObservation)
 	}
 
+	// Attempt to construct the name.
 	name := obs.Name
 	if name == "" {
 		name = path.Base(remotePath)
 	}
 	if name == "" || name == "." {
+		// Bad name.
 		return filedb.FileRecord{}, fmt.Errorf("%w: name is required for %q", ErrInvalidObservation, remotePath)
 	}
 
+	// Sanitize the directory. At this point remotePath should be valid.
 	dir := obs.Dir
 	if dir == "" {
 		dir = path.Dir(remotePath)
@@ -193,6 +219,8 @@ func recordFromObservation(obs Observation) (filedb.FileRecord, error) {
 	}, nil
 }
 
+// validateObservationConsistency validates that the observation is consistent with the record. This
+// consists of ensuring paths and file names are set and not blank.
 func validateObservationConsistency(obs Observation, record filedb.FileRecord) error {
 	if obs.RemotePath != "" && obs.RemotePath != record.Path {
 		return fmt.Errorf("%w: observation remote path %q does not match record path %q",
@@ -246,8 +274,9 @@ func validateObservationConsistency(obs Observation, record filedb.FileRecord) e
 	return nil
 }
 
+// reconcileDirectory reconciles a directory observation with the record.
 func (r *Reconciler) reconcileDirectory(obs Observation, record filedb.FileRecord) Decision {
-	state := classify(obs)
+	state := classifyObservation(obs)
 
 	switch state {
 	case ObservationLocalOnly:
@@ -272,7 +301,7 @@ func (r *Reconciler) reconcileRegularFile(ctx context.Context, obs Observation, 
 	case ObservationRemoteOnly:
 		return r.reconcileRemoteOnlyFile(obs, record)
 	case ObservationBoth:
-		return r.reconcileBothSidesFile(ctx, obs, record)
+		return r.reconcilePresentOnBothSidesFile(ctx, obs, record)
 	default:
 		return skip(record, "no file action needed"), nil
 	}
@@ -363,7 +392,7 @@ func (r *Reconciler) reconcileRemoteOnlyFile(obs Observation, record filedb.File
 	}
 }
 
-func (r *Reconciler) reconcileBothSidesFile(ctx context.Context, obs Observation, record filedb.FileRecord) (Decision, error) {
+func (r *Reconciler) reconcilePresentOnBothSidesFile(ctx context.Context, obs Observation, record filedb.FileRecord) (Decision, error) {
 	updatedRecord := recordWithLocalAndRemote(obs, record)
 
 	switch r.mode {

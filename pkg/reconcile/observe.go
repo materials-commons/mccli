@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path"
 	"strings"
 	"time"
@@ -80,7 +81,7 @@ func (r *ObservationRunner) ObserveAndReconcile(ctx context.Context, localPath s
 		return FileState{}, err
 	}
 
-	localEntry, err := ObserveLocal(ctx, r.Translator, localPath, now)
+	localEntry, err := observeLocal(ctx, r.Translator, localPath, now)
 	if err != nil {
 		return FileState{}, err
 	}
@@ -144,6 +145,54 @@ func (r *ObservationRunner) ObserveAndReconcile(ctx context.Context, localPath s
 	return FileState{
 		Observation: observation,
 		Decision:    decision,
+	}, nil
+}
+
+// ObserveLocal observes localPath and converts it into a LocalEntry.
+//
+// If localPath does not exist, ObserveLocal returns nil, nil.
+func observeLocal(ctx context.Context, translator projectpath.Translator, localPath string, now time.Time) (*LocalEntry, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	info, err := os.Lstat(localPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("stat local path %q: %w", localPath, err)
+	}
+
+	remotePath, err := translator.LocalToRemote(localPath)
+	if err != nil {
+		return nil, err
+	}
+
+	kind := KindUnknown
+	if info.Mode().IsRegular() {
+		kind = KindFile
+	} else if info.IsDir() {
+		kind = KindDir
+	}
+
+	remoteDir := path.Dir(remotePath)
+	if remoteDir == "." {
+		remoteDir = "/"
+	}
+
+	return &LocalEntry{
+		Path:       localPath,
+		RemotePath: remotePath,
+		Name:       path.Base(remotePath),
+		Dir:        remoteDir,
+		Kind:       kind,
+		IsSymlink:  info.Mode()&os.ModeSymlink != 0,
+
+		Size:       info.Size(),
+		MTimeNS:    info.ModTime().UnixNano(),
+		CTimeNS:    ctimeNS(info),
+		LastSeenTS: now.Unix(),
 	}, nil
 }
 
