@@ -36,15 +36,18 @@ func TestUpsertAndGetByPath(t *testing.T) {
 	record.RemoteFileID = int64Ptr(123)
 	record.RemoteChecksum = stringPtr("remote-checksum")
 
+	// Insert new record
 	if err := store.Upsert(ctx, record); err != nil {
 		t.Fatalf("Upsert() error = %v", err)
 	}
 
+	// Check that we can get it back again.
 	got, err := store.GetByPath(ctx, "/Dir1/file.txt")
 	if err != nil {
 		t.Fatalf("GetByPath() error = %v", err)
 	}
 
+	// Validate the record.
 	if got.Path != record.Path {
 		t.Fatalf("Path = %q, want %q", got.Path, record.Path)
 	}

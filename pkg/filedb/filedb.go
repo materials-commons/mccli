@@ -116,6 +116,7 @@ func OpenPath(ctx context.Context, dbPath string) (*Store, error) {
 	logger := mclogging.Logger(ctx)
 	logger.Debug("opening file database", "path", dbPath)
 
+	// Open the database. Configure gorm logging.
 	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
 		TranslateError: true,
 		Logger: gormlogger.New(
@@ -204,6 +205,7 @@ func (s *Store) Close(ctx context.Context) error {
 	return nil
 }
 
+// configure will configure the SQLite database pragmas.
 func (s *Store) configure(ctx context.Context) error {
 	pragmas := []string{
 		"PRAGMA journal_mode=WAL;",
@@ -223,6 +225,8 @@ func (s *Store) configure(ctx context.Context) error {
 	return nil
 }
 
+// migrate will migrate the SQLite database schema. This is supported by Gorm and allows us to
+// automatically manage schema changes. Columns can't be changed, but new columns can be added.
 func (s *Store) migrate(ctx context.Context) error {
 	if err := s.db.WithContext(ctx).AutoMigrate(&FileRecord{}); err != nil {
 		return fmt.Errorf("migrate file database %q: %w", s.path, err)
