@@ -10,12 +10,16 @@
 //
 // then:
 //
-//	/home/gtarcea/projs/Aging              -> /
-//	/home/gtarcea/projs/Aging/Dir1/file.txt -> /Dir1/file.txt
+//	     Local Path                             Remote Path
+//	     ----------                             -----------
+//		/home/gtarcea/projs/Aging               ->   /
+//		/home/gtarcea/projs/Aging/Dir1/file.txt ->   /Dir1/file.txt
 //
 // and:
 //
-//	/Dir1/file.txt -> /home/gtarcea/projs/Aging/Dir1/file.txt
+//	    Remote Path             Local Path
+//	    -----------             ----------
+//		/Dir1/file.txt   ->    /home/gtarcea/projs/Aging/Dir1/file.txt
 package projectpath
 
 import (
@@ -66,10 +70,14 @@ func New(projectRoot string) (Translator, error) {
 		return Translator{}, fmt.Errorf("project root is required")
 	}
 
+	// Turn relative into absolute paths.
 	absRoot, err := filepath.Abs(projectRoot)
 	if err != nil {
 		return Translator{}, fmt.Errorf("resolve project root %q: %w", projectRoot, err)
 	}
+
+	// Clean path to get rid of any trailing slashes, '..', etc...
+	absRoot = filepath.Clean(absRoot)
 
 	return Translator{
 		projectRoot: filepath.Clean(absRoot),
@@ -108,6 +116,7 @@ func (t Translator) LocalToRemote(localPath string) (string, error) {
 	if rel == "." {
 		return "/", nil
 	}
+
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("%w: %s is not under %s", ErrPathOutsideProject, absLocal, t.projectRoot)
 	}
