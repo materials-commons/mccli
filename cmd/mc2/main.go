@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	mcapi "github.com/materials-commons/gomcapi"
-	lscmd "github.com/materials-commons/mccli/pkg/cmd/ls"
 	mclogging "github.com/materials-commons/mccli/pkg/logging"
 	"github.com/urfave/cli/v3"
 )
@@ -86,17 +85,6 @@ func newCommand() *cli.Command {
 	}
 }
 
-func versionCommand() *cli.Command {
-	return &cli.Command{
-		Name:  "version",
-		Usage: "Show mc2 version and build information",
-		Action: func(ctx context.Context, cmd *cli.Command) error {
-			fmt.Println(formatVersion())
-			return nil
-		},
-	}
-}
-
 func cloneCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "clone",
@@ -152,38 +140,6 @@ func initCommand() *cli.Command {
 		Name:   "init",
 		Usage:  "Initialize the current directory as a new Materials Commons project",
 		Action: notYetImplemented("init"),
-	}
-}
-
-func lsCommand() *cli.Command {
-	return &cli.Command{
-		Name:      "ls",
-		Usage:     "List local and remote directory contents",
-		ArgsUsage: "[paths...]",
-		Flags: []cli.Flag{
-			&cli.BoolFlag{
-				Name:  "action",
-				Usage: "Show the action that would be taken for each path and the reason",
-			},
-		},
-		Action: func(ctx context.Context, cmd *cli.Command) error {
-			paths := make([]string, 0, cmd.Args().Len())
-			for i := 0; i < cmd.Args().Len(); i++ {
-				paths = append(paths, cmd.Args().Get(i))
-			}
-
-			workingDir, err := os.Getwd()
-			if err != nil {
-				return fmt.Errorf("get working directory: %w", err)
-			}
-
-			return lscmd.Run(ctx, lscmd.Options{
-				WorkingDir: workingDir,
-				Paths:      paths,
-				Action:     cmd.Bool("action"),
-				Out:        os.Stdout,
-			})
-		},
 	}
 }
 
@@ -278,27 +234,6 @@ func remotesCommand() *cli.Command {
 			},
 		},
 		Action: notYetImplemented("remotes"),
-	}
-}
-
-func upCommand() *cli.Command {
-	return &cli.Command{
-		Name:      "up",
-		Usage:     "Upload files to Materials Commons",
-		ArgsUsage: "paths...",
-		Flags: []cli.Flag{
-			&cli.BoolFlag{
-				Name:    "recursive",
-				Aliases: []string{"r"},
-				Usage:   "Upload directory contents recursively",
-			},
-			&cli.StringFlag{
-				Name:  "ws-url",
-				Usage: "WebSocket URL for upload commands",
-				Value: defaultWebSocketURL,
-			},
-		},
-		Action: notYetImplemented("up"),
 	}
 }
 
