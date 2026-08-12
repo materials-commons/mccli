@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/materials-commons/mccli/pkg/conv"
 	"github.com/materials-commons/mccli/pkg/filedb"
 	"github.com/materials-commons/mccli/pkg/reconcile"
 	"github.com/olekukonko/tablewriter"
@@ -106,7 +107,7 @@ func fullRow(state reconcile.FileState) []string {
 		rUpdated = formatOptionalUnixNano(record.RemoteCTimeNS)
 		rSize = humanizeOptional(record.RemoteSize)
 		rType = remoteRecordKindCode(record)
-		rID = int64PtrString(record.RemoteFileID)
+		rID = conv.Int64PtrString(record.RemoteFileID)
 	}
 
 	return []string{
@@ -205,13 +206,6 @@ func humanize(size int64) string {
 	}
 
 	return fmt.Sprintf("%dB", size)
-}
-
-func int64PtrString(value *int64) string {
-	if value == nil {
-		return "-"
-	}
-	return strconv.FormatInt(*value, 10)
 }
 
 func recordForDisplay(state reconcile.FileState) (filedb.FileRecord, bool) {

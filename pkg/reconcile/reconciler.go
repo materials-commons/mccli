@@ -7,6 +7,7 @@ import (
 	"path"
 
 	"github.com/materials-commons/mccli/pkg/checksum"
+	"github.com/materials-commons/mccli/pkg/conv"
 	"github.com/materials-commons/mccli/pkg/filedb"
 )
 
@@ -529,7 +530,7 @@ func recordWithRemote(obs Observation, record filedb.FileRecord) filedb.FileReco
 	record.RemoteFileID = obs.RemoteEntry.RemoteFileID
 	record.RemoteSize = &obs.RemoteEntry.Size
 	record.RemoteCTimeNS = &obs.RemoteEntry.CTimeNS
-	record.RemoteChecksum = stringPtr(obs.RemoteEntry.Checksum)
+	record.RemoteChecksum = conv.StringPtrWithNil(obs.RemoteEntry.Checksum)
 
 	return record
 }
@@ -611,15 +612,4 @@ func conflict(record filedb.FileRecord, reason string) Decision {
 
 func dbUpdate(record filedb.FileRecord, reason string) Decision {
 	return decision(ActionDBUpdate, record, reason, true)
-}
-
-func stringPtr(value string) *string {
-	if value == "" {
-		return nil
-	}
-	return &value
-}
-
-func int64Ptr(value int64) *int64 {
-	return &value
 }
