@@ -77,12 +77,21 @@ type Globus struct {
 //
 // This is loaded from $HOME/.materialscommons/config.json by default.
 type Global struct {
-	DefaultRemote Remote   `json:"default_remote"`
-	Remotes       []Remote `json:"remotes"`
-	Globus        Globus   `json:"globus"`
-	DeveloperMode bool     `json:"developer_mode"`
-	RESTLogging   bool     `json:"REST_logging"`
-	ClientUUID    string   `json:"client_uuid"`
+	// Default remote. This is the remote configured under default_remote is
+	// what will be used by default.
+	DefaultRemote Remote `json:"default_remote"`
+
+	// List of other remotes that are configured. This is mostly used (right now) for
+	// local testing.
+	Remotes []Remote `json:"remotes"`
+
+	// Though we don't support Globus in mc2, this is preserved for future use.
+	Globus        Globus `json:"globus"`
+	DeveloperMode bool   `json:"developer_mode"`
+	RESTLogging   bool   `json:"REST_logging"`
+
+	// The ClientUUID configured for the server.
+	ClientUUID string `json:"client_uuid"`
 
 	path string
 }
@@ -93,17 +102,21 @@ func (g Global) Path() string {
 	return g.path
 }
 
-// FindRemote returns the configured remote matching email and mcurl.
+// FindRemote returns the configured remote matching email and mcurl. Returns
+// true if the remote was found, false otherwise.
 func (g Global) FindRemote(email, mcurl string) (Remote, bool) {
 	target := Remote{
 		MCURL: mcurl,
 		Email: email,
 	}
 
+	// First check if the default remote matches the target.
 	if g.DefaultRemote.Matches(target) {
 		return g.DefaultRemote, true
 	}
 
+	// If we are here then the default remote did not match. Check any other
+	// remotes that are configured.
 	for _, remote := range g.Remotes {
 		if remote.Matches(target) {
 			return remote, true
@@ -140,6 +153,7 @@ func LoadGlobal(ctx context.Context, path string) (Global, error) {
 	logger := mclogging.Logger(ctx)
 	logger.Debug("loading global config", "path", path)
 
+	// Attempt to read the config file. Distinguish between a file not existing and other errors.
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -148,23 +162,29 @@ func LoadGlobal(ctx context.Context, path string) (Global, error) {
 		return Global{}, fmt.Errorf("read global config %q: %w", path, err)
 	}
 
+	// Unmarshal the config from JSON.
 	var cfg Global
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return Global{}, fmt.Errorf("%w: decode global config %q: %w", ErrInvalidConfig, path, err)
 	}
 
+	// Save the path to the config. This field is not exported.
 	cfg.path = path
 	return cfg, nil
 }
 
-// SaveGlobal writes cfg to path as JSON.
-//
-// If path is empty, SaveGlobal writes to cfg.Path(). If cfg.Path() is also
-// empty, SaveGlobal writes $HOME/.materialscommons/config.json.
+// SaveGlobal writes cfg to path as JSON. SaveGlobal will create the config directory
+// if it does not exist. SaveGlobal determines the path in a few different ways. If
+// the path parameter is not blank then it will use that path. If path is blank, then
+// it will use the path set in Global. If this is blank then it will use the default
+// path ($HOME/.materialscommons/config.json).
 func SaveGlobal(ctx context.Context, cfg Global, path string) error {
+	// Use cfg.path if path is blank.
 	if path == "" {
 		path = cfg.path
 	}
+
+	// If path is still blank, then use the default path.
 	if path == "" {
 		defaultPath, err := DefaultGlobalConfigPath()
 		if err != nil {
@@ -176,10 +196,12 @@ func SaveGlobal(ctx context.Context, cfg Global, path string) error {
 	logger := mclogging.Logger(ctx)
 	logger.Debug("saving global config", "path", path)
 
+	// Create the config directory if it does not exist.
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create global config directory %q: %w", filepath.Dir(path), err)
 	}
 
+	// Marshal the config into JSON. Format it so that it can be easier for users to read.
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return fmt.Errorf("%w: encode global config: %w", ErrInvalidConfig, err)
@@ -187,127 +209,10 @@ func SaveGlobal(ctx context.Context, cfg Global, path string) error {
 
 	data = append(data, '\n')
 
+	// The config file is only readable by the user. This is set because the config contains the users
+	// APIKey which is secret and shouldn't be shared.
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("write global config %q: %w", path, err)
-	}
-
-	return nil
-}
-
-// Project is the local project configuration stored in $PROJECT/.mc/config.json.
-type Project struct {
-	Remote           Remote   `json:"remote"`
-	ProjectID        int      `json:"project_id"`
-	ProjectUUID      string   `json:"project_uuid"`
-	ExperimentID     *int     `json:"experiment_id"`
-	ExperimentUUID   *string  `json:"experiment_uuid"`
-	RemoteUpdateTime *float64 `json:"remote_updatetime"`
-	GlobusUploadID   *int     `json:"globus_upload_id"`
-	GlobusDownloadID *int     `json:"globus_download_id"`
-
-	projectRoot string
-	path        string
-}
-
-// ProjectRoot returns the local project root directory containing .mc/config.json.
-func (p Project) ProjectRoot() string {
-	return p.projectRoot
-}
-
-// Path returns the path to the local project configuration file.
-func (p Project) Path() string {
-	return p.path
-}
-
-// FindProjectRoot walks upward from start until it finds a directory containing
-// .mc/config.json.
-//
-// start may be either a file or directory path. If start does not exist,
-// FindProjectRoot still walks from start itself, which is useful for commands
-// that are validating paths that may be created later.
-func FindProjectRoot(ctx context.Context, start string) (string, error) {
-	return projectpath.FindRoot(ctx, start)
-}
-
-// ProjectConfigPath returns the local project configuration path for
-// projectRoot.
-func ProjectConfigPath(projectRoot string) string {
-	return projectpath.ConfigPath(projectRoot)
-}
-
-// LoadProject reads the local project configuration associated with start.
-//
-// start may be the project root or any path beneath the project root.
-func LoadProject(ctx context.Context, start string) (Project, error) {
-	projectRoot, err := projectpath.FindRoot(ctx, start)
-	if err != nil {
-		return Project{}, err
-	}
-
-	path := projectpath.ConfigPath(projectRoot)
-	logger := mclogging.Logger(ctx)
-	logger.Debug("loading project config", "project_root", projectRoot, "path", path)
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return Project{}, fmt.Errorf("%w: %s", ErrConfigNotFound, path)
-		}
-		return Project{}, fmt.Errorf("read project config %q: %w", path, err)
-	}
-
-	var cfg Project
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return Project{}, fmt.Errorf("%w: decode project config %q: %w", ErrInvalidConfig, path, err)
-	}
-
-	cfg.projectRoot = projectRoot
-	cfg.path = path
-
-	if cfg.ProjectID == 0 {
-		return Project{}, fmt.Errorf("%w: project_id is required in %s", ErrInvalidConfig, path)
-	}
-	if cfg.ProjectUUID == "" {
-		return Project{}, fmt.Errorf("%w: project_uuid is required in %s", ErrInvalidConfig, path)
-	}
-	if cfg.Remote.MCURL == "" {
-		return Project{}, fmt.Errorf("%w: remote.mcurl is required in %s", ErrInvalidConfig, path)
-	}
-	if cfg.Remote.Email == "" {
-		return Project{}, fmt.Errorf("%w: remote.email is required in %s", ErrInvalidConfig, path)
-	}
-
-	return cfg, nil
-}
-
-// SaveProject writes cfg to $projectRoot/.mc/config.json.
-func SaveProject(ctx context.Context, projectRoot string, cfg Project) error {
-	if projectRoot == "" {
-		projectRoot = cfg.projectRoot
-	}
-	if projectRoot == "" {
-		return fmt.Errorf("%w: project root is required", ErrInvalidConfig)
-	}
-
-	path := projectpath.ConfigPath(projectRoot)
-
-	logger := mclogging.Logger(ctx)
-	logger.Debug("saving project config", "project_root", projectRoot, "path", path)
-
-	configDir := filepath.Dir(path)
-	if err := os.MkdirAll(configDir, 0o755); err != nil {
-		return fmt.Errorf("create project config directory %q: %w", configDir, err)
-	}
-
-	data, err := json.Marshal(cfg)
-	if err != nil {
-		return fmt.Errorf("%w: encode project config: %w", ErrInvalidConfig, err)
-	}
-
-	data = append(data, '\n')
-
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return fmt.Errorf("write project config %q: %w", path, err)
 	}
 
 	return nil
