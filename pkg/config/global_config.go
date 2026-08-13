@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	url2 "net/url"
 	"os"
 	"path/filepath"
 
@@ -124,6 +125,46 @@ func (g Global) FindRemote(email, mcurl string) (Remote, bool) {
 	}
 
 	return Remote{}, false
+}
+
+// ToWebSocketURLFromRemoteURL converts a remote URL to a WebSocket URL. It looks at the MCURL used
+// to connect to a Materials Commons server to construct the WebSocket URL. If the MCURL uses the
+// https scheme, then the websocket url contains WSS, otherwise it uses ws. Examples:
+//
+//	   MCURL                              Websocket URL                      Error
+//	   -----                              -------------                     -----
+//	https://materialscommons.org/api      wss://materialscommons.org/ws      nil
+//	http://spelljammer/api                ws://speljammer/ws                 nil
+//	   ""                                 ""                                 Yes (blank MCURL)
+//	webdav://host/dav                     ""                                 Yes (unsupported scheme)
+//
+// The function validates the MCURL and returns an error if it is blank, has an unsupported scheme, or
+// the host is blank.
+func ToWebSocketURLFromRemoteURL(mcurl string) (string, error) {
+	if mcurl == "" {
+		return "", fmt.Errorf("blank url")
+	}
+
+	url, err := url2.Parse(mcurl)
+	if err != nil {
+		return "", fmt.Errorf("parse url: %w", err)
+	}
+
+	var wsScheme string
+
+	if url.Scheme == "http" {
+		wsScheme = "ws"
+	} else if url.Scheme == "https" {
+		wsScheme = "wss"
+	} else {
+		return "", fmt.Errorf("unsupported url scheme: %s", url.Scheme)
+	}
+
+	if url.Host == "" {
+		return "", fmt.Errorf("blank host")
+	}
+
+	return fmt.Sprintf("%s://%s/ws", wsScheme, url.Host), nil
 }
 
 // DefaultGlobalConfigPath returns the default global configuration path:
