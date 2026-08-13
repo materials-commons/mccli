@@ -105,6 +105,16 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
+	var webSocketURL string
+	if opts.WebSocketURL != "" {
+		webSocketURL = opts.WebSocketURL
+	} else {
+		webSocketURL, err = config.ToWebSocketURLFromRemoteURL(projectCfg.Remote.MCURL)
+		if err != nil {
+			return fmt.Errorf("invalid remote MCURL (%s) can't construct websocket URL: %w", projectCfg.Remote.MCURL, err)
+		}
+	}
+
 	translator, err := projectpath.New(projectRoot)
 	if err != nil {
 		return err
@@ -129,7 +139,7 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 	}
 
 	ws := deps.NewWebSocket(di.WebSocketConfig{
-		URL:      opts.WebSocketURL,
+		URL:      webSocketURL,
 		Token:    remoteCfg.APIKey,
 		ClientID: globalCfg.ClientUUID,
 		Outbound: sendQueue,
