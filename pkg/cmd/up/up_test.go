@@ -14,6 +14,7 @@ import (
 	mcapi "github.com/materials-commons/gomcapi"
 	"github.com/materials-commons/hydra/pkg/mcdb/mcmodel"
 	"github.com/materials-commons/mccli/pkg/config"
+	"github.com/materials-commons/mccli/pkg/di"
 	"github.com/materials-commons/mccli/pkg/filedb"
 	"github.com/materials-commons/mccli/pkg/upload"
 	"github.com/materials-commons/mccli/pkg/wsclient"
@@ -160,7 +161,7 @@ func TestRunnerNonRecursiveDirectoryQueuesOnlyImmediateFiles(t *testing.T) {
 	}
 }
 
-func testDeps(projectRoot string, store RecordStore, remote RemoteClient, manager *fakeManager) Dependencies {
+func testDeps(projectRoot string, store di.Store, remote di.RemoteClient, manager *fakeManager) di.Dependencies {
 	if manager == nil {
 		manager = newFakeManager()
 	}
@@ -168,7 +169,7 @@ func testDeps(projectRoot string, store RecordStore, remote RemoteClient, manage
 		remote = &fakeRemote{files: map[string]mcmodel.File{}}
 	}
 
-	return Dependencies{
+	return di.Dependencies{
 		LoadProject: func(ctx context.Context, start string) (config.Project, error) {
 			return config.LoadProject(ctx, projectRoot)
 		},
@@ -182,18 +183,18 @@ func testDeps(projectRoot string, store RecordStore, remote RemoteClient, manage
 				ClientUUID: "client-uuid",
 			}, nil
 		},
-		OpenStore: func(ctx context.Context, root string) (RecordStore, error) {
+		OpenStore: func(ctx context.Context, root string) (di.Store, error) {
 			return store, nil
 		},
-		NewRemote: func(project config.Project, global config.Global) (RemoteClient, error) {
+		NewRemote: func(project config.Project, global config.Global) (di.RemoteClient, error) {
 			return remote, nil
 		},
-		NewUploadManager: func(cfg upload.Config) (UploadManager, error) {
+		NewUploadManager: func(cfg upload.Config) (di.UploadManager, error) {
 			manager.sendQueue = cfg.SendQueue
 			manager.dbQueue = cfg.DBWriteQueue
 			return manager, nil
 		},
-		NewWebSocket: func(cfg WebSocketConfig) WebSocketRunner {
+		NewWebSocket: func(cfg di.WebSocketConfig) di.WebSocketRunner {
 			return &fakeWebSocket{}
 		},
 		Now: func() time.Time {
@@ -210,6 +211,10 @@ func (f *fakeRemote) GetFileByPath(projectID int, remotePath string) (*mcmodel.F
 	if file, ok := f.files[remotePath]; ok {
 		return &file, nil
 	}
+	return nil, fakeNotFound()
+}
+
+func (f *fakeRemote) ListDirectoryByPath(projectID int, remotePath string) ([]mcmodel.File, error) {
 	return nil, fakeNotFound()
 }
 

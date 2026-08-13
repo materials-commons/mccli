@@ -10,10 +10,8 @@ import (
 	"path/filepath"
 	"time"
 
-	mcapi "github.com/materials-commons/gomcapi"
-	"github.com/materials-commons/hydra/pkg/mcdb/mcmodel"
 	"github.com/materials-commons/mccli/pkg/config"
-	"github.com/materials-commons/mccli/pkg/filedb"
+	"github.com/materials-commons/mccli/pkg/di"
 	"github.com/materials-commons/mccli/pkg/projectpath"
 	"github.com/materials-commons/mccli/pkg/reconcile"
 	"github.com/materials-commons/mccli/pkg/upload"
@@ -39,90 +37,14 @@ type Options struct {
 	Out io.Writer
 }
 
-// RecordStore is the subset of filedb.Store used by up.
-type RecordStore interface {
-	reconcile.DirectoryRecordGetter
-	reconcile.FileRecordGetter
-	Close(ctx context.Context) error
-	Upsert(ctx context.Context, record filedb.FileRecord) error
-}
-
-// RemoteClient is the subset of gomcapi.Client used by up.
-type RemoteClient interface {
-	reconcile.RemoteFileGetter
-}
-
-// UploadManager queues and runs websocket uploads.
-type UploadManager interface {
-	StartWorkers(ctx context.Context)
-	StopWorkers()
-	QueueUpload(req upload.Request) (string, error)
-	HandleMessage(msg wsclient.TextMessage)
-	Result(transferID string) (upload.Result, bool)
-}
-
-// WebSocketRunner runs the websocket client.
-type WebSocketRunner interface {
-	Run(ctx context.Context) error
-}
-
-// Dependencies contains injectable command dependencies.
-type Dependencies struct {
-	LoadProject func(ctx context.Context, start string) (config.Project, error)
-	LoadGlobal  func(ctx context.Context, path string) (config.Global, error)
-	OpenStore   func(ctx context.Context, projectRoot string) (RecordStore, error)
-	NewRemote   func(project config.Project, global config.Global) (RemoteClient, error)
-
-	NewUploadManager func(cfg upload.Config) (UploadManager, error)
-	NewWebSocket     func(cfg WebSocketConfig) WebSocketRunner
-
-	Now func() time.Time
-}
-
-// WebSocketConfig configures the websocket runner dependency.
-type WebSocketConfig struct {
-	URL        string
-	Token      string
-	ClientID   string
-	Outbound   *wsclient.Queue[wsclient.OutboundMessage]
-	Handle     wsclient.Handler
-	ProjectIDs []int
-}
-
 // Runner executes up with injected dependencies.
 type Runner struct {
-	Deps Dependencies
+	Deps di.Dependencies
 }
 
 // Run executes mc2 up using production dependencies.
 func Run(ctx context.Context, opts Options) error {
-	return Runner{Deps: ProductionDependencies()}.Run(ctx, opts)
-}
-
-// ProductionDependencies returns the default command dependencies.
-func ProductionDependencies() Dependencies {
-	return Dependencies{
-		LoadProject: config.LoadProject,
-		LoadGlobal:  config.LoadGlobal,
-		OpenStore: func(ctx context.Context, projectRoot string) (RecordStore, error) {
-			return filedb.Open(ctx, projectRoot)
-		},
-		NewRemote: newRemoteClient,
-		NewUploadManager: func(cfg upload.Config) (UploadManager, error) {
-			return upload.NewManager(cfg)
-		},
-		NewWebSocket: func(cfg WebSocketConfig) WebSocketRunner {
-			return &wsclient.Client{
-				URL:        cfg.URL,
-				Token:      cfg.Token,
-				ClientID:   cfg.ClientID,
-				Outbound:   cfg.Outbound,
-				Handle:     cfg.Handle,
-				ProjectIDs: cfg.ProjectIDs,
-			}
-		},
-		Now: time.Now,
-	}
+	return Runner{Deps: di.Production()}.Run(ctx, opts)
 }
 
 // Run executes the up command.
@@ -139,7 +61,7 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("websocket url is required")
 	}
 
-	deps := r.withDefaults()
+	deps := di.WithDefaults(r.Deps)
 
 	projectCfg, err := deps.LoadProject(ctx, opts.WorkingDir)
 	if err != nil {
@@ -201,7 +123,7 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
-	ws := deps.NewWebSocket(WebSocketConfig{
+	ws := deps.NewWebSocket(di.WebSocketConfig{
 		URL:      opts.WebSocketURL,
 		Token:    remoteCfg.APIKey,
 		ClientID: globalCfg.ClientUUID,
@@ -269,49 +191,10 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 	return nil
 }
 
-func (r Runner) withDefaults() Dependencies {
-	deps := r.Deps
-	if deps.LoadProject == nil {
-		deps.LoadProject = config.LoadProject
-	}
-	if deps.LoadGlobal == nil {
-		deps.LoadGlobal = config.LoadGlobal
-	}
-	if deps.OpenStore == nil {
-		deps.OpenStore = func(ctx context.Context, projectRoot string) (RecordStore, error) {
-			return filedb.Open(ctx, projectRoot)
-		}
-	}
-	if deps.NewRemote == nil {
-		deps.NewRemote = newRemoteClient
-	}
-	if deps.NewUploadManager == nil {
-		deps.NewUploadManager = func(cfg upload.Config) (UploadManager, error) {
-			return upload.NewManager(cfg)
-		}
-	}
-	if deps.NewWebSocket == nil {
-		deps.NewWebSocket = func(cfg WebSocketConfig) WebSocketRunner {
-			return &wsclient.Client{
-				URL:        cfg.URL,
-				Token:      cfg.Token,
-				ClientID:   cfg.ClientID,
-				Outbound:   cfg.Outbound,
-				Handle:     cfg.Handle,
-				ProjectIDs: cfg.ProjectIDs,
-			}
-		}
-	}
-	if deps.Now == nil {
-		deps.Now = time.Now
-	}
-	return deps
-}
-
 type queueRequest struct {
 	opts       Options
 	project    config.Project
-	manager    UploadManager
+	manager    di.UploadManager
 	observer   *reconcile.ObservationRunner
 	translator projectpath.Translator
 	now        func() time.Time
@@ -433,7 +316,7 @@ func queueFileUpload(ctx context.Context, req queueRequest, localPath string) (s
 	return transferID, true, nil
 }
 
-func startDBWriter(ctx context.Context, store RecordStore, queue *wsclient.Queue[upload.DBWriteRequest]) <-chan struct{} {
+func startDBWriter(ctx context.Context, store di.Store, queue *wsclient.Queue[upload.DBWriteRequest]) <-chan struct{} {
 	done := make(chan struct{})
 
 	go func() {
@@ -455,7 +338,7 @@ func startDBWriter(ctx context.Context, store RecordStore, queue *wsclient.Queue
 	return done
 }
 
-func waitForTransfers(ctx context.Context, manager UploadManager, transferIDs []string) error {
+func waitForTransfers(ctx context.Context, manager di.UploadManager, transferIDs []string) error {
 	pending := map[string]bool{}
 	for _, id := range transferIDs {
 		pending[id] = true
@@ -518,24 +401,3 @@ func resolveInputPath(workingDir, inputPath string) (string, error) {
 
 	return filepath.Abs(filepath.Join(workingDir, inputPath))
 }
-
-func newRemoteClient(project config.Project, global config.Global) (RemoteClient, error) {
-	remoteCfg, ok := global.FindRemote(project.Remote.Email, project.Remote.MCURL)
-	if !ok {
-		return nil, fmt.Errorf("remote %s %s is not configured in global config", project.Remote.Email, project.Remote.MCURL)
-	}
-	if remoteCfg.APIKey == "" {
-		return nil, fmt.Errorf("remote %s %s is missing an API key", project.Remote.Email, project.Remote.MCURL)
-	}
-
-	return mcapi.NewClient(&mcapi.ClientArgs{
-		APIKey:  remoteCfg.APIKey,
-		BaseURL: remoteCfg.MCURL,
-	}), nil
-}
-
-// Ensure gomcapi client satisfies the remote interface.
-var _ RemoteClient = (*mcapi.Client)(nil)
-
-// Ensure the concrete model import remains intentional for interface compatibility.
-var _ *mcmodel.File

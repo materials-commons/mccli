@@ -11,9 +11,8 @@ import (
 	"sort"
 	"time"
 
-	mcapi "github.com/materials-commons/gomcapi"
 	"github.com/materials-commons/mccli/pkg/config"
-	"github.com/materials-commons/mccli/pkg/filedb"
+	"github.com/materials-commons/mccli/pkg/di"
 	"github.com/materials-commons/mccli/pkg/projectpath"
 	"github.com/materials-commons/mccli/pkg/reconcile"
 )
@@ -34,49 +33,14 @@ type Options struct {
 	Out io.Writer
 }
 
-// RecordStore is the subset of filedb.Store used by ls.
-type RecordStore interface {
-	reconcile.DirectoryRecordGetter
-	reconcile.FileRecordGetter
-	Close(ctx context.Context) error
-}
-
-// RemoteClient is the subset of gomcapi.Client used by ls.
-type RemoteClient interface {
-	reconcile.RemoteDirectoryLister
-	reconcile.RemoteFileGetter
-}
-
-// Dependencies contains injectable command dependencies.
-type Dependencies struct {
-	LoadProject func(ctx context.Context, start string) (config.Project, error)
-	LoadGlobal  func(ctx context.Context, path string) (config.Global, error)
-	OpenStore   func(ctx context.Context, projectRoot string) (RecordStore, error)
-	NewRemote   func(project config.Project, global config.Global) (RemoteClient, error)
-	Now         func() time.Time
-}
-
 // Runner executes ls with injected dependencies.
 type Runner struct {
-	Deps Dependencies
+	Deps di.Dependencies
 }
 
 // Run executes mc2 ls using production dependencies.
 func Run(ctx context.Context, opts Options) error {
-	return Runner{Deps: ProductionDependencies()}.Run(ctx, opts)
-}
-
-// ProductionDependencies returns the default command dependencies.
-func ProductionDependencies() Dependencies {
-	return Dependencies{
-		LoadProject: config.LoadProject,
-		LoadGlobal:  config.LoadGlobal,
-		OpenStore: func(ctx context.Context, projectRoot string) (RecordStore, error) {
-			return filedb.Open(ctx, projectRoot)
-		},
-		NewRemote: newRemoteClient,
-		Now:       time.Now,
-	}
+	return Runner{Deps: di.Production()}.Run(ctx, opts)
 }
 
 // Run executes the ls command.
@@ -86,25 +50,7 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 	}
 
 	opts = normalizeOptions(opts)
-
-	deps := r.Deps
-	if deps.LoadProject == nil {
-		deps.LoadProject = config.LoadProject
-	}
-	if deps.LoadGlobal == nil {
-		deps.LoadGlobal = config.LoadGlobal
-	}
-	if deps.OpenStore == nil {
-		deps.OpenStore = func(ctx context.Context, projectRoot string) (RecordStore, error) {
-			return filedb.Open(ctx, projectRoot)
-		}
-	}
-	if deps.NewRemote == nil {
-		deps.NewRemote = newRemoteClient
-	}
-	if deps.Now == nil {
-		deps.Now = time.Now
-	}
+	deps := di.WithDefaults(r.Deps)
 
 	projectCfg, err := deps.LoadProject(ctx, opts.WorkingDir)
 	if err != nil {
@@ -124,7 +70,7 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
-	store, err := deps.OpenStore(ctx, projectCfg.ProjectRoot())
+	store, err := deps.OpenStore(ctx, projectRoot)
 	if err != nil {
 		return err
 	}
@@ -137,7 +83,7 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
-	translator, err := projectpath.New(projectCfg.ProjectRoot())
+	translator, err := projectpath.New(projectRoot)
 	if err != nil {
 		return err
 	}
@@ -173,8 +119,8 @@ type listRequest struct {
 	opts       Options
 	project    config.Project
 	translator projectpath.Translator
-	store      RecordStore
-	remote     RemoteClient
+	store      di.Store
+	remote     di.RemoteClient
 	reconciler *reconcile.Reconciler
 	localPath  string
 	now        func() time.Time
@@ -279,22 +225,6 @@ func resolveInputPath(workingDir, inputPath string) (string, error) {
 	}
 
 	return filepath.Abs(filepath.Join(workingDir, inputPath))
-}
-
-func newRemoteClient(project config.Project, global config.Global) (RemoteClient, error) {
-	remoteCfg, ok := global.FindRemote(project.Remote.Email, project.Remote.MCURL)
-	if !ok {
-		return nil, fmt.Errorf("remote %s %s is not configured in global config", project.Remote.Email, project.Remote.MCURL)
-	}
-	if remoteCfg.APIKey == "" {
-		return nil, fmt.Errorf("remote %s %s is missing an API key", project.Remote.Email, project.Remote.MCURL)
-	}
-
-	fmt.Printf("APIKey %s, BaseURL %s\n", remoteCfg.APIKey, remoteCfg.MCURL)
-	return mcapi.NewClient(&mcapi.ClientArgs{
-		APIKey:  remoteCfg.APIKey,
-		BaseURL: remoteCfg.MCURL,
-	}), nil
 }
 
 func sortedStates(states map[string]reconcile.FileState) []reconcile.FileState {
