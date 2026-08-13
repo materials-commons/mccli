@@ -45,8 +45,42 @@ const (
 	defaultFinalizationTimeout       = 30 * time.Second
 )
 
-// ProgressFunc receives upload progress.
-type ProgressFunc func(bytesSent int64, totalBytes int64)
+// ProgressStatus describes the current state of an upload.
+type ProgressStatus string
+
+const (
+	ProgressStarting        ProgressStatus = "starting"
+	ProgressUploading       ProgressStatus = "uploading"
+	ProgressComplete        ProgressStatus = "complete"
+	ProgressAlreadyUploaded ProgressStatus = "already uploaded"
+	ProgressFailed          ProgressStatus = "failed"
+)
+
+// ProgressEvent describes upload progress for one transfer.
+type ProgressEvent struct {
+	TransferID string
+	LocalPath  string
+	RemotePath string
+	BytesSent  int64
+	TotalBytes int64
+	Status     ProgressStatus
+	Err        error
+}
+
+// ProgressReporter receives upload progress events.
+//
+// Implementations must be safe for concurrent calls from multiple uploader
+// goroutines.
+type ProgressReporter interface {
+	ReportUploadProgress(event ProgressEvent)
+}
+
+// ProgressReporterFunc adapts a function to ProgressReporter.
+type ProgressReporterFunc func(event ProgressEvent)
+
+func (f ProgressReporterFunc) ReportUploadProgress(event ProgressEvent) {
+	f(event)
+}
 
 // UploaderConfig configures one Uploader.
 type UploaderConfig struct {
@@ -63,7 +97,7 @@ type UploaderConfig struct {
 	ACKTimeout          time.Duration
 	FinalizationTimeout time.Duration
 
-	Progress ProgressFunc
+	Progress ProgressReporter
 }
 
 // Uploader uploads one file over the websocket protocol.
@@ -83,7 +117,7 @@ type Uploader struct {
 	ACKTimeout          time.Duration
 	FinalizationTimeout time.Duration
 
-	Progress ProgressFunc
+	Progress ProgressReporter
 
 	responseQueue *wsclient.Queue[wsclient.TextMessage]
 
@@ -173,28 +207,38 @@ func (u *Uploader) Upload(ctx context.Context) error {
 
 	u.resetTransferState()
 
+	u.reportProgress(0, local.Size, ProgressStarting, nil)
+
 	if err := u.sendTransferInit(ctx); err != nil {
+		u.reportProgress(u.currentBytesSent(), local.Size, ProgressFailed, err)
 		return err
 	}
 
 	if err := u.waitForAcceptance(ctx); err != nil {
 		if errors.Is(err, ErrAlreadyUploaded) {
+			u.reportProgress(local.Size, local.Size, ProgressAlreadyUploaded, nil)
 			return nil
 		}
+		u.reportProgress(u.currentBytesSent(), local.Size, ProgressFailed, err)
 		return err
 	}
 
 	if err := u.sendChunksWindowed(ctx); err != nil {
+		u.reportProgress(u.currentBytesSent(), local.Size, ProgressFailed, err)
 		return err
 	}
 
 	if err := u.sendTransferComplete(ctx); err != nil {
+		u.reportProgress(u.currentBytesSent(), local.Size, ProgressFailed, err)
 		return err
 	}
 
 	if err := u.waitForFinalization(ctx); err != nil {
+		u.reportProgress(u.currentBytesSent(), local.Size, ProgressFailed, err)
 		return err
 	}
+
+	u.reportProgress(local.Size, local.Size, ProgressComplete, nil)
 
 	return nil
 }
@@ -517,9 +561,7 @@ func (u *Uploader) processACKs(ctx context.Context, totalChunks int64) error {
 			currentBytesSent := u.bytesSent
 			u.mu.Unlock()
 
-			if u.Progress != nil {
-				u.Progress(currentBytesSent, u.Request.Observation.LocalEntry.Size)
-			}
+			u.reportProgress(currentBytesSent, u.Request.Observation.LocalEntry.Size, ProgressUploading, nil)
 
 		case "CHUNK_ERROR":
 			reason, _ := payload["error"].(string)
@@ -645,6 +687,34 @@ func (u *Uploader) validateResponseTransferID(payload map[string]any) error {
 		return fmt.Errorf("%w: response transfer_id %q does not match %q", ErrUnexpectedResponse, transferID, u.TransferID)
 	}
 	return nil
+}
+
+func (u *Uploader) reportProgress(bytesSent int64, totalBytes int64, status ProgressStatus, err error) {
+	if u.Progress == nil {
+		return
+	}
+
+	localPath := ""
+	if u.Request.Observation.LocalEntry != nil {
+		localPath = u.Request.Observation.LocalEntry.Path
+	}
+
+	u.Progress.ReportUploadProgress(ProgressEvent{
+		TransferID: u.TransferID,
+		LocalPath:  localPath,
+		RemotePath: u.Request.Observation.RemotePath,
+		BytesSent:  bytesSent,
+		TotalBytes: totalBytes,
+		Status:     status,
+		Err:        err,
+	})
+}
+
+func (u *Uploader) currentBytesSent() int64 {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	return u.bytesSent
 }
 
 func payloadMap(msg wsclient.TextMessage) (map[string]any, error) {

@@ -62,6 +62,7 @@ type Config struct {
 	ClientID      string
 	MaxConcurrent int
 	Factory       UploaderFactory
+	Progress      ProgressReporter
 }
 
 // NewManager creates an upload manager.
@@ -97,6 +98,7 @@ func NewManager(cfg Config) (*Manager, error) {
 				DBWriteQueue: m.dbQueue,
 				Request:      req,
 				ClientID:     m.clientID,
+				Progress:     cfg.Progress,
 			})
 		}
 	}

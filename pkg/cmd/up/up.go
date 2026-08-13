@@ -113,11 +113,16 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 	sendQueue := wsclient.NewQueue[wsclient.OutboundMessage]()
 	dbQueue := wsclient.NewQueue[upload.DBWriteRequest]()
 
+	progressFactory := upload.NewMPBProgressFactory(opts.Out)
+	progress := upload.NewUploadProgress(progressFactory)
+	defer progress.Wait()
+
 	manager, err := deps.NewUploadManager(upload.Config{
 		SendQueue:     sendQueue,
 		DBWriteQueue:  dbQueue,
 		ClientID:      globalCfg.ClientUUID,
 		MaxConcurrent: 3,
+		Progress:      progress,
 	})
 	if err != nil {
 		return err

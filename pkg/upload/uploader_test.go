@@ -132,9 +132,16 @@ func TestUploaderSendChunksWindowedSendsBinaryFrames(t *testing.T) {
 func TestUploaderProcessACKsReportsProgress(t *testing.T) {
 	var progress []int64
 
-	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, func(sent int64, total int64) {
-		progress = append(progress, sent)
-	})
+	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, ProgressReporterFunc(func(event ProgressEvent) {
+		progress = append(progress, event.BytesSent)
+
+		if event.TotalBytes != 11 {
+			t.Fatalf("TotalBytes = %d, want 11", event.TotalBytes)
+		}
+		if event.Status != ProgressUploading {
+			t.Fatalf("Status = %q, want %q", event.Status, ProgressUploading)
+		}
+	}))
 	uploader.TransferID = "transfer-1"
 
 	uploader.nextChunkToSend = 3
@@ -433,9 +440,9 @@ func TestUploaderUploadRejectsMissingChecksumForNonEmptyFile(t *testing.T) {
 func TestUploaderProcessACKsHandlesOutOfOrderACKs(t *testing.T) {
 	var progress []int64
 
-	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, func(sent int64, total int64) {
-		progress = append(progress, sent)
-	})
+	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, ProgressReporterFunc(func(event ProgressEvent) {
+		progress = append(progress, event.BytesSent)
+	}))
 	uploader.TransferID = "transfer-1"
 	uploader.ackedChunks = map[int64]bool{}
 	uploader.nextChunkToSend = 3
@@ -540,7 +547,7 @@ func TestUploaderSendChunksWindowedResetsStaleACKState(t *testing.T) {
 	}
 }
 
-func makeUploader(t *testing.T, fileBytes []byte, chunkSize int64, windowSize int, progress ProgressFunc) (*Uploader, *wsclient.Queue[wsclient.OutboundMessage], *wsclient.Queue[DBWriteRequest]) {
+func makeUploader(t *testing.T, fileBytes []byte, chunkSize int64, windowSize int, progress ProgressReporter) (*Uploader, *wsclient.Queue[wsclient.OutboundMessage], *wsclient.Queue[DBWriteRequest]) {
 	t.Helper()
 
 	dir := t.TempDir()
