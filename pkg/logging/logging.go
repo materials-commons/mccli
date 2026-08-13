@@ -88,7 +88,8 @@ func NewLogger(output io.Writer, level slog.Leveler) *slog.Logger {
 	}
 
 	handler := slog.NewTextHandler(output, &slog.HandlerOptions{
-		Level: level,
+		Level:     level,
+		AddSource: true,
 	})
 
 	return slog.New(handler)
