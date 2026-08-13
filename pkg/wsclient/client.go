@@ -3,6 +3,7 @@ package wsclient
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -144,6 +145,13 @@ func (c *Client) setupConnectionAndStartTasks(ctx context.Context) error {
 
 	conn, _, err := websocket.Dial(ctx, c.URL, &websocket.DialOptions{
 		HTTPHeader: headers,
+		HTTPClient: &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+			},
+		},
 	})
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
