@@ -36,7 +36,7 @@ type Result struct {
 // Manager manages queued concurrent uploads.
 type Manager struct {
 	sendQueue *wsclient.Queue[wsclient.OutboundMessage]
-	dbQueue   *wsclient.Queue[DBWriteRequest]
+	store     FileRecordStore
 
 	clientID      string
 	maxConcurrent int
@@ -58,7 +58,7 @@ type Manager struct {
 // Config configures a Manager.
 type Config struct {
 	SendQueue     *wsclient.Queue[wsclient.OutboundMessage]
-	DBWriteQueue  *wsclient.Queue[DBWriteRequest]
+	Store         FileRecordStore
 	ClientID      string
 	MaxConcurrent int
 	Factory       UploaderFactory
@@ -70,8 +70,8 @@ func NewManager(cfg Config) (*Manager, error) {
 	if cfg.SendQueue == nil {
 		return nil, fmt.Errorf("send queue is required")
 	}
-	if cfg.DBWriteQueue == nil {
-		return nil, fmt.Errorf("db write queue is required")
+	if cfg.Store == nil {
+		return nil, fmt.Errorf("file record store is required")
 	}
 	if cfg.ClientID == "" {
 		return nil, fmt.Errorf("client id is required")
@@ -82,7 +82,7 @@ func NewManager(cfg Config) (*Manager, error) {
 
 	m := &Manager{
 		sendQueue:     cfg.SendQueue,
-		dbQueue:       cfg.DBWriteQueue,
+		store:         cfg.Store,
 		clientID:      cfg.ClientID,
 		maxConcurrent: cfg.MaxConcurrent,
 		uploadQueue:   wsclient.NewQueue[uploaderRunner](),
@@ -94,11 +94,11 @@ func NewManager(cfg Config) (*Manager, error) {
 	if m.factory == nil {
 		m.factory = func(req Request) uploaderRunner {
 			return NewUploader(UploaderConfig{
-				SendQueue:    m.sendQueue,
-				DBWriteQueue: m.dbQueue,
-				Request:      req,
-				ClientID:     m.clientID,
-				Progress:     cfg.Progress,
+				SendQueue: m.sendQueue,
+				Store:     m.store,
+				Request:   req,
+				ClientID:  m.clientID,
+				Progress:  cfg.Progress,
 			})
 		}
 	}
@@ -211,6 +211,8 @@ func (m *Manager) HandleMessage(msg wsclient.TextMessage) {
 
 	if uploader != nil {
 		uploader.HandleResponse(msg)
+	} else {
+		fmt.Println("No active uploader found for transfer ID:", transferID)
 	}
 }
 

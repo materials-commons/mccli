@@ -15,7 +15,7 @@ import (
 )
 
 func TestUploaderSendTransferInit(t *testing.T) {
-	uploader, sendQueue, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader, sendQueue := makeUploader(t, []byte("hello world"), 5, 10, nil)
 	uploader.TransferID = "transfer-1"
 
 	if err := uploader.sendTransferInit(context.Background()); err != nil {
@@ -44,7 +44,7 @@ func TestUploaderSendTransferInit(t *testing.T) {
 }
 
 func TestUploaderWaitForAcceptanceAcceptAdjustsChunkSize(t *testing.T) {
-	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
 	uploader.TransferID = "transfer-1"
 
 	uploader.HandleResponse(wsclient.TextMessage{
@@ -65,7 +65,7 @@ func TestUploaderWaitForAcceptanceAcceptAdjustsChunkSize(t *testing.T) {
 }
 
 func TestUploaderWaitForAcceptanceRejectAlreadyUploaded(t *testing.T) {
-	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
 	uploader.TransferID = "transfer-1"
 
 	uploader.HandleResponse(wsclient.TextMessage{
@@ -87,7 +87,7 @@ func TestUploaderWaitForAcceptanceRejectAlreadyUploaded(t *testing.T) {
 }
 
 func TestUploaderSendChunksWindowedSendsBinaryFrames(t *testing.T) {
-	uploader, sendQueue, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader, sendQueue := makeUploader(t, []byte("hello world"), 5, 10, nil)
 	uploader.TransferID = "transfer-1"
 
 	go func() {
@@ -132,7 +132,7 @@ func TestUploaderSendChunksWindowedSendsBinaryFrames(t *testing.T) {
 func TestUploaderProcessACKsReportsProgress(t *testing.T) {
 	var progress []int64
 
-	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, ProgressReporterFunc(func(event ProgressEvent) {
+	uploader, _ := makeUploader(t, []byte("hello world"), 5, 10, ProgressReporterFunc(func(event ProgressEvent) {
 		progress = append(progress, event.BytesSent)
 
 		if event.TotalBytes != 11 {
@@ -167,7 +167,7 @@ func TestUploaderProcessACKsReportsProgress(t *testing.T) {
 }
 
 func TestUploaderSendTransferComplete(t *testing.T) {
-	uploader, sendQueue, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader, sendQueue := makeUploader(t, []byte("hello world"), 5, 10, nil)
 	uploader.TransferID = "transfer-1"
 	uploader.bytesSent = 11
 
@@ -187,62 +187,8 @@ func TestUploaderSendTransferComplete(t *testing.T) {
 	}
 }
 
-func TestUploaderWaitForFinalizationQueuesDBWrite(t *testing.T) {
-	uploader, _, dbQueue := makeUploader(t, []byte("hello world"), 5, 10, nil)
-	uploader.TransferID = "transfer-1"
-
-	uploader.HandleResponse(wsclient.TextMessage{
-		"command": "TRANSFER_FINALIZE",
-		"payload": map[string]any{
-			"transfer_id":        "transfer-1",
-			"file_checksum":      "remote-md5",
-			"file_size":          11,
-			"file_id":            456,
-			"file_created_at_ns": 789,
-		},
-	})
-
-	if err := uploader.waitForFinalization(context.Background()); err != nil {
-		t.Fatalf("waitForFinalization() error = %v, want nil", err)
-	}
-
-	reqs := dbQueue.Drain()
-	if len(reqs) != 1 {
-		t.Fatalf("len(db writes) = %d, want 1", len(reqs))
-	}
-
-	record := reqs[0].Record
-	if record.RemoteChecksum == nil || *record.RemoteChecksum != "remote-md5" {
-		t.Fatalf("RemoteChecksum = %v, want remote-md5", record.RemoteChecksum)
-	}
-	if record.RemoteSize == nil || *record.RemoteSize != 11 {
-		t.Fatalf("RemoteSize = %v, want 11", record.RemoteSize)
-	}
-	if record.RemoteFileID == nil || *record.RemoteFileID != 456 {
-		t.Fatalf("RemoteFileID = %v, want 456", record.RemoteFileID)
-	}
-	if record.RemoteCTimeNS == nil || *record.RemoteCTimeNS != 789 {
-		t.Fatalf("RemoteCTimeNS = %v, want 789", record.RemoteCTimeNS)
-	}
-}
-
-func TestUploaderUploadZeroSizeSkips(t *testing.T) {
-	uploader, sendQueue, dbQueue := makeUploader(t, nil, 5, 10, nil)
-
-	if err := uploader.Upload(context.Background()); err != nil {
-		t.Fatalf("Upload() error = %v, want nil for empty file", err)
-	}
-
-	if sendQueue.Len() != 0 {
-		t.Fatalf("sendQueue.Len() = %d, want 0", sendQueue.Len())
-	}
-	if dbQueue.Len() != 0 {
-		t.Fatalf("dbQueue.Len() = %d, want 0", dbQueue.Len())
-	}
-}
-
 func TestUploaderWaitForAcceptanceRejectsWrongTransferID(t *testing.T) {
-	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
 	uploader.TransferID = "transfer-1"
 
 	uploader.HandleResponse(wsclient.TextMessage{
@@ -259,7 +205,7 @@ func TestUploaderWaitForAcceptanceRejectsWrongTransferID(t *testing.T) {
 }
 
 func TestUploaderWaitForAcceptanceTimesOut(t *testing.T) {
-	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
 	uploader.TransferID = "transfer-1"
 	uploader.AcceptanceTimeout = 10 * time.Millisecond
 
@@ -273,7 +219,7 @@ func TestUploaderWaitForAcceptanceTimesOut(t *testing.T) {
 }
 
 func TestUploaderProcessACKsRejectsWrongTransferID(t *testing.T) {
-	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
 	uploader.TransferID = "transfer-1"
 	uploader.nextChunkToSend = 1
 	uploader.inFlightChunks = 1
@@ -294,7 +240,7 @@ func TestUploaderProcessACKsRejectsWrongTransferID(t *testing.T) {
 }
 
 func TestUploaderProcessACKsRejectsMissingPayload(t *testing.T) {
-	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
 	uploader.TransferID = "transfer-1"
 	uploader.nextChunkToSend = 1
 	uploader.inFlightChunks = 1
@@ -310,7 +256,7 @@ func TestUploaderProcessACKsRejectsMissingPayload(t *testing.T) {
 }
 
 func TestUploaderProcessACKsReturnsChunkError(t *testing.T) {
-	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
 	uploader.TransferID = "transfer-1"
 	uploader.nextChunkToSend = 1
 	uploader.inFlightChunks = 1
@@ -333,7 +279,7 @@ func TestUploaderProcessACKsReturnsChunkError(t *testing.T) {
 }
 
 func TestUploaderSendChunksWindowedReturnsWhenACKProcessorFails(t *testing.T) {
-	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
 	uploader.TransferID = "transfer-1"
 
 	uploader.HandleResponse(wsclient.TextMessage{
@@ -354,7 +300,7 @@ func TestUploaderSendChunksWindowedReturnsWhenACKProcessorFails(t *testing.T) {
 }
 
 func TestUploaderSendTransferInitFailsWhenSendQueueClosed(t *testing.T) {
-	uploader, sendQueue, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader, sendQueue := makeUploader(t, []byte("hello world"), 5, 10, nil)
 	uploader.TransferID = "transfer-1"
 	sendQueue.Close()
 
@@ -364,27 +310,8 @@ func TestUploaderSendTransferInitFailsWhenSendQueueClosed(t *testing.T) {
 	}
 }
 
-func TestUploaderWaitForFinalizationFailsWhenDBQueueClosed(t *testing.T) {
-	uploader, _, dbQueue := makeUploader(t, []byte("hello world"), 5, 10, nil)
-	uploader.TransferID = "transfer-1"
-	dbQueue.Close()
-
-	uploader.HandleResponse(wsclient.TextMessage{
-		"command": "TRANSFER_FINALIZE",
-		"payload": map[string]any{
-			"transfer_id": "transfer-1",
-			"file_id":     456,
-		},
-	})
-
-	err := uploader.waitForFinalization(context.Background())
-	if !errors.Is(err, ErrQueueClosed) {
-		t.Fatalf("waitForFinalization() error = %v, want ErrQueueClosed", err)
-	}
-}
-
 func TestUploaderUploadZeroSizeDoesNotRequireTransferID(t *testing.T) {
-	uploader, sendQueue, dbQueue := makeUploader(t, nil, 5, 10, nil)
+	uploader, sendQueue := makeUploader(t, nil, 5, 10, nil)
 	uploader.TransferID = ""
 
 	if err := uploader.Upload(context.Background()); err != nil {
@@ -394,13 +321,10 @@ func TestUploaderUploadZeroSizeDoesNotRequireTransferID(t *testing.T) {
 	if sendQueue.Len() != 0 {
 		t.Fatalf("sendQueue.Len() = %d, want 0", sendQueue.Len())
 	}
-	if dbQueue.Len() != 0 {
-		t.Fatalf("dbQueue.Len() = %d, want 0", dbQueue.Len())
-	}
 }
 
 func TestUploaderUploadRejectsBlankChecksumForNonEmptyFile(t *testing.T) {
-	uploader, sendQueue, dbQueue := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader, sendQueue := makeUploader(t, []byte("hello world"), 5, 10, nil)
 	uploader.TransferID = "transfer-1"
 
 	blank := ""
@@ -414,13 +338,10 @@ func TestUploaderUploadRejectsBlankChecksumForNonEmptyFile(t *testing.T) {
 	if sendQueue.Len() != 0 {
 		t.Fatalf("sendQueue.Len() = %d, want 0", sendQueue.Len())
 	}
-	if dbQueue.Len() != 0 {
-		t.Fatalf("dbQueue.Len() = %d, want 0", dbQueue.Len())
-	}
 }
 
 func TestUploaderUploadRejectsMissingChecksumForNonEmptyFile(t *testing.T) {
-	uploader, sendQueue, dbQueue := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader, sendQueue := makeUploader(t, []byte("hello world"), 5, 10, nil)
 	uploader.TransferID = "transfer-1"
 	uploader.Request.UpdatedRecord.LocalChecksum = nil
 
@@ -432,15 +353,12 @@ func TestUploaderUploadRejectsMissingChecksumForNonEmptyFile(t *testing.T) {
 	if sendQueue.Len() != 0 {
 		t.Fatalf("sendQueue.Len() = %d, want 0", sendQueue.Len())
 	}
-	if dbQueue.Len() != 0 {
-		t.Fatalf("dbQueue.Len() = %d, want 0", dbQueue.Len())
-	}
 }
 
 func TestUploaderProcessACKsHandlesOutOfOrderACKs(t *testing.T) {
 	var progress []int64
 
-	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, ProgressReporterFunc(func(event ProgressEvent) {
+	uploader, _ := makeUploader(t, []byte("hello world"), 5, 10, ProgressReporterFunc(func(event ProgressEvent) {
 		progress = append(progress, event.BytesSent)
 	}))
 	uploader.TransferID = "transfer-1"
@@ -474,7 +392,7 @@ func TestUploaderProcessACKsHandlesOutOfOrderACKs(t *testing.T) {
 }
 
 func TestUploaderProcessACKsDoesNotCompleteOnHighestACKOnly(t *testing.T) {
-	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
 	uploader.TransferID = "transfer-1"
 	uploader.ACKTimeout = 10 * time.Millisecond
 	uploader.ackedChunks = map[int64]bool{}
@@ -497,7 +415,7 @@ func TestUploaderProcessACKsDoesNotCompleteOnHighestACKOnly(t *testing.T) {
 }
 
 func TestUploaderProcessACKsIgnoresDuplicateACKForCompletion(t *testing.T) {
-	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
 	uploader.TransferID = "transfer-1"
 	uploader.ackedChunks = map[int64]bool{}
 	uploader.nextChunkToSend = 3
@@ -521,7 +439,7 @@ func TestUploaderProcessACKsIgnoresDuplicateACKForCompletion(t *testing.T) {
 }
 
 func TestUploaderSendChunksWindowedResetsStaleACKState(t *testing.T) {
-	uploader, _, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	uploader, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
 	uploader.TransferID = "transfer-1"
 
 	uploader.ackedChunks[0] = true
@@ -547,7 +465,81 @@ func TestUploaderSendChunksWindowedResetsStaleACKState(t *testing.T) {
 	}
 }
 
-func makeUploader(t *testing.T, fileBytes []byte, chunkSize int64, windowSize int, progress ProgressReporter) (*Uploader, *wsclient.Queue[wsclient.OutboundMessage], *wsclient.Queue[DBWriteRequest]) {
+func TestUploaderWaitForFinalizationUpsertsRecord(t *testing.T) {
+	store := &fakeStore{}
+	uploader, _ := makeUploaderWithStore(t, []byte("hello world"), 5, 10, nil, store)
+	uploader.TransferID = "transfer-1"
+
+	remoteChecksum := "remote-md5"
+	uploader.HandleResponse(wsclient.TextMessage{
+		"command": "TRANSFER_FINALIZE",
+		"payload": map[string]any{
+			"transfer_id":        "transfer-1",
+			"file_checksum":      remoteChecksum,
+			"file_size":          int64(11),
+			"file_id":            int64(42),
+			"file_created_at_ns": int64(123456789),
+		},
+	})
+
+	if err := uploader.waitForFinalization(context.Background()); err != nil {
+		t.Fatalf("waitForFinalization() error = %v, want nil", err)
+	}
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+
+	if len(store.records) != 1 {
+		t.Fatalf("len(store.records) = %d, want 1", len(store.records))
+	}
+
+	record := store.records[0]
+	if record.Path != "/example.txt" {
+		t.Fatalf("record.Path = %q, want /example.txt", record.Path)
+	}
+	if record.RemoteChecksum == nil || *record.RemoteChecksum != remoteChecksum {
+		t.Fatalf("record.RemoteChecksum = %v, want %q", record.RemoteChecksum, remoteChecksum)
+	}
+	if record.RemoteSize == nil || *record.RemoteSize != 11 {
+		t.Fatalf("record.RemoteSize = %v, want 11", record.RemoteSize)
+	}
+	if record.RemoteFileID == nil || *record.RemoteFileID != 42 {
+		t.Fatalf("record.RemoteFileID = %v, want 42", record.RemoteFileID)
+	}
+	if record.RemoteCTimeNS == nil || *record.RemoteCTimeNS != 123456789 {
+		t.Fatalf("record.RemoteCTimeNS = %v, want 123456789", record.RemoteCTimeNS)
+	}
+	if record.LocalLastSeenTS == 0 {
+		t.Fatal("record.LocalLastSeenTS = 0, want updated timestamp")
+	}
+}
+
+func TestUploaderWaitForFinalizationReturnsStoreError(t *testing.T) {
+	storeErr := errors.New("database write failed")
+	store := &fakeStore{err: storeErr}
+	uploader, _ := makeUploaderWithStore(t, []byte("hello world"), 5, 10, nil, store)
+	uploader.TransferID = "transfer-1"
+
+	uploader.HandleResponse(wsclient.TextMessage{
+		"command": "TRANSFER_FINALIZE",
+		"payload": map[string]any{
+			"transfer_id": "transfer-1",
+		},
+	})
+
+	err := uploader.waitForFinalization(context.Background())
+	if !errors.Is(err, storeErr) {
+		t.Fatalf("waitForFinalization() error = %v, want store error", err)
+	}
+}
+
+func makeUploader(t *testing.T, fileBytes []byte, chunkSize int64, windowSize int, progress ProgressReporter) (*Uploader, *wsclient.Queue[wsclient.OutboundMessage]) {
+	t.Helper()
+
+	return makeUploaderWithStore(t, fileBytes, chunkSize, windowSize, progress, &fakeStore{})
+}
+
+func makeUploaderWithStore(t *testing.T, fileBytes []byte, chunkSize int64, windowSize int, progress ProgressReporter, store FileRecordStore) (*Uploader, *wsclient.Queue[wsclient.OutboundMessage]) {
 	t.Helper()
 
 	dir := t.TempDir()
@@ -559,7 +551,6 @@ func makeUploader(t *testing.T, fileBytes []byte, chunkSize int64, windowSize in
 	localChecksum := "local-md5"
 
 	sendQueue := wsclient.NewQueue[wsclient.OutboundMessage]()
-	dbQueue := wsclient.NewQueue[DBWriteRequest]()
 
 	record := filedb.FileRecord{
 		Path:             "/example.txt",
@@ -574,8 +565,8 @@ func makeUploader(t *testing.T, fileBytes []byte, chunkSize int64, windowSize in
 	}
 
 	uploader := NewUploader(UploaderConfig{
-		SendQueue:    sendQueue,
-		DBWriteQueue: dbQueue,
+		SendQueue: sendQueue,
+		Store:     store,
 		Request: Request{
 			ProjectID: 123,
 			ClientID:  "client-123",
@@ -602,7 +593,7 @@ func makeUploader(t *testing.T, fileBytes []byte, chunkSize int64, windowSize in
 		Progress:   progress,
 	})
 
-	return uploader, sendQueue, dbQueue
+	return uploader, sendQueue
 }
 
 func popOutbound[T wsclient.OutboundMessage](t *testing.T, q *wsclient.Queue[wsclient.OutboundMessage]) T {

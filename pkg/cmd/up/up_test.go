@@ -191,7 +191,6 @@ func testDeps(projectRoot string, store di.Store, remote di.RemoteClient, manage
 		},
 		NewUploadManager: func(cfg upload.Config) (di.UploadManager, error) {
 			manager.sendQueue = cfg.SendQueue
-			manager.dbQueue = cfg.DBWriteQueue
 			return manager, nil
 		},
 		NewWebSocket: func(cfg di.WebSocketConfig) di.WebSocketRunner {
@@ -201,6 +200,12 @@ func testDeps(projectRoot string, store di.Store, remote di.RemoteClient, manage
 			return time.Unix(100, 0)
 		},
 	}
+}
+
+type fakeStore struct{}
+
+func (f *fakeStore) Upsert(ctx context.Context, record filedb.FileRecord) error {
+	return nil
 }
 
 type fakeRemote struct {

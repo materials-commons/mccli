@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/materials-commons/mccli/pkg/filedb"
 	"github.com/materials-commons/mccli/pkg/wsclient"
 )
 
@@ -18,12 +19,12 @@ func TestNewManagerValidation(t *testing.T) {
 		{
 			name: "missing send queue",
 			cfg: Config{
-				DBWriteQueue: wsclient.NewQueue[DBWriteRequest](),
-				ClientID:     "client-1",
+				Store:    &fakeStore{},
+				ClientID: "client-1",
 			},
 		},
 		{
-			name: "missing db queue",
+			name: "missing store",
 			cfg: Config{
 				SendQueue: wsclient.NewQueue[wsclient.OutboundMessage](),
 				ClientID:  "client-1",
@@ -32,8 +33,8 @@ func TestNewManagerValidation(t *testing.T) {
 		{
 			name: "missing client id",
 			cfg: Config{
-				SendQueue:    wsclient.NewQueue[wsclient.OutboundMessage](),
-				DBWriteQueue: wsclient.NewQueue[DBWriteRequest](),
+				SendQueue: wsclient.NewQueue[wsclient.OutboundMessage](),
+				Store:     &fakeStore{},
 			},
 		},
 	}
@@ -499,9 +500,11 @@ func newTestManager(t *testing.T, cfg Config) *Manager {
 	if cfg.SendQueue == nil {
 		cfg.SendQueue = wsclient.NewQueue[wsclient.OutboundMessage]()
 	}
-	if cfg.DBWriteQueue == nil {
-		cfg.DBWriteQueue = wsclient.NewQueue[DBWriteRequest]()
+
+	if cfg.Store == nil {
+		cfg.Store = &fakeStore{}
 	}
+
 	if cfg.ClientID == "" {
 		cfg.ClientID = "client-1"
 	}
@@ -526,6 +529,24 @@ func waitFor(t *testing.T, timeout time.Duration, fn func() bool) {
 	}
 
 	t.Fatal("condition not met before timeout")
+}
+
+type fakeStore struct {
+	mu      sync.Mutex
+	records []filedb.FileRecord
+	err     error
+}
+
+func (f *fakeStore) Upsert(ctx context.Context, record filedb.FileRecord) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.err != nil {
+		return f.err
+	}
+
+	f.records = append(f.records, record)
+	return nil
 }
 
 type fakeUploader struct {

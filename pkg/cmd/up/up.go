@@ -121,7 +121,6 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 	}
 
 	sendQueue := wsclient.NewQueue[wsclient.OutboundMessage]()
-	dbQueue := wsclient.NewQueue[upload.DBWriteRequest]()
 
 	progressFactory := upload.NewMPBProgressFactory(opts.Out)
 	progress := upload.NewUploadProgress(progressFactory)
@@ -129,7 +128,7 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 
 	manager, err := deps.NewUploadManager(upload.Config{
 		SendQueue:     sendQueue,
-		DBWriteQueue:  dbQueue,
+		Store:         store,
 		ClientID:      globalCfg.ClientUUID,
 		MaxConcurrent: 3,
 		Progress:      progress,
@@ -151,8 +150,6 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-
-	dbDone := startDBWriter(runCtx, store, dbQueue)
 
 	manager.StartWorkers(runCtx)
 
@@ -190,10 +187,9 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
-	cancel()
+	time.Sleep(3 * time.Second)
 	manager.StopWorkers()
-	dbQueue.Close()
-	<-dbDone
+	cancel()
 
 	select {
 	case err := <-wsErrCh:
@@ -329,28 +325,6 @@ func queueFileUpload(ctx context.Context, req queueRequest, localPath string) (s
 	}
 
 	return transferID, true, nil
-}
-
-func startDBWriter(ctx context.Context, store di.Store, queue *wsclient.Queue[upload.DBWriteRequest]) <-chan struct{} {
-	done := make(chan struct{})
-
-	go func() {
-		defer close(done)
-
-		for {
-			req, ok, err := queue.Pop(ctx)
-			if err != nil {
-				return
-			}
-			if !ok {
-				return
-			}
-
-			_ = store.Upsert(ctx, req.Record)
-		}
-	}()
-
-	return done
 }
 
 func waitForTransfers(ctx context.Context, manager di.UploadManager, transferIDs []string) error {

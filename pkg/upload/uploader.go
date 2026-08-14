@@ -82,10 +82,15 @@ func (f ProgressReporterFunc) ReportUploadProgress(event ProgressEvent) {
 	f(event)
 }
 
+// FileRecordStore persists uploaded file state.
+type FileRecordStore interface {
+	Upsert(ctx context.Context, record filedb.FileRecord) error
+}
+
 // UploaderConfig configures one Uploader.
 type UploaderConfig struct {
-	SendQueue    *wsclient.Queue[wsclient.OutboundMessage]
-	DBWriteQueue *wsclient.Queue[DBWriteRequest]
+	SendQueue *wsclient.Queue[wsclient.OutboundMessage]
+	Store     FileRecordStore
 
 	Request  Request
 	ClientID string
@@ -102,8 +107,8 @@ type UploaderConfig struct {
 
 // Uploader uploads one file over the websocket protocol.
 type Uploader struct {
-	SendQueue    *wsclient.Queue[wsclient.OutboundMessage]
-	DBWriteQueue *wsclient.Queue[DBWriteRequest]
+	SendQueue *wsclient.Queue[wsclient.OutboundMessage]
+	Store     FileRecordStore
 
 	Request  Request
 	ClientID string
@@ -152,7 +157,7 @@ func NewUploader(cfg UploaderConfig) *Uploader {
 
 	return &Uploader{
 		SendQueue:           cfg.SendQueue,
-		DBWriteQueue:        cfg.DBWriteQueue,
+		Store:               cfg.Store,
 		Request:             cfg.Request,
 		ClientID:            cfg.ClientID,
 		ChunkSize:           cfg.ChunkSize,
@@ -238,6 +243,7 @@ func (u *Uploader) Upload(ctx context.Context) error {
 		return err
 	}
 
+	fmt.Println("Progress Complete")
 	u.reportProgress(local.Size, local.Size, ProgressComplete, nil)
 
 	return nil
@@ -247,8 +253,8 @@ func (u *Uploader) validate() error {
 	if u.SendQueue == nil {
 		return fmt.Errorf("send queue is required")
 	}
-	if u.DBWriteQueue == nil {
-		return fmt.Errorf("db write queue is required")
+	if u.Store == nil {
+		return fmt.Errorf("file record store is required")
 	}
 	if u.ClientID == "" {
 		return fmt.Errorf("client id is required")
@@ -305,6 +311,7 @@ func (u *Uploader) sendTransferInit(ctx context.Context) error {
 		return fmt.Errorf("local entry is required")
 	}
 
+	fmt.Println("Sending transfer init for transfer ID:", u.TransferID)
 	msg := wsclient.TextMessage{
 		"command":   "TRANSFER_INIT",
 		"id":        u.TransferID,
@@ -333,6 +340,7 @@ func (u *Uploader) waitForAcceptance(ctx context.Context) error {
 	defer cancel()
 
 	msg, ok, err := u.responseQueue.Pop(waitCtx)
+	fmt.Printf("waitForAcceptance %+v, %v, %s\n", msg, ok, err)
 	if err != nil {
 		return fmt.Errorf("wait for transfer acceptance: %w", err)
 	}
@@ -356,6 +364,9 @@ func (u *Uploader) waitForAcceptance(ctx context.Context) error {
 			u.ChunkSize = chunkSize
 		}
 		return nil
+
+	case "TRANSFER_ALREADY_UPLOADED":
+		// The message will contain the information we need to update the database.
 
 	case "TRANSFER_REJECT":
 		reason, _ := payload["reason"].(string)
@@ -578,9 +589,11 @@ func (u *Uploader) processACKs(ctx context.Context, totalChunks int64) error {
 
 func (u *Uploader) sendTransferComplete(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
+		fmt.Println("sendTransferComplete ", u.TransferID, err)
 		return err
 	}
 
+	fmt.Println("Sent TRANSFER_COMPLETE", u.TransferID)
 	msg := wsclient.TextMessage{
 		"command":   "TRANSFER_COMPLETE",
 		"id":        u.TransferID,
@@ -623,6 +636,7 @@ func (u *Uploader) waitForFinalization(ctx context.Context) error {
 
 	switch command {
 	case "TRANSFER_FINALIZE":
+		fmt.Println("Received TRANSFER_FINALIZE response")
 		record := u.Request.UpdatedRecord
 		record.LocalLastSeenTS = time.Now().Unix()
 
@@ -639,8 +653,9 @@ func (u *Uploader) waitForFinalization(ctx context.Context) error {
 			record.RemoteCTimeNS = &createdNS
 		}
 
-		if ok := u.DBWriteQueue.Push(DBWriteRequest{Record: record}); !ok {
-			return fmt.Errorf("%w: queue db write", ErrQueueClosed)
+		fmt.Printf("  Upserting record: %v\n", record)
+		if err := u.Store.Upsert(ctx, record); err != nil {
+			return fmt.Errorf("upsert finalized upload record %q: %w", record.Path, err)
 		}
 
 		return nil

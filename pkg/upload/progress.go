@@ -88,6 +88,9 @@ func NewUploadProgress(factory progressFactory) *UploadProgress {
 //
 // It is safe to call concurrently from multiple uploader goroutines.
 func (p *UploadProgress) ReportUploadProgress(event ProgressEvent) {
+	if true {
+		return
+	}
 	if p == nil || p.factory == nil || event.TransferID == "" {
 		return
 	}
