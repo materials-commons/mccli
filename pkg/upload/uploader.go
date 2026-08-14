@@ -367,6 +367,7 @@ func (u *Uploader) waitForAcceptance(ctx context.Context) error {
 
 	case "TRANSFER_ALREADY_UPLOADED":
 		// The message will contain the information we need to update the database.
+		return nil
 
 	case "TRANSFER_REJECT":
 		reason, _ := payload["reason"].(string)
