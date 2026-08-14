@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/materials-commons/mccli/pkg/transfer"
 	"github.com/vbauerster/mpb/v8"
 	"github.com/vbauerster/mpb/v8/decor"
 )
@@ -84,10 +85,10 @@ func NewUploadProgress(factory progressFactory) *UploadProgress {
 	}
 }
 
-// ReportUploadProgress updates the progress bar for one transfer.
+// ReportTransferProgress updates the progress bar for one transfer.
 //
 // It is safe to call concurrently from multiple uploader goroutines.
-func (p *UploadProgress) ReportUploadProgress(event ProgressEvent) {
+func (p *UploadProgress) ReportTransferProgress(event transfer.Event) {
 	if p == nil || p.factory == nil || event.TransferID == "" {
 		return
 	}
@@ -114,7 +115,7 @@ func (p *UploadProgress) ReportUploadProgress(event ProgressEvent) {
 		state.bar.SetTotal(event.TotalBytes, false)
 	}
 
-	current := event.BytesSent
+	current := event.BytesDone
 	if current < state.current {
 		current = state.current
 	}
@@ -126,7 +127,7 @@ func (p *UploadProgress) ReportUploadProgress(event ProgressEvent) {
 	state.bar.SetCurrent(current)
 
 	switch event.Status {
-	case ProgressComplete, ProgressAlreadyUploaded:
+	case transfer.StatusComplete, transfer.StatusAlreadyUploaded:
 		if !state.done {
 			state.done = true
 			state.current = state.total
@@ -134,7 +135,7 @@ func (p *UploadProgress) ReportUploadProgress(event ProgressEvent) {
 			state.bar.SetTotal(state.total, true)
 		}
 
-	case ProgressFailed:
+	case transfer.StatusFailed, transfer.StatusCancelled:
 		if !state.done {
 			state.done = true
 			state.bar.Abort(false)
@@ -151,7 +152,7 @@ func (p *UploadProgress) Wait() {
 	p.factory.Wait()
 }
 
-func progressDisplayName(event ProgressEvent) string {
+func progressDisplayName(event transfer.Event) string {
 	if event.RemotePath != "" {
 		return event.RemotePath
 	}

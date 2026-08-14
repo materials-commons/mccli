@@ -12,6 +12,7 @@ import (
 
 	mcapi "github.com/materials-commons/gomcapi"
 	"github.com/materials-commons/mccli/pkg/config"
+	"github.com/materials-commons/mccli/pkg/download"
 	"github.com/materials-commons/mccli/pkg/filedb"
 	"github.com/materials-commons/mccli/pkg/reconcile"
 	"github.com/materials-commons/mccli/pkg/upload"
@@ -47,6 +48,14 @@ type UploadManager interface {
 	Result(transferID string) (upload.Result, bool)
 }
 
+// DownloadManager queues and runs HTTP Range downloads.
+type DownloadManager interface {
+	StartWorkers(ctx context.Context)
+	StopWorkers()
+	QueueDownload(req download.Request) (string, error)
+	Result(transferID string) (download.Result, bool)
+}
+
 // WebSocketRunner runs a websocket client.
 type WebSocketRunner interface {
 	Run(ctx context.Context) error
@@ -70,8 +79,9 @@ type Dependencies struct {
 	OpenStore   func(ctx context.Context, projectRoot string) (Store, error)
 	NewRemote   func(project config.Project, global config.Global) (RemoteClient, error)
 
-	NewUploadManager func(cfg upload.Config) (UploadManager, error)
-	NewWebSocket     func(cfg WebSocketConfig) WebSocketRunner
+	NewUploadManager   func(cfg upload.Config) (UploadManager, error)
+	NewDownloadManager func(cfg download.Config) (DownloadManager, error)
+	NewWebSocket       func(cfg WebSocketConfig) WebSocketRunner
 
 	Now func() time.Time
 }
@@ -87,6 +97,9 @@ func Production() Dependencies {
 		NewRemote: NewRemoteClient,
 		NewUploadManager: func(cfg upload.Config) (UploadManager, error) {
 			return upload.NewManager(cfg)
+		},
+		NewDownloadManager: func(cfg download.Config) (DownloadManager, error) {
+			return download.NewManager(cfg)
 		},
 		NewWebSocket: func(cfg WebSocketConfig) WebSocketRunner {
 			return &wsclient.Client{
@@ -120,6 +133,9 @@ func WithDefaults(deps Dependencies) Dependencies {
 	}
 	if deps.NewUploadManager == nil {
 		deps.NewUploadManager = prod.NewUploadManager
+	}
+	if deps.NewDownloadManager == nil {
+		deps.NewDownloadManager = prod.NewDownloadManager
 	}
 	if deps.NewWebSocket == nil {
 		deps.NewWebSocket = prod.NewWebSocket

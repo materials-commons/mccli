@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/materials-commons/mccli/pkg/transfer"
 	"github.com/materials-commons/mccli/pkg/wsclient"
 )
 
@@ -62,7 +63,7 @@ type Config struct {
 	ClientID      string
 	MaxConcurrent int
 	Factory       UploaderFactory
-	Progress      ProgressReporter
+	Progress      transfer.Reporter
 }
 
 // NewManager creates an upload manager.

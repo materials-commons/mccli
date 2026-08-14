@@ -114,27 +114,6 @@ func configCommand() *cli.Command {
 	}
 }
 
-func downCommand() *cli.Command {
-	return &cli.Command{
-		Name:      "down",
-		Usage:     "Download files or directories from Materials Commons",
-		ArgsUsage: "paths...",
-		Flags: []cli.Flag{
-			&cli.BoolFlag{
-				Name:    "recursive",
-				Aliases: []string{"r"},
-				Usage:   "Download directory contents recursively",
-			},
-			&cli.BoolFlag{
-				Name:    "force",
-				Aliases: []string{"f"},
-				Usage:   "Overwrite local files even if they were not previously uploaded",
-			},
-		},
-		Action: notYetImplemented("down"),
-	}
-}
-
 func initCommand() *cli.Command {
 	return &cli.Command{
 		Name:   "init",

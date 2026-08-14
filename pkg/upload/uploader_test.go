@@ -11,6 +11,7 @@ import (
 
 	"github.com/materials-commons/mccli/pkg/filedb"
 	"github.com/materials-commons/mccli/pkg/reconcile"
+	"github.com/materials-commons/mccli/pkg/transfer"
 	"github.com/materials-commons/mccli/pkg/wsclient"
 )
 
@@ -132,14 +133,14 @@ func TestUploaderSendChunksWindowedSendsBinaryFrames(t *testing.T) {
 func TestUploaderProcessACKsReportsProgress(t *testing.T) {
 	var progress []int64
 
-	uploader, _ := makeUploader(t, []byte("hello world"), 5, 10, ProgressReporterFunc(func(event ProgressEvent) {
-		progress = append(progress, event.BytesSent)
+	uploader, _ := makeUploader(t, []byte("hello world"), 5, 10, transfer.ReporterFunc(func(event transfer.Event) {
+		progress = append(progress, event.BytesDone)
 
 		if event.TotalBytes != 11 {
 			t.Fatalf("TotalBytes = %d, want 11", event.TotalBytes)
 		}
-		if event.Status != ProgressUploading {
-			t.Fatalf("Status = %q, want %q", event.Status, ProgressUploading)
+		if event.Status != transfer.StatusUploading {
+			t.Fatalf("Status = %q, want %q", event.Status, transfer.StatusUploading)
 		}
 	}))
 	uploader.TransferID = "transfer-1"
@@ -358,8 +359,8 @@ func TestUploaderUploadRejectsMissingChecksumForNonEmptyFile(t *testing.T) {
 func TestUploaderProcessACKsHandlesOutOfOrderACKs(t *testing.T) {
 	var progress []int64
 
-	uploader, _ := makeUploader(t, []byte("hello world"), 5, 10, ProgressReporterFunc(func(event ProgressEvent) {
-		progress = append(progress, event.BytesSent)
+	uploader, _ := makeUploader(t, []byte("hello world"), 5, 10, transfer.ReporterFunc(func(event transfer.Event) {
+		progress = append(progress, event.BytesDone)
 	}))
 	uploader.TransferID = "transfer-1"
 	uploader.ackedChunks = map[int64]bool{}
@@ -533,13 +534,13 @@ func TestUploaderWaitForFinalizationReturnsStoreError(t *testing.T) {
 	}
 }
 
-func makeUploader(t *testing.T, fileBytes []byte, chunkSize int64, windowSize int, progress ProgressReporter) (*Uploader, *wsclient.Queue[wsclient.OutboundMessage]) {
+func makeUploader(t *testing.T, fileBytes []byte, chunkSize int64, windowSize int, progress transfer.Reporter) (*Uploader, *wsclient.Queue[wsclient.OutboundMessage]) {
 	t.Helper()
 
 	return makeUploaderWithStore(t, fileBytes, chunkSize, windowSize, progress, &fakeStore{})
 }
 
-func makeUploaderWithStore(t *testing.T, fileBytes []byte, chunkSize int64, windowSize int, progress ProgressReporter, store FileRecordStore) (*Uploader, *wsclient.Queue[wsclient.OutboundMessage]) {
+func makeUploaderWithStore(t *testing.T, fileBytes []byte, chunkSize int64, windowSize int, progress transfer.Reporter, store FileRecordStore) (*Uploader, *wsclient.Queue[wsclient.OutboundMessage]) {
 	t.Helper()
 
 	dir := t.TempDir()

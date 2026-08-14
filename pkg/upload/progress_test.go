@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+
+	"github.com/materials-commons/mccli/pkg/transfer"
 )
 
 type fakeProgressFactory struct {
@@ -75,19 +77,19 @@ func TestUploadProgressCreatesOneBarPerTransfer(t *testing.T) {
 	factory := newFakeProgressFactory()
 	progress := NewUploadProgress(factory)
 
-	progress.ReportUploadProgress(ProgressEvent{
+	progress.ReportTransferProgress(transfer.Event{
 		TransferID: "transfer-1",
 		RemotePath: "/a.txt",
-		BytesSent:  5,
+		BytesDone:  5,
 		TotalBytes: 10,
-		Status:     ProgressUploading,
+		Status:     transfer.StatusUploading,
 	})
-	progress.ReportUploadProgress(ProgressEvent{
+	progress.ReportTransferProgress(transfer.Event{
 		TransferID: "transfer-1",
 		RemotePath: "/a.txt",
-		BytesSent:  10,
+		BytesDone:  10,
 		TotalBytes: 10,
-		Status:     ProgressComplete,
+		Status:     transfer.StatusComplete,
 	})
 
 	if len(progress.bars) != 1 {
@@ -122,21 +124,21 @@ func TestUploadProgressIsConcurrentSafe(t *testing.T) {
 			defer wg.Done()
 
 			for sent := int64(0); sent <= updates; sent++ {
-				progress.ReportUploadProgress(ProgressEvent{
+				progress.ReportTransferProgress(transfer.Event{
 					TransferID: transferID,
 					RemotePath: "/" + transferID,
-					BytesSent:  sent,
+					BytesDone:  sent,
 					TotalBytes: updates,
-					Status:     ProgressUploading,
+					Status:     transfer.StatusUploading,
 				})
 			}
 
-			progress.ReportUploadProgress(ProgressEvent{
+			progress.ReportTransferProgress(transfer.Event{
 				TransferID: transferID,
 				RemotePath: "/" + transferID,
-				BytesSent:  updates,
+				BytesDone:  updates,
 				TotalBytes: updates,
-				Status:     ProgressComplete,
+				Status:     transfer.StatusComplete,
 			})
 		}()
 	}
@@ -161,19 +163,19 @@ func TestUploadProgressDoesNotMoveBackward(t *testing.T) {
 	factory := newFakeProgressFactory()
 	progress := NewUploadProgress(factory)
 
-	progress.ReportUploadProgress(ProgressEvent{
+	progress.ReportTransferProgress(transfer.Event{
 		TransferID: "transfer-1",
 		RemotePath: "/a.txt",
-		BytesSent:  8,
+		BytesDone:  8,
 		TotalBytes: 10,
-		Status:     ProgressUploading,
+		Status:     transfer.StatusUploading,
 	})
-	progress.ReportUploadProgress(ProgressEvent{
+	progress.ReportTransferProgress(transfer.Event{
 		TransferID: "transfer-1",
 		RemotePath: "/a.txt",
-		BytesSent:  4,
+		BytesDone:  4,
 		TotalBytes: 10,
-		Status:     ProgressUploading,
+		Status:     transfer.StatusUploading,
 	})
 
 	state := progress.bars["transfer-1"]
@@ -189,12 +191,12 @@ func TestUploadProgressAbortsFailedUpload(t *testing.T) {
 	factory := newFakeProgressFactory()
 	progress := NewUploadProgress(factory)
 
-	progress.ReportUploadProgress(ProgressEvent{
+	progress.ReportTransferProgress(transfer.Event{
 		TransferID: "transfer-1",
 		RemotePath: "/a.txt",
-		BytesSent:  4,
+		BytesDone:  4,
 		TotalBytes: 10,
-		Status:     ProgressFailed,
+		Status:     transfer.StatusFailed,
 	})
 
 	state := progress.bars["transfer-1"]

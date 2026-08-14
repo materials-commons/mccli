@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/materials-commons/mccli/pkg/filedb"
+	"github.com/materials-commons/mccli/pkg/transfer"
 	"github.com/materials-commons/mccli/pkg/wsclient"
 )
 
@@ -45,43 +46,6 @@ const (
 	defaultFinalizationTimeout       = 30 * time.Second
 )
 
-// ProgressStatus describes the current state of an upload.
-type ProgressStatus string
-
-const (
-	ProgressStarting        ProgressStatus = "starting"
-	ProgressUploading       ProgressStatus = "uploading"
-	ProgressComplete        ProgressStatus = "complete"
-	ProgressAlreadyUploaded ProgressStatus = "already uploaded"
-	ProgressFailed          ProgressStatus = "failed"
-)
-
-// ProgressEvent describes upload progress for one transfer.
-type ProgressEvent struct {
-	TransferID string
-	LocalPath  string
-	RemotePath string
-	BytesSent  int64
-	TotalBytes int64
-	Status     ProgressStatus
-	Err        error
-}
-
-// ProgressReporter receives upload progress events.
-//
-// Implementations must be safe for concurrent calls from multiple uploader
-// goroutines.
-type ProgressReporter interface {
-	ReportUploadProgress(event ProgressEvent)
-}
-
-// ProgressReporterFunc adapts a function to ProgressReporter.
-type ProgressReporterFunc func(event ProgressEvent)
-
-func (f ProgressReporterFunc) ReportUploadProgress(event ProgressEvent) {
-	f(event)
-}
-
 // FileRecordStore persists uploaded file state.
 type FileRecordStore interface {
 	Upsert(ctx context.Context, record filedb.FileRecord) error
@@ -102,7 +66,7 @@ type UploaderConfig struct {
 	ACKTimeout          time.Duration
 	FinalizationTimeout time.Duration
 
-	Progress ProgressReporter
+	Progress transfer.Reporter
 }
 
 // Uploader uploads one file over the websocket protocol.
@@ -122,7 +86,7 @@ type Uploader struct {
 	ACKTimeout          time.Duration
 	FinalizationTimeout time.Duration
 
-	Progress ProgressReporter
+	Progress transfer.Reporter
 
 	responseQueue *wsclient.Queue[wsclient.TextMessage]
 
@@ -212,38 +176,38 @@ func (u *Uploader) Upload(ctx context.Context) error {
 
 	u.resetTransferState()
 
-	u.reportProgress(0, local.Size, ProgressStarting, nil)
+	u.reportProgress(0, local.Size, transfer.StatusStarting, nil)
 
 	if err := u.sendTransferInit(ctx); err != nil {
-		u.reportProgress(u.currentBytesSent(), local.Size, ProgressFailed, err)
+		u.reportProgress(u.currentBytesSent(), local.Size, transfer.StatusFailed, err)
 		return err
 	}
 
 	if err := u.waitForAcceptance(ctx); err != nil {
 		if errors.Is(err, ErrAlreadyUploaded) {
-			u.reportProgress(local.Size, local.Size, ProgressAlreadyUploaded, nil)
+			u.reportProgress(local.Size, local.Size, transfer.StatusAlreadyUploaded, nil)
 			return nil
 		}
-		u.reportProgress(u.currentBytesSent(), local.Size, ProgressFailed, err)
+		u.reportProgress(u.currentBytesSent(), local.Size, transfer.StatusFailed, err)
 		return err
 	}
 
 	if err := u.sendChunksWindowed(ctx); err != nil {
-		u.reportProgress(u.currentBytesSent(), local.Size, ProgressFailed, err)
+		u.reportProgress(u.currentBytesSent(), local.Size, transfer.StatusFailed, err)
 		return err
 	}
 
 	if err := u.sendTransferComplete(ctx); err != nil {
-		u.reportProgress(u.currentBytesSent(), local.Size, ProgressFailed, err)
+		u.reportProgress(u.currentBytesSent(), local.Size, transfer.StatusFailed, err)
 		return err
 	}
 
 	if err := u.waitForFinalization(ctx); err != nil {
-		u.reportProgress(u.currentBytesSent(), local.Size, ProgressFailed, err)
+		u.reportProgress(u.currentBytesSent(), local.Size, transfer.StatusFailed, err)
 		return err
 	}
 
-	u.reportProgress(local.Size, local.Size, ProgressComplete, nil)
+	u.reportProgress(local.Size, local.Size, transfer.StatusComplete, nil)
 
 	return nil
 }
@@ -574,7 +538,7 @@ func (u *Uploader) processACKs(ctx context.Context, totalChunks int64) error {
 			currentBytesSent := u.bytesSent
 			u.mu.Unlock()
 
-			u.reportProgress(currentBytesSent, u.Request.Observation.LocalEntry.Size, ProgressUploading, nil)
+			u.reportProgress(currentBytesSent, u.Request.Observation.LocalEntry.Size, transfer.StatusUploading, nil)
 
 		case "CHUNK_ERROR":
 			reason, _ := payload["error"].(string)
@@ -706,7 +670,7 @@ func (u *Uploader) validateResponseTransferID(payload map[string]any) error {
 	return nil
 }
 
-func (u *Uploader) reportProgress(bytesSent int64, totalBytes int64, status ProgressStatus, err error) {
+func (u *Uploader) reportProgress(bytesSent int64, totalBytes int64, status transfer.Status, err error) {
 	if u.Progress == nil {
 		return
 	}
@@ -716,11 +680,11 @@ func (u *Uploader) reportProgress(bytesSent int64, totalBytes int64, status Prog
 		localPath = u.Request.Observation.LocalEntry.Path
 	}
 
-	u.Progress.ReportUploadProgress(ProgressEvent{
+	u.Progress.ReportTransferProgress(transfer.Event{
 		TransferID: u.TransferID,
 		LocalPath:  localPath,
 		RemotePath: u.Request.Observation.RemotePath,
-		BytesSent:  bytesSent,
+		BytesDone:  bytesSent,
 		TotalBytes: totalBytes,
 		Status:     status,
 		Err:        err,
