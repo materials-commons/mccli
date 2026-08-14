@@ -15,6 +15,7 @@ import (
 	"github.com/materials-commons/mccli/pkg/di"
 	"github.com/materials-commons/mccli/pkg/projectpath"
 	"github.com/materials-commons/mccli/pkg/reconcile"
+	"github.com/materials-commons/mccli/pkg/services"
 )
 
 // Options contains user-facing mc2 ls command options.
@@ -52,38 +53,26 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 	opts = normalizeOptions(opts)
 	deps := di.WithDefaults(r.Deps)
 
-	projectCfg, err := deps.LoadProject(ctx, opts.WorkingDir)
-	if err != nil {
-		return err
-	}
-
-	projectRoot := projectCfg.ProjectRoot()
-	if projectRoot == "" {
-		projectRoot, err = projectpath.FindRoot(ctx, opts.WorkingDir)
-		if err != nil {
-			return err
-		}
-	}
-
-	globalCfg, err := deps.LoadGlobal(ctx, "")
-	if err != nil {
-		return err
-	}
-
-	store, err := deps.OpenStore(ctx, projectRoot)
+	container := services.NewContainer(deps)
+	cmdCtx, err := container.LoadCommandContext(ctx, opts.WorkingDir)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		_ = store.Close(ctx)
+		_ = container.Close(ctx)
 	}()
 
-	remote, err := deps.NewRemote(projectCfg, globalCfg)
+	store, err := container.Store(ctx)
 	if err != nil {
 		return err
 	}
 
-	translator, err := projectpath.New(projectRoot)
+	remote, err := container.Remote()
+	if err != nil {
+		return err
+	}
+
+	translator, err := container.Translator()
 	if err != nil {
 		return err
 	}
@@ -100,7 +89,7 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 
 		if err := r.listPath(ctx, listRequest{
 			opts:       opts,
-			project:    projectCfg,
+			project:    cmdCtx.Project,
 			translator: translator,
 			store:      store,
 			remote:     remote,

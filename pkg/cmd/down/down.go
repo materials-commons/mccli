@@ -10,7 +10,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/materials-commons/mccli/pkg/config"
 	"github.com/materials-commons/mccli/pkg/di"
@@ -18,7 +17,7 @@ import (
 	"github.com/materials-commons/mccli/pkg/filedb"
 	"github.com/materials-commons/mccli/pkg/projectpath"
 	"github.com/materials-commons/mccli/pkg/reconcile"
-	"github.com/materials-commons/mccli/pkg/upload"
+	"github.com/materials-commons/mccli/pkg/services"
 )
 
 // Options contains user-facing mc2 down command options.
@@ -62,76 +61,57 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 
 	deps := di.WithDefaults(r.Deps)
 
-	projectCfg, err := deps.LoadProject(ctx, opts.WorkingDir)
+	container := services.NewContainer(deps)
+	cmdCtx, err := container.LoadCommandContext(ctx, opts.WorkingDir)
 	if err != nil {
 		return err
 	}
 
-	projectRoot := projectCfg.ProjectRoot()
-	if projectRoot == "" {
-		projectRoot, err = projectpath.FindRoot(ctx, opts.WorkingDir)
-		if err != nil {
-			return err
-		}
+	remoteCfg, err := services.RequireConfiguredRemote(cmdCtx.Project, cmdCtx.Global)
+	if err != nil {
+		return err
+	}
+	if err := cmdCtx.RequireClientUUID("websocket downloads"); err != nil {
+		return err
 	}
 
-	globalCfg, err := deps.LoadGlobal(ctx, "")
+	store, err := container.Store(ctx)
 	if err != nil {
 		return err
 	}
 
-	remoteCfg, ok := globalCfg.FindRemote(projectCfg.Remote.Email, projectCfg.Remote.MCURL)
-	if !ok {
-		return fmt.Errorf("remote %s %s is not configured in global config", projectCfg.Remote.Email, projectCfg.Remote.MCURL)
-	}
-	if remoteCfg.APIKey == "" {
-		return fmt.Errorf("remote %s %s is missing an API key", projectCfg.Remote.Email, projectCfg.Remote.MCURL)
-	}
-	if globalCfg.ClientUUID == "" {
-		return fmt.Errorf("global config client_uuid is required for websocket downloads")
-	}
-
-	store, err := deps.OpenStore(ctx, projectRoot)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = store.Close(ctx)
-	}()
-
-	remote, err := deps.NewRemote(projectCfg, globalCfg)
+	remote, err := container.Remote()
 	if err != nil {
 		return err
 	}
 
-	translator, err := projectpath.New(projectRoot)
+	translator, err := container.Translator()
 	if err != nil {
 		return err
 	}
 
-	progressFactory := upload.NewMPBProgressFactory(opts.Out)
-	progress := upload.NewUploadProgress(progressFactory)
-	defer progress.Wait()
-
-	manager, err := deps.NewDownloadManager(download.Config{
-		Store:         store,
-		ClientID:      globalCfg.ClientUUID,
+	manager, err := container.DownloadManager(ctx, services.DownloadManagerOptions{
+		Out:           opts.Out,
 		MaxConcurrent: 3,
-		Progress:      progress,
 	})
 	if err != nil {
 		return err
 	}
 
-	runCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	manager.StartWorkers(runCtx)
+	runtime := services.NewRuntime(container)
+	if err := runtime.Start(ctx, services.StartOptions{
+		DownloadManager: manager,
+	}); err != nil {
+		return err
+	}
+	defer func() {
+		_ = runtime.Stop(context.Background())
+	}()
 
 	reconciler := reconcile.New(reconcile.ModeDownload)
 	transferIDs, err := r.queueDownloads(ctx, queueRequest{
 		opts:       opts,
-		project:    projectCfg,
+		project:    cmdCtx.Project,
 		remoteCfg:  remoteCfg,
 		manager:    manager,
 		store:      store,
@@ -140,19 +120,14 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 		reconciler: reconciler,
 	})
 	if err != nil {
-		cancel()
 		return err
 	}
 
-	if err := waitForTransfers(ctx, manager, transferIDs); err != nil {
-		cancel()
+	if err := services.WaitForDownloads(ctx, manager, transferIDs); err != nil {
 		return err
 	}
 
-	manager.StopWorkers()
-	cancel()
-
-	return nil
+	return runtime.Stop(ctx)
 }
 
 type queueRequest struct {
@@ -325,48 +300,6 @@ func queueFileDownloadFromState(ctx context.Context, req queueRequest, state rec
 	}
 
 	return transferID, true, nil
-}
-
-func waitForTransfers(ctx context.Context, manager di.DownloadManager, transferIDs []string) error {
-	pending := map[string]bool{}
-	for _, id := range transferIDs {
-		pending[id] = true
-	}
-
-	ticker := time.NewTicker(50 * time.Millisecond)
-	defer ticker.Stop()
-
-	for len(pending) > 0 {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
-		for id := range pending {
-			result, ok := manager.Result(id)
-			if !ok {
-				continue
-			}
-			if !result.Success {
-				if result.Err != nil {
-					return result.Err
-				}
-				return fmt.Errorf("download %s failed", id)
-			}
-			delete(pending, id)
-		}
-
-		if len(pending) == 0 {
-			return nil
-		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-		}
-	}
-
-	return nil
 }
 
 func loadFileRecord(ctx context.Context, store di.Store, remotePath string) (filedb.FileRecord, bool, error) {

@@ -14,6 +14,7 @@ import (
 	"github.com/materials-commons/mccli/pkg/di"
 	"github.com/materials-commons/mccli/pkg/projectpath"
 	"github.com/materials-commons/mccli/pkg/reconcile"
+	"github.com/materials-commons/mccli/pkg/services"
 	"github.com/materials-commons/mccli/pkg/upload"
 	"github.com/materials-commons/mccli/pkg/wsclient"
 )
@@ -57,110 +58,69 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 	if len(opts.Paths) == 0 {
 		return fmt.Errorf("at least one path is required")
 	}
-	if opts.WebSocketURL == "" {
-		return fmt.Errorf("websocket url is required")
-	}
 
 	deps := di.WithDefaults(r.Deps)
 
-	projectCfg, err := deps.LoadProject(ctx, opts.WorkingDir)
+	container := services.NewContainer(deps)
+	cmdCtx, err := container.LoadCommandContext(ctx, opts.WorkingDir)
 	if err != nil {
 		return err
 	}
 
-	projectRoot := projectCfg.ProjectRoot()
-	if projectRoot == "" {
-		projectRoot, err = projectpath.FindRoot(ctx, opts.WorkingDir)
-		if err != nil {
-			return err
-		}
+	if _, err := services.RequireConfiguredRemote(cmdCtx.Project, cmdCtx.Global); err != nil {
+		return err
+	}
+	if err := cmdCtx.RequireClientUUID("websocket uploads"); err != nil {
+		return err
 	}
 
-	globalCfg, err := deps.LoadGlobal(ctx, "")
+	store, err := container.Store(ctx)
 	if err != nil {
 		return err
 	}
 
-	remoteCfg, ok := globalCfg.FindRemote(projectCfg.Remote.Email, projectCfg.Remote.MCURL)
-	if !ok {
-		return fmt.Errorf("remote %s %s is not configured in global config", projectCfg.Remote.Email, projectCfg.Remote.MCURL)
-	}
-	if remoteCfg.APIKey == "" {
-		return fmt.Errorf("remote %s %s is missing an API key", projectCfg.Remote.Email, projectCfg.Remote.MCURL)
-	}
-	if globalCfg.ClientUUID == "" {
-		return fmt.Errorf("global config client_uuid is required for websocket uploads")
-	}
-
-	store, err := deps.OpenStore(ctx, projectRoot)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = store.Close(ctx)
-	}()
-
-	remote, err := deps.NewRemote(projectCfg, globalCfg)
+	remote, err := container.Remote()
 	if err != nil {
 		return err
 	}
 
-	var webSocketURL string
-	if opts.WebSocketURL != "" {
-		webSocketURL = opts.WebSocketURL
-	} else {
-		webSocketURL, err = config.ToWebSocketURLFromRemoteURL(projectCfg.Remote.MCURL)
-		if err != nil {
-			return fmt.Errorf("invalid remote MCURL (%s) can't construct websocket URL: %w", projectCfg.Remote.MCURL, err)
-		}
-	}
-
-	translator, err := projectpath.New(projectRoot)
+	translator, err := container.Translator()
 	if err != nil {
 		return err
 	}
 
-	sendQueue := wsclient.NewQueue[wsclient.OutboundMessage]()
-
-	progressFactory := upload.NewMPBProgressFactory(opts.Out)
-	progress := upload.NewUploadProgress(progressFactory)
-	defer progress.Wait()
-
-	manager, err := deps.NewUploadManager(upload.Config{
-		SendQueue:     sendQueue,
-		Store:         store,
-		ClientID:      globalCfg.ClientUUID,
+	manager, err := container.UploadManager(ctx, services.UploadManagerOptions{
+		Out:           opts.Out,
 		MaxConcurrent: 3,
-		Progress:      progress,
 	})
 	if err != nil {
 		return err
 	}
 
-	ws := deps.NewWebSocket(di.WebSocketConfig{
-		URL:      webSocketURL,
-		Token:    remoteCfg.APIKey,
-		ClientID: globalCfg.ClientUUID,
-		Outbound: sendQueue,
+	ws, err := container.WebSocket(services.WebSocketOptions{
+		URL: opts.WebSocketURL,
 		Handle: func(ctx context.Context, msg wsclient.TextMessage) {
 			manager.HandleMessage(msg)
 		},
-		ProjectIDs: []int{projectCfg.ProjectID},
 	})
+	if err != nil {
+		return err
+	}
 
-	runCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	manager.StartWorkers(runCtx)
-
-	wsErrCh := make(chan error, 1)
-	go func() {
-		wsErrCh <- ws.Run(runCtx)
+	runtime := services.NewRuntime(container)
+	if err := runtime.Start(ctx, services.StartOptions{
+		UploadManager: manager,
+		WebSocket:     ws,
+	}); err != nil {
+		return err
+	}
+	defer func() {
+		_ = runtime.Stop(context.Background())
 	}()
 
 	reconciler := reconcile.New(reconcile.ModeUpload)
 	observer := reconcile.NewObservationRunner(
-		projectCfg.ProjectID,
+		cmdCtx.Project.ProjectID,
 		translator,
 		store,
 		remote,
@@ -171,34 +131,21 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 
 	transferIDs, err := r.queueUploads(ctx, queueRequest{
 		opts:       opts,
-		project:    projectCfg,
+		project:    cmdCtx.Project,
 		manager:    manager,
 		observer:   observer,
 		translator: translator,
 		now:        deps.Now,
 	})
 	if err != nil {
-		cancel()
 		return err
 	}
 
-	if err := waitForTransfers(ctx, manager, transferIDs); err != nil {
-		cancel()
+	if err := services.WaitForUploads(ctx, manager, transferIDs); err != nil {
 		return err
 	}
 
-	manager.StopWorkers()
-	cancel()
-
-	select {
-	case err := <-wsErrCh:
-		if err != nil && !errors.Is(err, context.Canceled) {
-			return err
-		}
-	default:
-	}
-
-	return nil
+	return runtime.Stop(ctx)
 }
 
 type queueRequest struct {
@@ -324,48 +271,6 @@ func queueFileUpload(ctx context.Context, req queueRequest, localPath string) (s
 	}
 
 	return transferID, true, nil
-}
-
-func waitForTransfers(ctx context.Context, manager di.UploadManager, transferIDs []string) error {
-	pending := map[string]bool{}
-	for _, id := range transferIDs {
-		pending[id] = true
-	}
-
-	ticker := time.NewTicker(50 * time.Millisecond)
-	defer ticker.Stop()
-
-	for len(pending) > 0 {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
-		for id := range pending {
-			result, ok := manager.Result(id)
-			if !ok {
-				continue
-			}
-			if !result.Success {
-				if result.Err != nil {
-					return result.Err
-				}
-				return fmt.Errorf("upload %s failed", id)
-			}
-			delete(pending, id)
-		}
-
-		if len(pending) == 0 {
-			return nil
-		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-		}
-	}
-
-	return nil
 }
 
 func normalizeOptions(opts Options) Options {

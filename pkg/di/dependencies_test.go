@@ -26,6 +26,9 @@ func TestWithDefaultsFillsMissingDependencies(t *testing.T) {
 	if deps.NewUploadManager == nil {
 		t.Fatal("NewUploadManager is nil")
 	}
+	if deps.NewDownloadManager == nil {
+		t.Fatal("NewDownloadManager is nil")
+	}
 	if deps.NewWebSocket == nil {
 		t.Fatal("NewWebSocket is nil")
 	}

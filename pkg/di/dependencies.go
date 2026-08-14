@@ -73,6 +73,10 @@ type WebSocketConfig struct {
 
 // Dependencies contains injectable command dependencies shared by command
 // packages.
+//
+// These are constructors only. They should not be interpreted as a fully
+// initialized command dependency graph. Higher-level packages decide which
+// services are needed and request them lazily.
 type Dependencies struct {
 	LoadProject func(ctx context.Context, start string) (config.Project, error)
 	LoadGlobal  func(ctx context.Context, path string) (config.Global, error)
@@ -86,7 +90,10 @@ type Dependencies struct {
 	Now func() time.Time
 }
 
-// Production returns the default production dependency graph.
+// Production returns the default production factory set.
+//
+// Nothing returned here is constructed eagerly except the function values
+// themselves. Command-specific service construction belongs in pkg/services.
 func Production() Dependencies {
 	return Dependencies{
 		LoadProject: config.LoadProject,
