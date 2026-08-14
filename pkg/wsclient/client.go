@@ -281,7 +281,6 @@ func (c *Client) send(ctx context.Context, conn websocketConn, msg OutboundMessa
 		if err != nil {
 			return fmt.Errorf("%w: marshal websocket text message: %v", ErrInvalidOutboundMessage, err)
 		}
-		fmt.Printf("Sending websocket text message: %+v\n", m)
 		return conn.Write(ctx, websocket.MessageText, data)
 
 	case BinaryFrame:
