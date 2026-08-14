@@ -187,7 +187,6 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
-	time.Sleep(3 * time.Second)
 	manager.StopWorkers()
 	cancel()
 

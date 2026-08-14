@@ -243,7 +243,6 @@ func (u *Uploader) Upload(ctx context.Context) error {
 		return err
 	}
 
-	fmt.Println("Progress Complete")
 	u.reportProgress(local.Size, local.Size, ProgressComplete, nil)
 
 	return nil
@@ -311,7 +310,6 @@ func (u *Uploader) sendTransferInit(ctx context.Context) error {
 		return fmt.Errorf("local entry is required")
 	}
 
-	fmt.Println("Sending transfer init for transfer ID:", u.TransferID)
 	msg := wsclient.TextMessage{
 		"command":   "TRANSFER_INIT",
 		"id":        u.TransferID,
@@ -340,10 +338,11 @@ func (u *Uploader) waitForAcceptance(ctx context.Context) error {
 	defer cancel()
 
 	msg, ok, err := u.responseQueue.Pop(waitCtx)
-	fmt.Printf("waitForAcceptance %+v, %v, %s\n", msg, ok, err)
+
 	if err != nil {
 		return fmt.Errorf("wait for transfer acceptance: %w", err)
 	}
+
 	if !ok {
 		return fmt.Errorf("%w: response queue closed while waiting for acceptance", ErrQueueClosed)
 	}
@@ -366,8 +365,10 @@ func (u *Uploader) waitForAcceptance(ctx context.Context) error {
 		return nil
 
 	case "TRANSFER_ALREADY_UPLOADED":
-		// The message will contain the information we need to update the database.
-		return nil
+		if err := u.Upsert(ctx, payload); err != nil {
+			return err
+		}
+		return ErrAlreadyUploaded
 
 	case "TRANSFER_REJECT":
 		reason, _ := payload["reason"].(string)
@@ -590,11 +591,9 @@ func (u *Uploader) processACKs(ctx context.Context, totalChunks int64) error {
 
 func (u *Uploader) sendTransferComplete(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
-		fmt.Println("sendTransferComplete ", u.TransferID, err)
 		return err
 	}
 
-	fmt.Println("Sent TRANSFER_COMPLETE", u.TransferID)
 	msg := wsclient.TextMessage{
 		"command":   "TRANSFER_COMPLETE",
 		"id":        u.TransferID,
@@ -637,29 +636,7 @@ func (u *Uploader) waitForFinalization(ctx context.Context) error {
 
 	switch command {
 	case "TRANSFER_FINALIZE":
-		fmt.Println("Received TRANSFER_FINALIZE response")
-		record := u.Request.UpdatedRecord
-		record.LocalLastSeenTS = time.Now().Unix()
-
-		if checksum, _ := payload["file_checksum"].(string); checksum != "" {
-			record.RemoteChecksum = &checksum
-		}
-		if size, ok := numberAsInt64(payload["file_size"]); ok {
-			record.RemoteSize = &size
-		}
-		if id, ok := numberAsInt64(payload["file_id"]); ok {
-			record.RemoteFileID = &id
-		}
-		if createdNS, ok := numberAsInt64(payload["file_created_at_ns"]); ok {
-			record.RemoteCTimeNS = &createdNS
-		}
-
-		fmt.Printf("  Upserting record: %v\n", record)
-		if err := u.Store.Upsert(ctx, record); err != nil {
-			return fmt.Errorf("upsert finalized upload record %q: %w", record.Path, err)
-		}
-
-		return nil
+		return u.Upsert(ctx, payload)
 
 	case "UPLOAD_FAILED":
 		reason, _ := payload["error"].(string)
@@ -671,6 +648,30 @@ func (u *Uploader) waitForFinalization(ctx context.Context) error {
 	default:
 		return fmt.Errorf("%w: got %q while waiting for TRANSFER_FINALIZE", ErrUnexpectedResponse, command)
 	}
+}
+
+func (u *Uploader) Upsert(ctx context.Context, payload map[string]any) error {
+	record := u.Request.UpdatedRecord
+	record.LocalLastSeenTS = time.Now().Unix()
+
+	if checksum, _ := payload["file_checksum"].(string); checksum != "" {
+		record.RemoteChecksum = &checksum
+	}
+	if size, ok := numberAsInt64(payload["file_size"]); ok {
+		record.RemoteSize = &size
+	}
+	if id, ok := numberAsInt64(payload["file_id"]); ok {
+		record.RemoteFileID = &id
+	}
+	if createdNS, ok := numberAsInt64(payload["file_created_at_ns"]); ok {
+		record.RemoteCTimeNS = &createdNS
+	}
+
+	if err := u.Store.Upsert(ctx, record); err != nil {
+		return fmt.Errorf("upsert finalized upload record %q: %w", record.Path, err)
+	}
+
+	return nil
 }
 
 // Pause pauses this upload.

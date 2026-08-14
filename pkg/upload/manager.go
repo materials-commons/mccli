@@ -212,7 +212,7 @@ func (m *Manager) HandleMessage(msg wsclient.TextMessage) {
 	if uploader != nil {
 		uploader.HandleResponse(msg)
 	} else {
-		fmt.Println("No active uploader found for transfer ID:", transferID)
+		//fmt.Println("No active uploader found for transfer ID:", transferID)
 	}
 }
 
@@ -336,6 +336,7 @@ func isUploadResponseCommand(command string) bool {
 		"CHUNK_ERROR",
 		"TRANSFER_FINALIZE",
 		"UPLOAD_FAILED",
+		"TRANSFER_ALREADY_UPLOADED",
 		"TRANSFER_RESUME_RESPONSE":
 		return true
 	default:
