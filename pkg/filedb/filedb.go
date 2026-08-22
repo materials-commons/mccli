@@ -20,9 +20,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/libtnb/sqlite"
 	mclogging "github.com/materials-commons/mccli/pkg/logging"
 	"github.com/materials-commons/mccli/pkg/projectpath"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	gormlogger "gorm.io/gorm/logger"
