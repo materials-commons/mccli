@@ -30,6 +30,11 @@ type DirectoryLister interface {
 	ListDirectoryByPath(projectID int, path string) ([]mcmodel.File, error)
 }
 
+type FileDirectoryGetter interface {
+	FileGetter
+	DirectoryLister
+}
+
 type DirectoryCreater interface {
 	CreateDirectoryByPath(projectID int, path string) error
 }

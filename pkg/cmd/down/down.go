@@ -21,11 +21,6 @@ import (
 	"github.com/materials-commons/mccli/pkg/services"
 )
 
-type RemoteFileDirectoryGetter interface {
-	remote2.FileGetter
-	remote2.DirectoryLister
-}
-
 // Options contains user-facing mc2 down command options.
 type Options struct {
 	// WorkingDir is the directory used to discover the current Materials Commons project.
@@ -91,7 +86,7 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
-	remote, ok := remoteAny.(RemoteFileDirectoryGetter)
+	remote, ok := remoteAny.(remote2.FileDirectoryGetter)
 	if !ok {
 		return fmt.Errorf("remote is not a FileGetter")
 	}
@@ -147,7 +142,7 @@ type queueRequest struct {
 	remoteCfg  config.Remote
 	manager    di.DownloadManager
 	store      di.Store
-	remote     RemoteFileDirectoryGetter
+	remote     remote2.FileDirectoryGetter
 	translator projectpath.Translator
 	reconciler *reconcile.Reconciler
 }
