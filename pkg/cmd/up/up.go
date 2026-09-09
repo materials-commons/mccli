@@ -14,6 +14,7 @@ import (
 	"github.com/materials-commons/mccli/pkg/di"
 	"github.com/materials-commons/mccli/pkg/projectpath"
 	"github.com/materials-commons/mccli/pkg/reconcile"
+	remote2 "github.com/materials-commons/mccli/pkg/remote"
 	"github.com/materials-commons/mccli/pkg/services"
 	"github.com/materials-commons/mccli/pkg/upload"
 	"github.com/materials-commons/mccli/pkg/wsclient"
@@ -79,9 +80,14 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
-	remote, err := container.Remote()
+	remoteAny, err := container.Remote()
 	if err != nil {
 		return err
+	}
+
+	remote, ok := remoteAny.(remote2.FileGetter)
+	if !ok {
+		return fmt.Errorf("remote is not a FileGetter")
 	}
 
 	translator, err := container.Translator()

@@ -28,7 +28,7 @@ type Container struct {
 	projectRoot string
 
 	store      di.Store
-	remote     di.RemoteClient
+	remote     di.Remote
 	translator projectpath.Translator
 
 	sendQueue *wsclient.Queue[wsclient.OutboundMessage]
@@ -118,7 +118,7 @@ func (c *Container) Store(ctx context.Context) (di.Store, error) {
 	return c.store, nil
 }
 
-func (c *Container) Remote() (di.RemoteClient, error) {
+func (c *Container) Remote() (di.Remote, error) {
 	if c.remote != nil {
 		return c.remote, nil
 	}

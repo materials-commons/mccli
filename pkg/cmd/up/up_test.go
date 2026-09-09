@@ -161,7 +161,7 @@ func TestRunnerNonRecursiveDirectoryQueuesOnlyImmediateFiles(t *testing.T) {
 	}
 }
 
-func testDeps(projectRoot string, store di.Store, remote di.RemoteClient, manager *fakeManager) di.Dependencies {
+func testDeps(projectRoot string, store di.Store, remote di.Remote, manager *fakeManager) di.Dependencies {
 	if manager == nil {
 		manager = newFakeManager()
 	}
@@ -186,7 +186,7 @@ func testDeps(projectRoot string, store di.Store, remote di.RemoteClient, manage
 		OpenStore: func(ctx context.Context, root string) (di.Store, error) {
 			return store, nil
 		},
-		NewRemote: func(project config.Project, global config.Global) (di.RemoteClient, error) {
+		NewRemote: func(project config.Project, global config.Global) (di.Remote, error) {
 			return remote, nil
 		},
 		NewUploadManager: func(cfg upload.Config) (di.UploadManager, error) {
@@ -212,14 +212,14 @@ type fakeRemote struct {
 	files map[string]mcmodel.File
 }
 
+func (f *fakeRemote) GetFile(projectID, fileID int) (*mcmodel.File, error) {
+	return nil, fakeNotFound()
+}
+
 func (f *fakeRemote) GetFileByPath(projectID int, remotePath string) (*mcmodel.File, error) {
 	if file, ok := f.files[remotePath]; ok {
 		return &file, nil
 	}
-	return nil, fakeNotFound()
-}
-
-func (f *fakeRemote) ListDirectoryByPath(projectID int, remotePath string) ([]mcmodel.File, error) {
 	return nil, fakeNotFound()
 }
 

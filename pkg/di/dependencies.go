@@ -34,10 +34,10 @@ type Store interface {
 // RemoteClient is the Materials Commons API behavior used by command packages.
 //
 // *gomcapi.Client satisfies this interface.
-type RemoteClient interface {
-	reconcile.RemoteDirectoryLister
-	reconcile.RemoteFileGetter
-}
+//type RemoteClient interface {
+//	reconcile.RemoteDirectoryLister
+//	reconcile.RemoteFileGetter
+//}
 
 // UploadManager queues and runs websocket uploads.
 type UploadManager interface {
@@ -71,6 +71,8 @@ type WebSocketConfig struct {
 	ProjectIDs []int
 }
 
+type Remote = any
+
 // Dependencies contains injectable command dependencies shared by command
 // packages.
 //
@@ -81,7 +83,7 @@ type Dependencies struct {
 	LoadProject func(ctx context.Context, start string) (config.Project, error)
 	LoadGlobal  func(ctx context.Context, path string) (config.Global, error)
 	OpenStore   func(ctx context.Context, projectRoot string) (Store, error)
-	NewRemote   func(project config.Project, global config.Global) (*mcapi.Client, error)
+	NewRemote   func(project config.Project, global config.Global) (Remote, error)
 
 	NewUploadManager   func(cfg upload.Config) (UploadManager, error)
 	NewDownloadManager func(cfg download.Config) (DownloadManager, error)
@@ -154,8 +156,8 @@ func WithDefaults(deps Dependencies) Dependencies {
 	return deps
 }
 
-// NewRemoteClient creates a gomcapi client for the project's configured remote.
-func NewRemoteClient(project config.Project, global config.Global) (*mcapi.Client, error) {
+// NewRemoteClient creates a Remote client for the project's configured remote.
+func NewRemoteClient(project config.Project, global config.Global) (Remote, error) {
 	remoteCfg, ok := global.FindRemote(project.Remote.Email, project.Remote.MCURL)
 	if !ok {
 		return nil, fmt.Errorf("remote %s %s is not configured in global config", project.Remote.Email, project.Remote.MCURL)
@@ -169,6 +171,3 @@ func NewRemoteClient(project config.Project, global config.Global) (*mcapi.Clien
 		BaseURL: remoteCfg.MCURL,
 	}), nil
 }
-
-// Ensure gomcapi client satisfies the remote interface.
-var _ RemoteClient = (*mcapi.Client)(nil)
