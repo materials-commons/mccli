@@ -51,7 +51,7 @@ func TestContainerLoadCommandContextDoesNotInitializeCommandSpecificServices(t *
 			storeCalls++
 			return fakeStore{}, nil
 		},
-		NewRemote: func(project config.Project, global config.Global) (di.RemoteClient, error) {
+		NewRemote: func(project config.Project, global config.Global) (di.Remote, error) {
 			remoteCalls++
 			return &fakeRemote{}, nil
 		},
