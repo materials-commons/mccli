@@ -17,8 +17,14 @@ import (
 	"github.com/materials-commons/mccli/pkg/filedb"
 	"github.com/materials-commons/mccli/pkg/projectpath"
 	"github.com/materials-commons/mccli/pkg/reconcile"
+	remote2 "github.com/materials-commons/mccli/pkg/remote"
 	"github.com/materials-commons/mccli/pkg/services"
 )
+
+type RemoteFileDirectoryGetter interface {
+	remote2.FileGetter
+	remote2.DirectoryLister
+}
 
 // Options contains user-facing mc2 down command options.
 type Options struct {
@@ -80,9 +86,14 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
-	remote, err := container.Remote()
+	remoteAny, err := container.Remote()
 	if err != nil {
 		return err
+	}
+
+	remote, ok := remoteAny.(RemoteFileDirectoryGetter)
+	if !ok {
+		return fmt.Errorf("remote is not a FileGetter")
 	}
 
 	translator, err := container.Translator()
@@ -136,7 +147,7 @@ type queueRequest struct {
 	remoteCfg  config.Remote
 	manager    di.DownloadManager
 	store      di.Store
-	remote     di.RemoteClient
+	remote     RemoteFileDirectoryGetter
 	translator projectpath.Translator
 	reconciler *reconcile.Reconciler
 }
