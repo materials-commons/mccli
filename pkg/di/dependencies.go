@@ -31,14 +31,6 @@ type Store interface {
 	Upsert(ctx context.Context, record filedb.FileRecord) error
 }
 
-// RemoteClient is the Materials Commons API behavior used by command packages.
-//
-// *gomcapi.Client satisfies this interface.
-//type RemoteClient interface {
-//	reconcile.RemoteDirectoryLister
-//	reconcile.RemoteFileGetter
-//}
-
 // UploadManager queues and runs websocket uploads.
 type UploadManager interface {
 	StartWorkers(ctx context.Context)

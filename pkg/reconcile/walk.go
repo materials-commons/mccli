@@ -12,9 +12,9 @@ import (
 	"time"
 
 	mcapi "github.com/materials-commons/gomcapi"
-	"github.com/materials-commons/hydra/pkg/mcdb/mcmodel"
 	"github.com/materials-commons/mccli/pkg/filedb"
 	"github.com/materials-commons/mccli/pkg/projectpath"
+	remote2 "github.com/materials-commons/mccli/pkg/remote"
 )
 
 var (
@@ -53,13 +53,6 @@ type NodeListDirFunc func(ctx context.Context, node WalkNode) ([]Observation, er
 
 // WalkNodeFunc is called once for each listed node.
 type WalkNodeFunc func(ctx context.Context, node WalkNode, observations []Observation) error
-
-// RemoteDirectoryLister lists a remote Materials Commons project directory.
-//
-// *mcapi.Client satisfies this interface.
-type RemoteDirectoryLister interface {
-	ListDirectoryByPath(projectID int, remotePath string) ([]mcmodel.File, error)
-}
 
 // DirectoryRecordGetter loads persisted file state for a remote directory path.
 type DirectoryRecordGetter interface {
@@ -225,7 +218,7 @@ func LocalNodeListDir(translator projectpath.Translator, now func() time.Time) N
 
 // RemoteListDir returns a ListDirFunc that lists remote Materials Commons
 // directory entries by translating localDir to its remote project path.
-func RemoteListDir(projectID int, translator projectpath.Translator, remote RemoteDirectoryLister) ListDirFunc {
+func RemoteListDir(projectID int, translator projectpath.Translator, remote remote2.DirectoryLister) ListDirFunc {
 	remoteOnly := RemoteOnlyListDir(projectID, translator, remote)
 
 	return func(ctx context.Context, localDir string) ([]Observation, error) {
@@ -245,7 +238,7 @@ func RemoteListDir(projectID int, translator projectpath.Translator, remote Remo
 // Commons directory entries using WalkNode.RemotePath.
 //
 // This function supports remote-only recursive walking.
-func RemoteOnlyListDir(projectID int, translator projectpath.Translator, remote RemoteDirectoryLister) NodeListDirFunc {
+func RemoteOnlyListDir(projectID int, translator projectpath.Translator, remote remote2.DirectoryLister) NodeListDirFunc {
 	return func(ctx context.Context, node WalkNode) ([]Observation, error) {
 		if remote == nil {
 			return nil, fmt.Errorf("remote directory lister is required")
