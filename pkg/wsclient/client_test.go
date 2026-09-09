@@ -199,7 +199,7 @@ func TestClientRunSendsHeaders(t *testing.T) {
 		if got := headers.Get("MC-Client-ID"); got != "client-123" {
 			t.Fatalf("MC-Client-ID = %q, want client-123", got)
 		}
-		if got := headers.Get("MC-Connection-Type"); got != "cli" {
+		if got := headers.Get("MC-Connection-Type"); got != "gocli" {
 			t.Fatalf("MC-Connection-Type = %q, want cli", got)
 		}
 	case <-time.After(time.Second):
@@ -371,7 +371,7 @@ func TestClientBuildHeadersIncludesHostnameAndProjects(t *testing.T) {
 	if got := headers.Get("MC-Client-Projects"); got != "1,2,3" {
 		t.Fatalf("MC-Client-Projects = %q", got)
 	}
-	if got := headers.Get("MC-Connection-Type"); got != "cli" {
+	if got := headers.Get("MC-Connection-Type"); got != "gocli" {
 		t.Fatalf("MC-Connection-Type = %q", got)
 	}
 }

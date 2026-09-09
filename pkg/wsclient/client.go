@@ -241,7 +241,7 @@ func (c *Client) buildHeaders() http.Header {
 		headers.Set("MC-Client-Projects", "")
 	}
 
-	headers.Set("MC-Connection-Type", "cli")
+	headers.Set("MC-Connection-Type", "gocli")
 
 	return headers
 }
