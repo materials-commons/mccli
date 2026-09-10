@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	downcmd "github.com/materials-commons/mccli/pkg/cmd/down"
+	"github.com/materials-commons/mccli/pkg/cmd/down"
 	"github.com/urfave/cli/v3"
 )
 
@@ -41,7 +41,7 @@ func runDownCmd(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("get working directory: %w", err)
 	}
 
-	return downcmd.Run(ctx, downcmd.Options{
+	return down.Run(ctx, down.Options{
 		WorkingDir: workingDir,
 		Paths:      paths,
 		Recursive:  cmd.Bool("recursive"),

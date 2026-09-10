@@ -85,21 +85,6 @@ func newCommand() *cli.Command {
 	}
 }
 
-func cloneCommand() *cli.Command {
-	return &cli.Command{
-		Name:  "clone",
-		Usage: "Clone an existing Materials Commons project",
-		Flags: []cli.Flag{
-			&cli.IntFlag{
-				Name:     "id",
-				Usage:    "Materials Commons project id to clone",
-				Required: true,
-			},
-		},
-		Action: notYetImplemented("clone"),
-	}
-}
-
 func configCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "config",

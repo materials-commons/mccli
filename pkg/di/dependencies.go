@@ -72,14 +72,14 @@ type RemoteClient = any
 // initialized command dependency graph. Higher-level packages decide which
 // services are needed and request them lazily.
 type Dependencies struct {
-	LoadProject     func(ctx context.Context, start string) (config.Project, error)
-	LoadGlobal      func(ctx context.Context, path string) (config.Global, error)
-	OpenStore       func(ctx context.Context, projectRoot string) (Store, error)
-	NewRemoteClient func(project config.Project, global config.Global) (RemoteClient, error)
-
-	NewUploadManager   func(cfg upload.Config) (UploadManager, error)
-	NewDownloadManager func(cfg download.Config) (DownloadManager, error)
-	NewWebSocket       func(cfg WebSocketConfig) WebSocketRunner
+	LoadProject            func(ctx context.Context, start string) (config.Project, error)
+	LoadGlobal             func(ctx context.Context, path string) (config.Global, error)
+	OpenStore              func(ctx context.Context, projectRoot string) (Store, error)
+	NewRemoteClient        func(project config.Project, global config.Global) (RemoteClient, error)
+	NewDefaultRemoteClient func(global config.Global) (RemoteClient, error)
+	NewUploadManager       func(cfg upload.Config) (UploadManager, error)
+	NewDownloadManager     func(cfg download.Config) (DownloadManager, error)
+	NewWebSocket           func(cfg WebSocketConfig) WebSocketRunner
 
 	Now func() time.Time
 }
@@ -95,7 +95,8 @@ func Production() Dependencies {
 		OpenStore: func(ctx context.Context, projectRoot string) (Store, error) {
 			return filedb.Open(ctx, projectRoot)
 		},
-		NewRemoteClient: NewRemoteClient,
+		NewRemoteClient:        NewRemoteClient,
+		NewDefaultRemoteClient: NewDefaultRemoteClient,
 		NewUploadManager: func(cfg upload.Config) (UploadManager, error) {
 			return upload.NewManager(cfg)
 		},
@@ -161,5 +162,12 @@ func NewRemoteClient(project config.Project, global config.Global) (RemoteClient
 	return mcapi.NewClient(&mcapi.ClientArgs{
 		APIKey:  remoteCfg.APIKey,
 		BaseURL: remoteCfg.MCURL,
+	}), nil
+}
+
+func NewDefaultRemoteClient(global config.Global) (RemoteClient, error) {
+	return mcapi.NewClient(&mcapi.ClientArgs{
+		APIKey:  global.DefaultRemote.APIKey,
+		BaseURL: global.DefaultRemote.MCURL,
 	}), nil
 }

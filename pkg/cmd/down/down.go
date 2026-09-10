@@ -105,9 +105,10 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 	}
 
 	runtime := services.NewRuntime(container)
-	if err := runtime.Start(ctx, services.StartOptions{
+	err = runtime.Start(ctx, services.StartOptions{
 		DownloadManager: manager,
-	}); err != nil {
+	})
+	if err != nil {
 		return err
 	}
 	defer func() {

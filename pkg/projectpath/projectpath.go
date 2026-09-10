@@ -30,6 +30,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	mclogging "github.com/materials-commons/mccli/pkg/logging"
 )
@@ -271,4 +272,62 @@ func RemoteToLocal(projectRoot, remotePath string) (string, error) {
 	}
 
 	return translator.RemoteToLocal(remotePath)
+}
+
+// CleanProjectDirName returns a filesystem- and shell-friendly directory name
+// derived from a Materials Commons project name.
+//
+// It replaces characters that are invalid or awkward in common filesystems and
+// shells with "-", collapses repeated "-", and returns "project" if the cleaned
+// name would otherwise be empty.
+func CleanProjectDirName(name string) string {
+	name = strings.TrimSpace(name)
+
+	var b strings.Builder
+	lastWasDash := false
+
+	for _, r := range name {
+		if isSafeProjectDirNameRune(r) {
+			b.WriteRune(r)
+			lastWasDash = false
+			continue
+		}
+
+		if !lastWasDash {
+			b.WriteRune('-')
+			lastWasDash = true
+		}
+	}
+
+	cleaned := strings.Trim(b.String(), ".- ")
+	if cleaned == "" {
+		return "project"
+	}
+
+	if isWindowsReservedName(cleaned) {
+		return cleaned + "-project"
+	}
+
+	return cleaned
+}
+
+func isSafeProjectDirNameRune(r rune) bool {
+	return unicode.IsLetter(r) ||
+		unicode.IsDigit(r) ||
+		r == '-' ||
+		r == '_' ||
+		r == '.' ||
+		r == ' '
+}
+
+func isWindowsReservedName(name string) bool {
+	base := strings.TrimSuffix(strings.ToUpper(name), ".")
+	switch base {
+	case "CON", "PRN", "AUX", "NUL",
+		"COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+		"LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9":
+		return true
+	default:
+		return false
+	}
 }
