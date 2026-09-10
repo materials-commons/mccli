@@ -164,7 +164,7 @@ func TestRunnerPrintsMissingPath(t *testing.T) {
 	}
 }
 
-func testDeps(projectRoot string, store di.Store, remote di.Remote) di.Dependencies {
+func testDeps(projectRoot string, store di.Store, remote di.RemoteClient) di.Dependencies {
 	return di.Dependencies{
 		LoadProject: func(ctx context.Context, start string) (config.Project, error) {
 			return config.LoadProject(ctx, projectRoot)
@@ -181,7 +181,7 @@ func testDeps(projectRoot string, store di.Store, remote di.Remote) di.Dependenc
 		OpenStore: func(ctx context.Context, root string) (di.Store, error) {
 			return store, nil
 		},
-		NewRemote: func(project config.Project, global config.Global) (di.Remote, error) {
+		NewRemoteClient: func(project config.Project, global config.Global) (di.RemoteClient, error) {
 			return remote, nil
 		},
 		Now: func() time.Time {

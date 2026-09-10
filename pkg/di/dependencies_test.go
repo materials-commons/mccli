@@ -20,7 +20,7 @@ func TestWithDefaultsFillsMissingDependencies(t *testing.T) {
 	if deps.OpenStore == nil {
 		t.Fatal("OpenStore is nil")
 	}
-	if deps.NewRemote == nil {
+	if deps.NewRemoteClient == nil {
 		t.Fatal("NewRemote is nil")
 	}
 	if deps.NewUploadManager == nil {

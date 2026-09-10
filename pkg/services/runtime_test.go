@@ -161,7 +161,7 @@ func testDependencies() di.Dependencies {
 		OpenStore: func(ctx context.Context, projectRoot string) (di.Store, error) {
 			return fakeStore{}, nil
 		},
-		NewRemote: func(project config.Project, global config.Global) (di.Remote, error) {
+		NewRemoteClient: func(project config.Project, global config.Global) (di.RemoteClient, error) {
 			return &fakeRemote{}, nil
 		},
 		NewUploadManager: func(cfg upload.Config) (di.UploadManager, error) {

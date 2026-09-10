@@ -28,7 +28,7 @@ type Container struct {
 	projectRoot string
 
 	store      di.Store
-	remote     di.Remote
+	remote     di.RemoteClient
 	translator projectpath.Translator
 
 	sendQueue *wsclient.Queue[wsclient.OutboundMessage]
@@ -118,7 +118,7 @@ func (c *Container) Store(ctx context.Context) (di.Store, error) {
 	return c.store, nil
 }
 
-func (c *Container) Remote() (di.Remote, error) {
+func (c *Container) Remote() (di.RemoteClient, error) {
 	if c.remote != nil {
 		return c.remote, nil
 	}
@@ -129,7 +129,7 @@ func (c *Container) Remote() (di.Remote, error) {
 		return nil, fmt.Errorf("global config has not been loaded")
 	}
 
-	remote, err := c.deps.NewRemote(c.project, c.global)
+	remote, err := c.deps.NewRemoteClient(c.project, c.global)
 	if err != nil {
 		return nil, err
 	}

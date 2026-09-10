@@ -63,7 +63,7 @@ type WebSocketConfig struct {
 	ProjectIDs []int
 }
 
-type Remote = any
+type RemoteClient = any
 
 // Dependencies contains injectable command dependencies shared by command
 // packages.
@@ -72,10 +72,10 @@ type Remote = any
 // initialized command dependency graph. Higher-level packages decide which
 // services are needed and request them lazily.
 type Dependencies struct {
-	LoadProject func(ctx context.Context, start string) (config.Project, error)
-	LoadGlobal  func(ctx context.Context, path string) (config.Global, error)
-	OpenStore   func(ctx context.Context, projectRoot string) (Store, error)
-	NewRemote   func(project config.Project, global config.Global) (Remote, error)
+	LoadProject     func(ctx context.Context, start string) (config.Project, error)
+	LoadGlobal      func(ctx context.Context, path string) (config.Global, error)
+	OpenStore       func(ctx context.Context, projectRoot string) (Store, error)
+	NewRemoteClient func(project config.Project, global config.Global) (RemoteClient, error)
 
 	NewUploadManager   func(cfg upload.Config) (UploadManager, error)
 	NewDownloadManager func(cfg download.Config) (DownloadManager, error)
@@ -95,7 +95,7 @@ func Production() Dependencies {
 		OpenStore: func(ctx context.Context, projectRoot string) (Store, error) {
 			return filedb.Open(ctx, projectRoot)
 		},
-		NewRemote: NewRemoteClient,
+		NewRemoteClient: NewRemoteClient,
 		NewUploadManager: func(cfg upload.Config) (UploadManager, error) {
 			return upload.NewManager(cfg)
 		},
@@ -129,8 +129,8 @@ func WithDefaults(deps Dependencies) Dependencies {
 	if deps.OpenStore == nil {
 		deps.OpenStore = prod.OpenStore
 	}
-	if deps.NewRemote == nil {
-		deps.NewRemote = prod.NewRemote
+	if deps.NewRemoteClient == nil {
+		deps.NewRemoteClient = prod.NewRemoteClient
 	}
 	if deps.NewUploadManager == nil {
 		deps.NewUploadManager = prod.NewUploadManager
@@ -148,8 +148,8 @@ func WithDefaults(deps Dependencies) Dependencies {
 	return deps
 }
 
-// NewRemoteClient creates a Remote client for the project's configured remote.
-func NewRemoteClient(project config.Project, global config.Global) (Remote, error) {
+// NewRemoteClient creates a RemoteClient client for the project's configured remote.
+func NewRemoteClient(project config.Project, global config.Global) (RemoteClient, error) {
 	remoteCfg, ok := global.FindRemote(project.Remote.Email, project.Remote.MCURL)
 	if !ok {
 		return nil, fmt.Errorf("remote %s %s is not configured in global config", project.Remote.Email, project.Remote.MCURL)
