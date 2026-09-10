@@ -99,14 +99,6 @@ func configCommand() *cli.Command {
 	}
 }
 
-func initCommand() *cli.Command {
-	return &cli.Command{
-		Name:   "init",
-		Usage:  "Initialize the current directory as a new Materials Commons project",
-		Action: notYetImplemented("init"),
-	}
-}
-
 func mkdirCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "mkdir",

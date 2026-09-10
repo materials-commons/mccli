@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/materials-commons/mccli/pkg/cmd/down"
+	"github.com/materials-commons/mccli/pkg/cmds/down"
 	"github.com/urfave/cli/v3"
 )
 

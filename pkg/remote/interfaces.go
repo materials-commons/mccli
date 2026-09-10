@@ -6,7 +6,7 @@ import (
 )
 
 type ProjectCreater interface {
-	CreateProject(req mcapi.CreateProjectRequest) error
+	CreateProject(req mcapi.CreateProjectRequest) (*mcmodel.Project, error)
 }
 
 type ProjectLister interface {

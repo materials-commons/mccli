@@ -111,6 +111,11 @@ func (g Global) FindRemote(email, mcurl string) (Remote, bool) {
 		Email: email,
 	}
 
+	// If either email or mcurl is empty, return the default remote.
+	if email == "" || mcurl == "" {
+		return g.DefaultRemote, true
+	}
+
 	// First check if the default remote matches the target.
 	if g.DefaultRemote.Matches(target) {
 		return g.DefaultRemote, true

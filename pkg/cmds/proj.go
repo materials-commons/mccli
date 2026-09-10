@@ -1,4 +1,4 @@
-package cmd
+package cmds
 
 import (
 	"github.com/materials-commons/mccli/pkg/di"

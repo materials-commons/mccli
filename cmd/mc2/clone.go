@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 
-	"github.com/materials-commons/mccli/pkg/cmd/clone"
+	"github.com/materials-commons/mccli/pkg/cmds"
 	"github.com/urfave/cli/v3"
 )
 
@@ -20,7 +20,7 @@ func cloneCommand() *cli.Command {
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			projectID := cmd.Int("id")
-			return clone.Run(ctx, projectID)
+			return cmds.RunCloneCmd(ctx, projectID)
 		},
 	}
 }

@@ -1,4 +1,4 @@
-package clone
+package cmds
 
 import (
 	"context"
@@ -63,7 +63,7 @@ func TestRunner_Run_Success(t *testing.T) {
 		},
 	}
 
-	r := &runner{deps: testDeps(getter, nil)}
+	r := &cloneRunner{deps: testDeps(getter, nil)}
 
 	err := r.Run(ctx, projectID)
 	if err != nil {
@@ -113,7 +113,7 @@ func TestRunner_Run_LoadGlobalError(t *testing.T) {
 		},
 	}
 
-	r := &runner{deps: deps}
+	r := &cloneRunner{deps: deps}
 	err := r.Run(ctx, 1)
 	if !errors.Is(err, expectedErr) {
 		t.Fatalf("Run() error = %v, want %v", err, expectedErr)
@@ -126,7 +126,7 @@ func TestRunner_Run_NewDefaultRemoteClientError(t *testing.T) {
 	t.Chdir(workDir)
 
 	expectedErr := errors.New("client creation error")
-	r := &runner{deps: testDeps(nil, expectedErr)}
+	r := &cloneRunner{deps: testDeps(nil, expectedErr)}
 
 	err := r.Run(ctx, 1)
 	if !errors.Is(err, expectedErr) {
@@ -149,7 +149,7 @@ func TestRunner_Run_RemoteClientNotProjectGetter(t *testing.T) {
 		},
 	}
 
-	r := &runner{deps: deps}
+	r := &cloneRunner{deps: deps}
 	err := r.Run(ctx, 1)
 	if err == nil || err.Error() != "remote client is not a ProjectGetter" {
 		t.Fatalf("Run() error = %v, want 'remote client is not a ProjectGetter'", err)
@@ -163,7 +163,7 @@ func TestRunner_Run_GetProjectError(t *testing.T) {
 
 	expectedErr := errors.New("get project failed")
 	getter := &fakeProjectGetter{err: expectedErr}
-	r := &runner{deps: testDeps(getter, nil)}
+	r := &cloneRunner{deps: testDeps(getter, nil)}
 
 	err := r.Run(ctx, 1)
 	if !errors.Is(err, expectedErr) {
@@ -191,7 +191,7 @@ func TestRunner_Run_MkdirError(t *testing.T) {
 		},
 	}
 
-	r := &runner{deps: testDeps(getter, nil)}
+	r := &cloneRunner{deps: testDeps(getter, nil)}
 	err := r.Run(ctx, 10)
 	if err == nil {
 		t.Fatal("Run() error = nil, want error due to existing file conflict")
@@ -219,7 +219,7 @@ func TestRunner_Run_SaveProjectError(t *testing.T) {
 		},
 	}
 
-	r := &runner{deps: testDeps(getter, nil)}
+	r := &cloneRunner{deps: testDeps(getter, nil)}
 	err := r.Run(ctx, 15)
 	if err == nil {
 		t.Fatal("Run() error = nil, want error when SaveProject fails")
@@ -247,7 +247,7 @@ func TestRunner_Run_OpenDBError(t *testing.T) {
 		},
 	}
 
-	r := &runner{deps: testDeps(getter, nil)}
+	r := &cloneRunner{deps: testDeps(getter, nil)}
 	err := r.Run(ctx, 20)
 	if err == nil {
 		t.Fatal("Run() error = nil, want error when filedb.Open fails")
@@ -259,7 +259,7 @@ func TestRunner_getRemoteClient(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		getter := &fakeProjectGetter{}
-		r := &runner{
+		r := &cloneRunner{
 			deps: di.Dependencies{
 				NewDefaultRemoteClient: func(global config.Global) (di.RemoteClient, error) {
 					return getter, nil
@@ -278,7 +278,7 @@ func TestRunner_getRemoteClient(t *testing.T) {
 
 	t.Run("client creation error", func(t *testing.T) {
 		expectedErr := errors.New("new client failed")
-		r := &runner{
+		r := &cloneRunner{
 			deps: di.Dependencies{
 				NewDefaultRemoteClient: func(global config.Global) (di.RemoteClient, error) {
 					return nil, expectedErr
@@ -293,7 +293,7 @@ func TestRunner_getRemoteClient(t *testing.T) {
 	})
 
 	t.Run("not ProjectGetter", func(t *testing.T) {
-		r := &runner{
+		r := &cloneRunner{
 			deps: di.Dependencies{
 				NewDefaultRemoteClient: func(global config.Global) (di.RemoteClient, error) {
 					return "invalid", nil
@@ -316,7 +316,7 @@ func TestRun_Production(t *testing.T) {
 	// Set HOME to empty temp directory so LoadGlobal fails with no config found
 	t.Setenv("HOME", t.TempDir())
 
-	err := Run(ctx, 1)
+	err := RunCloneCmd(ctx, 1)
 	if err == nil {
 		t.Fatal("Run() error = nil, want error when global config is not found")
 	}
