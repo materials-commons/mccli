@@ -2,6 +2,7 @@ package logging
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -28,6 +29,33 @@ type Config struct {
 	File string
 }
 
+type suppressedError struct {
+	err error
+}
+
+func (e suppressedError) Error() string {
+	return e.err.Error()
+}
+
+func (e suppressedError) Unwrap() error {
+	return e.err
+}
+
+// SuppressError marks err so main exits without logging it.
+func SuppressError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	return suppressedError{err: err}
+}
+
+// IsSuppressedError reports whether err should be returned without logging.
+func IsSuppressedError(err error) bool {
+	var suppressed suppressedError
+	return errors.As(err, &suppressed)
+}
+
 // Logger returns the logger stored in ctx.
 //
 // If ctx does not contain an mc2 logger, Logger returns slog.Default(). This
@@ -49,6 +77,13 @@ func WithLogger(ctx context.Context, logger *slog.Logger) context.Context {
 	}
 
 	return context.WithValue(ctx, contextKey{}, logger)
+}
+
+// WithDiscardLogger returns a child context containing a logger that discards
+// all log records.
+func WithDiscardLogger(ctx context.Context) context.Context {
+	logger := NewLogger(io.Discard, slog.LevelDebug)
+	return WithLogger(ctx, logger)
 }
 
 // Configure creates a logger from cfg and returns a context containing it.

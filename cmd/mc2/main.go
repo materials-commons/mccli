@@ -8,7 +8,6 @@ import (
 	"runtime/debug"
 	"strings"
 
-	mcapi "github.com/materials-commons/gomcapi"
 	mclogging "github.com/materials-commons/mccli/pkg/logging"
 	"github.com/urfave/cli/v3"
 )
@@ -37,12 +36,12 @@ var (
 
 // main runs the mc2 command.
 func main() {
-	var c mcapi.Client
-	_ = c
 	cmd := newCommand()
 
 	if err := cmd.Run(context.Background(), os.Args); err != nil {
-		slog.Error("mc2 failed", "error", err)
+		if !mclogging.IsSuppressedError(err) {
+			slog.Error("mc2 failed", "error", err)
+		}
 		os.Exit(1)
 	}
 }
@@ -82,20 +81,6 @@ func newCommand() *cli.Command {
 			remotesCommand(),
 			upCommand(),
 		},
-	}
-}
-
-func configCommand() *cli.Command {
-	return &cli.Command{
-		Name:  "config",
-		Usage: "Show global or project configuration",
-		Flags: []cli.Flag{
-			&cli.BoolFlag{
-				Name:  "proj",
-				Usage: "Show project configuration instead of global configuration",
-			},
-		},
-		Action: notYetImplemented("config"),
 	}
 }
 
