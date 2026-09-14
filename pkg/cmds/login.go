@@ -8,11 +8,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/x/term"
 	"github.com/google/uuid"
 	"github.com/materials-commons/mccli/pkg/config"
 	"github.com/materials-commons/mccli/pkg/di"
 	"github.com/materials-commons/mccli/pkg/remote"
+	term2 "golang.org/x/term"
 )
 
 type loginRunner struct {
@@ -163,7 +163,7 @@ func (r loginRunner) promptForPassword(email string) (string, error) {
 	for {
 		_, _ = fmt.Fprintf(os.Stderr, "Password for %s: ", email)
 
-		passwordBytes, err := term.ReadPassword(os.Stdin.Fd())
+		passwordBytes, err := term2.ReadPassword(int(os.Stdin.Fd()))
 		_, _ = fmt.Fprintln(os.Stderr)
 
 		if err != nil {
