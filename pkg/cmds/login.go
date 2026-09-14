@@ -12,7 +12,7 @@ import (
 	"github.com/materials-commons/mccli/pkg/config"
 	"github.com/materials-commons/mccli/pkg/di"
 	"github.com/materials-commons/mccli/pkg/remote"
-	term2 "golang.org/x/term"
+	"golang.org/x/term"
 )
 
 type loginRunner struct {
@@ -163,7 +163,7 @@ func (r loginRunner) promptForPassword(email string) (string, error) {
 	for {
 		_, _ = fmt.Fprintf(os.Stderr, "Password for %s: ", email)
 
-		passwordBytes, err := term2.ReadPassword(int(os.Stdin.Fd()))
+		passwordBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
 		_, _ = fmt.Fprintln(os.Stderr)
 
 		if err != nil {
