@@ -171,3 +171,7 @@ func NewDefaultRemoteClient(global config.Global) (RemoteClient, error) {
 		BaseURL: global.DefaultRemote.MCURL,
 	}), nil
 }
+
+func NewBaseRemoteClient(mcapiURL string) RemoteClient {
+	return mcapi.NewClient(&mcapi.ClientArgs{BaseURL: mcapiURL})
+}

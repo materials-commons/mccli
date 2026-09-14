@@ -38,3 +38,7 @@ type FileDirectoryGetter interface {
 type DirectoryCreater interface {
 	CreateDirectoryByPath(projectID int, path string) error
 }
+
+type Loginer interface {
+	Login(username, password string) (string, error)
+}
