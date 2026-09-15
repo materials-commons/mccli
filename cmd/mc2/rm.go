@@ -1,6 +1,9 @@
 package main
 
 import (
+	"context"
+
+	"github.com/materials-commons/mccli/pkg/cmds"
 	"github.com/urfave/cli/v3"
 )
 
@@ -20,6 +23,12 @@ func rmCommand() *cli.Command {
 				Usage: "Remove files only on the Materials Commons server",
 			},
 		},
-		Action: notYetImplemented("rm"),
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			opts := cmds.RmOpts{
+				Recursive:  cmd.Bool("recursive"),
+				RemoteOnly: cmd.Bool("remote-only"),
+			}
+			return cmds.RunRmCmd(ctx, opts, cmd.Args().Slice())
+		},
 	}
 }
