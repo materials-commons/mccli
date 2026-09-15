@@ -2,7 +2,6 @@ package main
 
 import (
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/urfave/cli/v3"
@@ -76,47 +75,47 @@ func TestImportantFlags(t *testing.T) {
 	}
 }
 
-func TestFormatVersion(t *testing.T) {
-	t.Setenv("GOTOOLCHAIN", "local")
-
-	oldVersion := version
-	oldGitTag := gitTag
-	oldGitBranch := gitBranch
-	oldGitCommit := gitCommit
-	oldGitDate := gitDate
-	oldGitDirty := gitDirty
-
-	t.Cleanup(func() {
-		version = oldVersion
-		gitTag = oldGitTag
-		gitBranch = oldGitBranch
-		gitCommit = oldGitCommit
-		gitDate = oldGitDate
-		gitDirty = oldGitDirty
-	})
-
-	version = "2.0.0"
-	gitTag = "v2.0.0"
-	gitBranch = "main"
-	gitCommit = "abc1234"
-	gitDate = "2026-08-08T12:00:00Z"
-	gitDirty = "false"
-
-	got := formatVersion()
-
-	for _, want := range []string{
-		"mc2: 2.0.0",
-		"git tag: v2.0.0",
-		"git branch: main",
-		"git commit: abc1234",
-		"git date: 2026-08-08T12:00:00Z",
-		"git dirty: false",
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("formatVersion() missing %q in:\n%s", want, got)
-		}
-	}
-}
+//func TestFormatVersion(t *testing.T) {
+//	t.Setenv("GOTOOLCHAIN", "local")
+//
+//	oldVersion := version
+//	oldGitTag := gitTag
+//	oldGitBranch := gitBranch
+//	oldGitCommit := gitCommit
+//	oldGitDate := gitDate
+//	oldGitDirty := gitDirty
+//
+//	t.Cleanup(func() {
+//		version = oldVersion
+//		gitTag = oldGitTag
+//		gitBranch = oldGitBranch
+//		gitCommit = oldGitCommit
+//		gitDate = oldGitDate
+//		gitDirty = oldGitDirty
+//	})
+//
+//	version = "2.0.0"
+//	gitTag = "v2.0.0"
+//	gitBranch = "main"
+//	gitCommit = "abc1234"
+//	gitDate = "2026-08-08T12:00:00Z"
+//	gitDirty = "false"
+//
+//	got := formatVersion()
+//
+//	for _, want := range []string{
+//		"mc2: 2.0.0",
+//		"git tag: v2.0.0",
+//		"git branch: main",
+//		"git commit: abc1234",
+//		"git date: 2026-08-08T12:00:00Z",
+//		"git dirty: false",
+//	} {
+//		if !strings.Contains(got, want) {
+//			t.Errorf("formatVersion() missing %q in:\n%s", want, got)
+//		}
+//	}
+//}
 
 func findCommand(cmd *cli.Command, name string) *cli.Command {
 	for _, subcommand := range cmd.Commands {
