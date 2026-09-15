@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/google/uuid"
 	mclogging "github.com/materials-commons/mccli/pkg/logging"
 	"github.com/materials-commons/mccli/pkg/projectpath"
 )
@@ -38,10 +39,6 @@ const (
 )
 
 var (
-	// ErrNoProject indicates that no local Materials Commons project could be
-	// found at or above the requested path.
-	ErrNoProject = projectpath.ErrNoProject
-
 	// ErrConfigNotFound indicates that the requested configuration file does
 	// not exist.
 	ErrConfigNotFound = errors.New("configuration file not found")
@@ -212,6 +209,17 @@ func LoadGlobal(ctx context.Context, path string) (Global, error) {
 	var cfg Global
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return Global{}, fmt.Errorf("%w: decode global config %q: %w", ErrInvalidConfig, path, err)
+	}
+
+	// Make sure the clientUUID is set, and if not, set it and save the config. This is a safeguard to ensure
+	// that the clientUUID is set. It's not ideal to have this side effect here. It's being done to maintain
+	// compatibility with older versions of the config file that did not have a clientUUID but that the client
+	// version of the CLI used.
+	if cfg.ClientUUID == "" {
+		cfg.ClientUUID = uuid.New().String()
+		if err := SaveGlobal(ctx, cfg, path); err != nil {
+			return Global{}, fmt.Errorf("save global config %q: %w", path, err)
+		}
 	}
 
 	// Save the path to the config. This field is not exported.
