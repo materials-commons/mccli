@@ -12,7 +12,7 @@ func versionCommand() *cli.Command {
 		Name:  "version",
 		Usage: "Show mc2 version and build information",
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			fmt.Println(formatVersion())
+			fmt.Println("mc2", formatVersion())
 			return nil
 		},
 	}

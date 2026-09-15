@@ -68,11 +68,11 @@ func newCommand() *cli.Command {
 		},
 		Before: configureLogging,
 		Commands: []*cli.Command{
-			versionCommand(),
-			cloneCommand(),
 			configCommand(),
+			cloneCommand(),
 			downCommand(),
 			initCommand(),
+			loginCommand(),
 			lsCommand(),
 			mkdirCommand(),
 			mvCommand(),
@@ -80,6 +80,7 @@ func newCommand() *cli.Command {
 			rmCommand(),
 			remotesCommand(),
 			upCommand(),
+			versionCommand(),
 		},
 	}
 }
@@ -124,26 +125,6 @@ func projCommand() *cli.Command {
 		Name:   "proj",
 		Usage:  "List remote projects the current user can access",
 		Action: notYetImplemented("proj"),
-	}
-}
-
-func rmCommand() *cli.Command {
-	return &cli.Command{
-		Name:      "rm",
-		Usage:     "Remove files and directories locally and remotely",
-		ArgsUsage: "paths...",
-		Flags: []cli.Flag{
-			&cli.BoolFlag{
-				Name:    "recursive",
-				Aliases: []string{"r"},
-				Usage:   "Remove remote directories recursively",
-			},
-			&cli.BoolFlag{
-				Name:  "remote-only",
-				Usage: "Remove files only on the Materials Commons server",
-			},
-		},
-		Action: notYetImplemented("rm"),
 	}
 }
 
@@ -270,21 +251,27 @@ type versionInfo struct {
 }
 
 func (v versionInfo) String() string {
-	var b strings.Builder
 
-	writeLine := func(label, value string) {
-		if value != "" {
-			fmt.Fprintf(&b, "%s: %s\n", label, value)
-		}
+	tag := v.GitTag
+	if tag == "" {
+		tag = "untagged release"
 	}
-
-	writeLine("mc2", v.Version)
-	writeLine("git tag", v.GitTag)
-	writeLine("git branch", v.GitBranch)
-	writeLine("git commit", v.GitCommit)
-	writeLine("git date", v.GitDate)
-	writeLine("git dirty", v.GitDirty)
-	writeLine("go", v.GoVersion)
-
-	return strings.TrimRight(b.String(), "\n")
+	return fmt.Sprintf("%s (%s) for branch %s, on %s", v.Version, tag, v.GitBranch, v.GitDate)
+	//var b strings.Builder
+	//
+	//writeLine := func(label, value string) {
+	//	if value != "" {
+	//		fmt.Fprintf(&b, "%s: %s\n", label, value)
+	//	}
+	//}
+	//
+	//writeLine("mc2", v.Version)
+	//writeLine("git tag", v.GitTag)
+	//writeLine("git branch", v.GitBranch)
+	//writeLine("git commit", v.GitCommit)
+	//writeLine("git date", v.GitDate)
+	//writeLine("git dirty", v.GitDirty)
+	//writeLine("go", v.GoVersion)
+	//
+	//return strings.TrimRight(b.String(), "\n")
 }
