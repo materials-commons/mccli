@@ -238,17 +238,35 @@ type fakeManager struct {
 
 	sendQueue *wsclient.Queue[wsclient.OutboundMessage]
 	dbQueue   *wsclient.Queue[upload.DBWriteRequest]
+
+	queueErr      error
+	resultSuccess bool
+	resultErr     error
+	hideResults   bool
+	startCount    int
+	stopCount     int
 }
 
 func newFakeManager() *fakeManager {
 	return &fakeManager{
-		results: map[string]upload.Result{},
+		results:       map[string]upload.Result{},
+		resultSuccess: true,
 	}
 }
 
-func (f *fakeManager) StartWorkers(ctx context.Context) {}
+func (f *fakeManager) StartWorkers(ctx context.Context) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 
-func (f *fakeManager) StopWorkers() {}
+	f.startCount++
+}
+
+func (f *fakeManager) StopWorkers() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.stopCount++
+}
 
 func (f *fakeManager) QueueUpload(req upload.Request) (string, error) {
 	f.mu.Lock()
@@ -260,7 +278,12 @@ func (f *fakeManager) QueueUpload(req upload.Request) (string, error) {
 	f.requests = append(f.requests, req)
 	f.results[id] = upload.Result{
 		TransferID: id,
-		Success:    true,
+		Success:    f.resultSuccess,
+		Err:        f.resultErr,
+	}
+
+	if f.queueErr != nil {
+		return id, f.queueErr
 	}
 
 	return id, nil
@@ -271,6 +294,10 @@ func (f *fakeManager) HandleMessage(msg wsclient.TextMessage) {}
 func (f *fakeManager) Result(transferID string) (upload.Result, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	if f.hideResults {
+		return upload.Result{}, false
+	}
 
 	result, ok := f.results[transferID]
 	return result, ok
