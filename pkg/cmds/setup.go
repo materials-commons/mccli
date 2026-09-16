@@ -133,6 +133,25 @@ func (r *setupRunner) runConfigureProjectLocationsForm() (bool, error) {
 	return configureProjectLocations, nil
 }
 
+func (r *setupRunner) promptForAuth() error {
+	var apiKey string
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("API Key").
+				Description("Enter your API Key").
+				Placeholder("show existing api key here if there is one").
+				Value(&apiKey),
+		),
+	)
+
+	if err := form.Run(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (r *setupRunner) promptProjectLocations() ([]string, error) {
 	var locations []string
 
