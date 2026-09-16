@@ -91,6 +91,9 @@ type Global struct {
 	// The ClientUUID configured for the server.
 	ClientUUID string `json:"client_uuid"`
 
+	// Has the user run setup yet?
+	SetupRun bool `json:"setup_run"`
+
 	path string
 }
 

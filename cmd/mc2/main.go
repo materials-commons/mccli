@@ -8,6 +8,8 @@ import (
 	"runtime/debug"
 	"strings"
 
+	"github.com/materials-commons/mccli/pkg/cmds"
+	"github.com/materials-commons/mccli/pkg/config"
 	mclogging "github.com/materials-commons/mccli/pkg/logging"
 	"github.com/urfave/cli/v3"
 )
@@ -36,6 +38,20 @@ var (
 
 // main runs the mc2 command.
 func main() {
+	// We want to check if mccli hasn't been configured yet. However, if the user has requested
+	// the setup command, then we don't need to check the status.
+	if !userRequestedSetup(os.Args) {
+		globalCfg, err := config.LoadGlobal(context.Background(), "")
+		if err != nil || !globalCfg.SetupRun {
+			// mccli hasn't been configured yet. Drop the user into setup.
+			if err := cmds.RunSetupCmd(globalCfg, err); err != nil {
+				fmt.Println("Setup failed", err)
+				os.Exit(1)
+			}
+			os.Exit(0)
+		}
+	}
+
 	cmd := newCommand()
 
 	if err := cmd.Run(context.Background(), os.Args); err != nil {
@@ -44,6 +60,30 @@ func main() {
 		}
 		os.Exit(1)
 	}
+}
+
+func userRequestedSetup(args []string) bool {
+	for i := 1; i < len(args); i++ {
+		arg := args[i]
+
+		if arg == "--" {
+			return false
+		}
+
+		switch {
+		case arg == "--log-level" || arg == "--log-file":
+			i++
+			continue
+		case strings.HasPrefix(arg, "--log-level=") || strings.HasPrefix(arg, "--log-file="):
+			continue
+		case strings.HasPrefix(arg, "-"):
+			continue
+		default:
+			return arg == "setup"
+		}
+	}
+
+	return false
 }
 
 // newCommand constructs the mc2 command tree.
@@ -79,8 +119,20 @@ func newCommand() *cli.Command {
 			projCommand(),
 			rmCommand(),
 			remotesCommand(),
+			setupCommand(),
 			upCommand(),
 			versionCommand(),
+		},
+	}
+}
+
+func setupCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "setup",
+		Usage: "Run setup for the cli",
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			cfg, err := config.LoadGlobal(ctx, "")
+			return cmds.RunSetupCmd(cfg, err)
 		},
 	}
 }
@@ -251,27 +303,10 @@ type versionInfo struct {
 }
 
 func (v versionInfo) String() string {
-
 	tag := v.GitTag
 	if tag == "" {
 		tag = "untagged release"
 	}
+
 	return fmt.Sprintf("%s (%s) for branch %s, on %s", v.Version, tag, v.GitBranch, v.GitDate)
-	//var b strings.Builder
-	//
-	//writeLine := func(label, value string) {
-	//	if value != "" {
-	//		fmt.Fprintf(&b, "%s: %s\n", label, value)
-	//	}
-	//}
-	//
-	//writeLine("mc2", v.Version)
-	//writeLine("git tag", v.GitTag)
-	//writeLine("git branch", v.GitBranch)
-	//writeLine("git commit", v.GitCommit)
-	//writeLine("git date", v.GitDate)
-	//writeLine("git dirty", v.GitDirty)
-	//writeLine("go", v.GoVersion)
-	//
-	//return strings.TrimRight(b.String(), "\n")
 }
