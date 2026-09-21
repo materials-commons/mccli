@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	upcmd "github.com/materials-commons/mccli/pkg/cmds/up"
+	upcmd "github.com/materials-commons/mccli/cmd/mc2/up"
 	"github.com/urfave/cli/v3"
 )
 

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	lscmd "github.com/materials-commons/mccli/pkg/cmds/ls"
+	lscmd "github.com/materials-commons/mccli/cmd/mc2/ls"
 	"github.com/urfave/cli/v3"
 )
 
