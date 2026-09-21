@@ -1,4 +1,4 @@
-package cmds
+package main
 
 import (
 	"context"
@@ -10,14 +10,26 @@ import (
 	"charm.land/huh/v2"
 	"github.com/creativeprojects/go-selfupdate"
 	"github.com/materials-commons/mccli/pkg/config"
+	"github.com/urfave/cli/v3"
 )
+
+func setupCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "setup",
+		Usage: "Run setup for the cli",
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			cfg, err := config.LoadGlobal(ctx, "")
+			return runSetupCmd(cfg, err)
+		},
+	}
+}
 
 type setupRunner struct {
 	fdCommandPath string
 	rgCommandPath string
 }
 
-func RunSetupCmd(config config.Global, cfgLoadErr error) error {
+func runSetupCmd(config config.Global, cfgLoadErr error) error {
 	return (&setupRunner{}).run(config, cfgLoadErr)
 }
 

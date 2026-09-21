@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/materials-commons/mccli/pkg/cmds"
 	"github.com/materials-commons/mccli/pkg/config"
 	mclogging "github.com/materials-commons/mccli/pkg/logging"
 	"github.com/urfave/cli/v3"
@@ -43,7 +42,7 @@ func main() {
 		globalCfg, err := config.LoadGlobal(context.Background(), "")
 		if err != nil || !globalCfg.SetupRun {
 			// mccli hasn't been configured yet. Drop the user into setup.
-			if err := cmds.RunSetupCmd(globalCfg, err); err != nil {
+			if err := runSetupCmd(globalCfg, err); err != nil {
 				fmt.Println("Setup failed", err)
 				os.Exit(1)
 			}
@@ -121,17 +120,6 @@ func newCommand() *cli.Command {
 			setupCommand(),
 			upCommand(),
 			versionCommand(),
-		},
-	}
-}
-
-func setupCommand() *cli.Command {
-	return &cli.Command{
-		Name:  "setup",
-		Usage: "Run setup for the cli",
-		Action: func(ctx context.Context, cmd *cli.Command) error {
-			cfg, err := config.LoadGlobal(ctx, "")
-			return cmds.RunSetupCmd(cfg, err)
 		},
 	}
 }
