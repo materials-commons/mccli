@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 
+	"github.com/materials-commons/mccli/pkg/app"
 	"github.com/materials-commons/mccli/pkg/config"
 	"github.com/materials-commons/mccli/pkg/di"
 	"github.com/materials-commons/mccli/pkg/mc"
-	"github.com/materials-commons/mccli/pkg/setup"
 	"github.com/urfave/cli/v3"
 )
 
@@ -68,7 +68,7 @@ func (r *cloneRunner) Run(ctx context.Context, projectID int) error {
 	projectDirName := mc.CleanProjectDirName(project.Name)
 
 	// CreateLocalProject will create the project directory and initialize it.
-	return setup.CreateLocalProject(ctx, projectDirName, project.ID)
+	return app.CreateLocalProject(ctx, projectDirName, project.ID)
 }
 
 // getRemotelient creates an instance of the client and then casts it to a ProjectGetter.

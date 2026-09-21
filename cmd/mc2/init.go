@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 
 	mcapi "github.com/materials-commons/gomcapi"
+	"github.com/materials-commons/mccli/pkg/app"
 	"github.com/materials-commons/mccli/pkg/config"
 	"github.com/materials-commons/mccli/pkg/di"
 	"github.com/materials-commons/mccli/pkg/mc"
-	"github.com/materials-commons/mccli/pkg/setup"
 	"github.com/urfave/cli/v3"
 )
 
@@ -121,7 +121,7 @@ func (r *initRunner) Run(ctx context.Context, opts initOpts) error {
 	}
 
 	// Now set up the project by creating the directory, its config and metadata.
-	return setup.CreateLocalProject(ctx, projectDir, proj.ID)
+	return app.CreateLocalProject(ctx, projectDir, proj.ID)
 }
 
 func (r *initRunner) getRemoteClient(cfg config.Global) (mc.ProjectCreater, error) {
