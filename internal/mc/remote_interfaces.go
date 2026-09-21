@@ -26,6 +26,10 @@ type FileGetter interface {
 	GetFileByPath(projectID int, path string) (*mcmodel.File, error)
 }
 
+type FileDeleter interface {
+	DeleteFile(projectID int, fileID int) error
+}
+
 type DirectoryLister interface {
 	ListDirectoryByPath(projectID int, path string) ([]mcmodel.File, error)
 }

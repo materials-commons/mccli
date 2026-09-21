@@ -81,7 +81,7 @@ func (r *ObservationRunner) ObserveAndReconcile(ctx context.Context, localPath s
 		return FileState{}, err
 	}
 
-	localEntry, err := observeLocal(ctx, r.Translator, localPath, now)
+	localEntry, err := ObserveLocal(ctx, r.Translator, localPath, now)
 	if err != nil {
 		return FileState{}, err
 	}
@@ -151,7 +151,7 @@ func (r *ObservationRunner) ObserveAndReconcile(ctx context.Context, localPath s
 // ObserveLocal observes localPath and converts it into a LocalEntry.
 //
 // If localPath does not exist, ObserveLocal returns nil, nil.
-func observeLocal(ctx context.Context, translator mc.ProjectPathTranslator, localPath string, now time.Time) (*LocalEntry, error) {
+func ObserveLocal(ctx context.Context, translator mc.ProjectPathTranslator, localPath string, now time.Time) (*LocalEntry, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
