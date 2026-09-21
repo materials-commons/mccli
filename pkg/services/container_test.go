@@ -11,8 +11,8 @@ import (
 	"github.com/materials-commons/hydra/pkg/mcdb/mcmodel"
 	"github.com/materials-commons/mccli/pkg/config"
 	"github.com/materials-commons/mccli/pkg/di"
-	"github.com/materials-commons/mccli/pkg/download"
 	"github.com/materials-commons/mccli/pkg/filedb"
+	"github.com/materials-commons/mccli/pkg/transfer"
 	"github.com/materials-commons/mccli/pkg/upload"
 	"github.com/materials-commons/mccli/pkg/wsclient"
 )
@@ -59,7 +59,7 @@ func TestContainerLoadCommandContextDoesNotInitializeCommandSpecificServices(t *
 			uploadCalls++
 			return fakeUploadManager{}, nil
 		},
-		NewDownloadManager: func(cfg download.DownloadConfig) (di.DownloadManager, error) {
+		NewDownloadManager: func(cfg transfer.DownloadConfig) (di.DownloadManager, error) {
 			downloadCalls++
 			return fakeDownloadManager{}, nil
 		},
@@ -239,12 +239,12 @@ func (fakeDownloadManager) StartWorkers(ctx context.Context) {}
 
 func (fakeDownloadManager) StopWorkers() {}
 
-func (fakeDownloadManager) QueueDownload(req download.DownloadRequest) (string, error) {
+func (fakeDownloadManager) QueueDownload(req transfer.DownloadRequest) (string, error) {
 	return "download-1", nil
 }
 
-func (fakeDownloadManager) Result(transferID string) (download.Result, bool) {
-	return download.Result{Success: true}, true
+func (fakeDownloadManager) Result(transferID string) (transfer.DownloadResult, bool) {
+	return transfer.DownloadResult{Success: true}, true
 }
 
 type fakeWebSocket struct{}

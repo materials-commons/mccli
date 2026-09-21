@@ -1,4 +1,4 @@
-package download
+package transfer
 
 import (
 	"bytes"
@@ -15,7 +15,6 @@ import (
 	"github.com/materials-commons/mccli/pkg/conv"
 	"github.com/materials-commons/mccli/pkg/filedb"
 	"github.com/materials-commons/mccli/pkg/reconcile"
-	"github.com/materials-commons/mccli/pkg/transfer"
 	"github.com/materials-commons/mccli/pkg/wsclient"
 )
 
@@ -97,7 +96,7 @@ func TestDownloaderDownloadsFileAndReportsProgress(t *testing.T) {
 		t.Fatal("progress events = 0, want at least one")
 	}
 	last := progress.events[len(progress.events)-1]
-	if last.Status != transfer.StatusComplete {
+	if last.Status != StatusComplete {
 		t.Fatalf("last progress status = %q, want complete", last.Status)
 	}
 	if last.BytesDone != int64(len(body)) {
@@ -243,10 +242,10 @@ func (s *fakeStore) Upsert(ctx context.Context, record filedb.FileRecord) error 
 }
 
 type fakeProgress struct {
-	events []transfer.Event
+	events []Event
 }
 
-func (p *fakeProgress) ReportTransferProgress(event transfer.Event) {
+func (p *fakeProgress) ReportTransferProgress(event Event) {
 	p.events = append(p.events, event)
 }
 

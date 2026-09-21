@@ -7,8 +7,8 @@ import (
 
 	"github.com/materials-commons/mccli/pkg/config"
 	"github.com/materials-commons/mccli/pkg/di"
-	"github.com/materials-commons/mccli/pkg/download"
 	"github.com/materials-commons/mccli/pkg/projectpath"
+	"github.com/materials-commons/mccli/pkg/transfer"
 	"github.com/materials-commons/mccli/pkg/upload"
 	"github.com/materials-commons/mccli/pkg/wsclient"
 )
@@ -228,7 +228,7 @@ func (c *Container) DownloadManager(ctx context.Context, opts DownloadManagerOpt
 	progress := upload.NewUploadProgress(progressFactory)
 	c.uploadProgressWait = progress.Wait
 
-	manager, err := c.deps.NewDownloadManager(download.DownloadConfig{
+	manager, err := c.deps.NewDownloadManager(transfer.DownloadConfig{
 		Store:         store,
 		ClientID:      c.global.ClientUUID,
 		MaxConcurrent: maxConcurrent,

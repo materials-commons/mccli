@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/materials-commons/mccli/pkg/download"
+	"github.com/materials-commons/mccli/pkg/transfer"
 	"github.com/materials-commons/mccli/pkg/upload"
 )
 
@@ -41,7 +41,7 @@ func TestWaitForDownloadsReturnsResultError(t *testing.T) {
 	wantErr := errors.New("download failed")
 
 	err := WaitForDownloads(context.Background(), fakeWaitDownloadManager{
-		result: download.Result{
+		result: transfer.DownloadResult{
 			Success: false,
 			Err:     wantErr,
 		},
@@ -65,10 +65,10 @@ func (m fakeWaitUploadManager) Result(transferID string) (upload.Result, bool) {
 
 type fakeWaitDownloadManager struct {
 	fakeDownloadManager
-	result download.Result
+	result transfer.DownloadResult
 	ok     bool
 }
 
-func (m fakeWaitDownloadManager) Result(transferID string) (download.Result, bool) {
+func (m fakeWaitDownloadManager) Result(transferID string) (transfer.DownloadResult, bool) {
 	return m.result, m.ok
 }

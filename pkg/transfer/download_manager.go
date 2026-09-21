@@ -1,4 +1,4 @@
-package download
+package transfer
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/materials-commons/mccli/pkg/transfer"
 	"github.com/materials-commons/mccli/pkg/wsclient"
 )
 
@@ -26,8 +25,8 @@ type downloaderRunner interface {
 // Factory creates downloaders. It is injectable for tests.
 type Factory func(req DownloadRequest) downloaderRunner
 
-// Result describes the outcome of one download.
-type Result struct {
+// DownloadResult describes the outcome of one download.
+type DownloadResult struct {
 	TransferID string
 	Success    bool
 	Err        error
@@ -51,7 +50,7 @@ type DownloadConfig struct {
 	ClientID      string
 	MaxConcurrent int
 	Factory       Factory
-	Progress      transfer.Reporter
+	Progress      Reporter
 }
 
 // DownloadManager manages queued concurrent downloads.
@@ -66,7 +65,7 @@ type DownloadManager struct {
 
 	mu              sync.Mutex
 	activeDownloads map[string]downloaderRunner
-	results         map[string]Result
+	results         map[string]DownloadResult
 
 	started bool
 	cancel  context.CancelFunc
@@ -95,7 +94,7 @@ func NewDownloadManager(cfg DownloadConfig) (*DownloadManager, error) {
 		maxConcurrent:   cfg.MaxConcurrent,
 		downloadQueue:   wsclient.NewQueue[downloaderRunner](),
 		activeDownloads: map[string]downloaderRunner{},
-		results:         map[string]Result{},
+		results:         map[string]DownloadResult{},
 		factory:         cfg.Factory,
 	}
 
@@ -190,8 +189,8 @@ func (m *DownloadManager) QueueDownload(req DownloadRequest) (string, error) {
 	return downloader.TransferIDValue(), nil
 }
 
-// Result returns the result for a transfer.
-func (m *DownloadManager) Result(transferID string) (Result, bool) {
+// DownloadResult returns the result for a transfer.
+func (m *DownloadManager) Result(transferID string) (DownloadResult, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -319,7 +318,7 @@ func (m *DownloadManager) runDownloader(ctx context.Context, downloader download
 
 	m.mu.Lock()
 	delete(m.activeDownloads, transferID)
-	m.results[transferID] = Result{
+	m.results[transferID] = DownloadResult{
 		TransferID: transferID,
 		Success:    downloadErr == nil,
 		Err:        downloadErr,

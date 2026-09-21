@@ -1,5 +1,5 @@
 // Package download implements queued HTTP Range file downloads.
-package download
+package transfer
 
 import (
 	"github.com/materials-commons/mccli/pkg/filedb"

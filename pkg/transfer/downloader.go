@@ -1,4 +1,4 @@
-package download
+package transfer
 
 import (
 	"context"
@@ -17,7 +17,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/materials-commons/mccli/pkg/filedb"
 	"github.com/materials-commons/mccli/pkg/projectpath"
-	"github.com/materials-commons/mccli/pkg/transfer"
 	"github.com/materials-commons/mccli/pkg/wsclient"
 )
 
@@ -50,7 +49,7 @@ type DownloaderConfig struct {
 	TransferID string
 	ChunkSize  int64
 	HTTPClient HTTPClient
-	Progress   transfer.Reporter
+	Progress   Reporter
 
 	Now func() time.Time
 }
@@ -65,7 +64,7 @@ type Downloader struct {
 	TransferID string
 	ChunkSize  int64
 	HTTPClient HTTPClient
-	Progress   transfer.Reporter
+	Progress   Reporter
 	Now        func() time.Time
 
 	mu            sync.Mutex
@@ -169,11 +168,11 @@ func (d *Downloader) Download(ctx context.Context) error {
 	}
 
 	d.setBytesReceived(resumeFrom)
-	d.reportProgress(transfer.StatusStarting, nil)
+	d.reportProgress(StatusStarting, nil)
 
 	if err := d.downloadWithRange(ctx, localPath, partPath, metaPath, resumeFrom); err != nil {
 		_ = d.saveMetadata(metaPath, localPath)
-		d.reportProgress(transfer.StatusFailed, err)
+		d.reportProgress(StatusFailed, err)
 		_ = d.sendCompletion(false, err)
 		return err
 	}
@@ -181,7 +180,7 @@ func (d *Downloader) Download(ctx context.Context) error {
 	if checksum := d.expectedChecksum(); checksum != "" {
 		if err := verifyMD5(partPath, checksum); err != nil {
 			_ = d.saveMetadata(metaPath, localPath)
-			d.reportProgress(transfer.StatusFailed, err)
+			d.reportProgress(StatusFailed, err)
 			_ = d.sendCompletion(false, err)
 			return err
 		}
@@ -197,7 +196,7 @@ func (d *Downloader) Download(ctx context.Context) error {
 		return err
 	}
 
-	d.reportProgress(transfer.StatusComplete, nil)
+	d.reportProgress(StatusComplete, nil)
 	return d.sendCompletion(true, nil)
 }
 
@@ -281,7 +280,7 @@ func (d *Downloader) downloadWithRange(ctx context.Context, localPath, partPath,
 	}
 	defer file.Close()
 
-	d.reportProgress(transfer.StatusDownloading, nil)
+	d.reportProgress(StatusDownloading, nil)
 
 	buf := make([]byte, d.ChunkSize)
 	lastSave := d.BytesReceived()
@@ -310,7 +309,7 @@ func (d *Downloader) downloadWithRange(ctx context.Context, localPath, partPath,
 			}
 
 			current := d.addBytesReceived(int64(n))
-			d.reportProgress(transfer.StatusDownloading, nil)
+			d.reportProgress(StatusDownloading, nil)
 
 			if current-lastSave >= d.ChunkSize*10 {
 				if err := d.saveMetadata(metaPath, localPath); err != nil {
@@ -488,16 +487,16 @@ func (d *Downloader) Cancel() {
 	d.cancelled = true
 }
 
-func (d *Downloader) reportProgress(status transfer.Status, err error) {
+func (d *Downloader) reportProgress(status Status, err error) {
 	if d.Progress == nil {
 		return
 	}
 
 	localPath, _ := d.LocalPath()
 
-	d.Progress.ReportTransferProgress(transfer.Event{
+	d.Progress.ReportTransferProgress(Event{
 		TransferID: d.TransferID,
-		Direction:  transfer.DirectionDownload,
+		Direction:  DirectionDownload,
 		LocalPath:  localPath,
 		RemotePath: d.Request.Observation.RemotePath,
 		BytesDone:  d.BytesReceived(),

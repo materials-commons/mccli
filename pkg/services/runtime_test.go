@@ -7,7 +7,7 @@ import (
 
 	"github.com/materials-commons/mccli/pkg/config"
 	"github.com/materials-commons/mccli/pkg/di"
-	"github.com/materials-commons/mccli/pkg/download"
+	"github.com/materials-commons/mccli/pkg/transfer"
 	"github.com/materials-commons/mccli/pkg/upload"
 	"github.com/materials-commons/mccli/pkg/wsclient"
 )
@@ -119,12 +119,12 @@ func (m *recordingDownloadManager) StopWorkers() {
 	*m.events = append(*m.events, "download:stop")
 }
 
-func (m *recordingDownloadManager) QueueDownload(req download.DownloadRequest) (string, error) {
+func (m *recordingDownloadManager) QueueDownload(req transfer.DownloadRequest) (string, error) {
 	return "download-1", nil
 }
 
-func (m *recordingDownloadManager) Result(transferID string) (download.Result, bool) {
-	return download.Result{Success: true}, true
+func (m *recordingDownloadManager) Result(transferID string) (transfer.DownloadResult, bool) {
+	return transfer.DownloadResult{Success: true}, true
 }
 
 type recordingWebSocket struct {
@@ -167,7 +167,7 @@ func testDependencies() di.Dependencies {
 		NewUploadManager: func(cfg upload.Config) (di.UploadManager, error) {
 			return fakeUploadManager{}, nil
 		},
-		NewDownloadManager: func(cfg download.DownloadConfig) (di.DownloadManager, error) {
+		NewDownloadManager: func(cfg transfer.DownloadConfig) (di.DownloadManager, error) {
 			return fakeDownloadManager{}, nil
 		},
 		NewWebSocket: func(cfg di.WebSocketConfig) di.WebSocketRunner {

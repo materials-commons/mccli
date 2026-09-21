@@ -12,9 +12,9 @@ import (
 
 	mcapi "github.com/materials-commons/gomcapi"
 	"github.com/materials-commons/mccli/pkg/config"
-	"github.com/materials-commons/mccli/pkg/download"
 	"github.com/materials-commons/mccli/pkg/filedb"
 	"github.com/materials-commons/mccli/pkg/reconcile"
+	"github.com/materials-commons/mccli/pkg/transfer"
 	"github.com/materials-commons/mccli/pkg/upload"
 	"github.com/materials-commons/mccli/pkg/wsclient"
 )
@@ -44,8 +44,8 @@ type UploadManager interface {
 type DownloadManager interface {
 	StartWorkers(ctx context.Context)
 	StopWorkers()
-	QueueDownload(req download.DownloadRequest) (string, error)
-	Result(transferID string) (download.Result, bool)
+	QueueDownload(req transfer.DownloadRequest) (string, error)
+	Result(transferID string) (transfer.DownloadResult, bool)
 }
 
 // WebSocketRunner runs a websocket client.
@@ -78,7 +78,7 @@ type Dependencies struct {
 	NewRemoteClient        func(project config.Project, global config.Global) (RemoteClient, error)
 	NewDefaultRemoteClient func(global config.Global) (RemoteClient, error)
 	NewUploadManager       func(cfg upload.Config) (UploadManager, error)
-	NewDownloadManager     func(cfg download.DownloadConfig) (DownloadManager, error)
+	NewDownloadManager     func(cfg transfer.DownloadConfig) (DownloadManager, error)
 	NewWebSocket           func(cfg WebSocketConfig) WebSocketRunner
 
 	Now func() time.Time
@@ -100,8 +100,8 @@ func Production() Dependencies {
 		NewUploadManager: func(cfg upload.Config) (UploadManager, error) {
 			return upload.NewManager(cfg)
 		},
-		NewDownloadManager: func(cfg download.DownloadConfig) (DownloadManager, error) {
-			return download.NewDownloadManager(cfg)
+		NewDownloadManager: func(cfg transfer.DownloadConfig) (DownloadManager, error) {
+			return transfer.NewDownloadManager(cfg)
 		},
 		NewWebSocket: func(cfg WebSocketConfig) WebSocketRunner {
 			return &wsclient.Client{

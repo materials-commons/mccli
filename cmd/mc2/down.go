@@ -12,12 +12,12 @@ import (
 
 	"github.com/materials-commons/mccli/pkg/config"
 	"github.com/materials-commons/mccli/pkg/di"
-	"github.com/materials-commons/mccli/pkg/download"
 	"github.com/materials-commons/mccli/pkg/filedb"
 	"github.com/materials-commons/mccli/pkg/projectpath"
 	"github.com/materials-commons/mccli/pkg/reconcile"
 	remote2 "github.com/materials-commons/mccli/pkg/remote"
 	"github.com/materials-commons/mccli/pkg/services"
+	"github.com/materials-commons/mccli/pkg/transfer"
 	"github.com/urfave/cli/v3"
 )
 
@@ -331,7 +331,7 @@ func queueFileDownloadFromState(ctx context.Context, req queueRequest, state rec
 		return "", false, err
 	}
 
-	transferID, err := req.manager.QueueDownload(download.DownloadRequest{
+	transferID, err := req.manager.QueueDownload(transfer.DownloadRequest{
 		ProjectID:     req.project.ProjectID,
 		ClientID:      "",
 		BaseURL:       req.remoteCfg.MCURL,
