@@ -45,7 +45,7 @@ func TestDownloaderDownloadsFileAndReportsProgress(t *testing.T) {
 		Store:      store,
 		ClientID:   "client-1",
 		TransferID: "transfer-1",
-		Request: Request{
+		Request: DownloadRequest{
 			ProjectID: 1,
 			BaseURL:   "https://example.test/api",
 			APIToken:  "token-1",
@@ -155,7 +155,7 @@ func TestDownloaderResumesWithRangeRequest(t *testing.T) {
 		Store:      &fakeStore{},
 		ClientID:   "client-1",
 		TransferID: "transfer-1",
-		Request: Request{
+		Request: DownloadRequest{
 			ProjectID: 1,
 			BaseURL:   "https://example.test/api",
 			APIToken:  "token-1",
@@ -205,7 +205,7 @@ func TestDownloaderChecksumMismatchReturnsError(t *testing.T) {
 		Store:      &fakeStore{},
 		ClientID:   "client-1",
 		TransferID: "transfer-1",
-		Request: Request{
+		Request: DownloadRequest{
 			ProjectID: 1,
 			BaseURL:   "https://example.test/api",
 			APIToken:  "token-1",

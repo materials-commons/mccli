@@ -119,7 +119,7 @@ func (m *recordingDownloadManager) StopWorkers() {
 	*m.events = append(*m.events, "download:stop")
 }
 
-func (m *recordingDownloadManager) QueueDownload(req download.Request) (string, error) {
+func (m *recordingDownloadManager) QueueDownload(req download.DownloadRequest) (string, error) {
 	return "download-1", nil
 }
 
@@ -167,7 +167,7 @@ func testDependencies() di.Dependencies {
 		NewUploadManager: func(cfg upload.Config) (di.UploadManager, error) {
 			return fakeUploadManager{}, nil
 		},
-		NewDownloadManager: func(cfg download.Config) (di.DownloadManager, error) {
+		NewDownloadManager: func(cfg download.DownloadConfig) (di.DownloadManager, error) {
 			return fakeDownloadManager{}, nil
 		},
 		NewWebSocket: func(cfg di.WebSocketConfig) di.WebSocketRunner {

@@ -331,7 +331,7 @@ func queueFileDownloadFromState(ctx context.Context, req queueRequest, state rec
 		return "", false, err
 	}
 
-	transferID, err := req.manager.QueueDownload(download.Request{
+	transferID, err := req.manager.QueueDownload(download.DownloadRequest{
 		ProjectID:     req.project.ProjectID,
 		ClientID:      "",
 		BaseURL:       req.remoteCfg.MCURL,

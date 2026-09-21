@@ -15,11 +15,11 @@ func TestManagerQueueDownloadAssignsTransferIDAndRuns(t *testing.T) {
 	ctx := context.Background()
 
 	var runner *fakeDownloaderRunner
-	m, err := NewManager(Config{
+	m, err := NewDownloadManager(DownloadConfig{
 		Store:         &fakeStore{},
 		ClientID:      "client-1",
 		MaxConcurrent: 1,
-		Factory: func(req Request) downloaderRunner {
+		Factory: func(req DownloadRequest) downloaderRunner {
 			runner = &fakeDownloaderRunner{
 				localPath: filepath.Join(t.TempDir(), "file.txt"),
 				total:     100,
@@ -34,7 +34,7 @@ func TestManagerQueueDownloadAssignsTransferIDAndRuns(t *testing.T) {
 	m.StartWorkers(ctx)
 	defer m.StopWorkers()
 
-	transferID, err := m.QueueDownload(Request{})
+	transferID, err := m.QueueDownload(DownloadRequest{})
 	if err != nil {
 		t.Fatalf("QueueDownload() error = %v", err)
 	}
@@ -60,11 +60,11 @@ func TestManagerRecordsDownloadFailure(t *testing.T) {
 	ctx := context.Background()
 	downloadErr := fmt.Errorf("download failed")
 
-	m, err := NewManager(Config{
+	m, err := NewDownloadManager(DownloadConfig{
 		Store:         &fakeStore{},
 		ClientID:      "client-1",
 		MaxConcurrent: 1,
-		Factory: func(req Request) downloaderRunner {
+		Factory: func(req DownloadRequest) downloaderRunner {
 			return &fakeDownloaderRunner{err: downloadErr}
 		},
 	})
@@ -75,7 +75,7 @@ func TestManagerRecordsDownloadFailure(t *testing.T) {
 	m.StartWorkers(ctx)
 	defer m.StopWorkers()
 
-	transferID, err := m.QueueDownload(Request{})
+	transferID, err := m.QueueDownload(DownloadRequest{})
 	if err != nil {
 		t.Fatalf("QueueDownload() error = %v", err)
 	}
@@ -94,7 +94,7 @@ func TestManagerRecordsDownloadFailure(t *testing.T) {
 	}
 }
 
-func waitForResult(t *testing.T, m *Manager, transferID string) {
+func waitForResult(t *testing.T, m *DownloadManager, transferID string) {
 	t.Helper()
 
 	deadline := time.After(2 * time.Second)

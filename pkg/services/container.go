@@ -228,7 +228,7 @@ func (c *Container) DownloadManager(ctx context.Context, opts DownloadManagerOpt
 	progress := upload.NewUploadProgress(progressFactory)
 	c.uploadProgressWait = progress.Wait
 
-	manager, err := c.deps.NewDownloadManager(download.Config{
+	manager, err := c.deps.NewDownloadManager(download.DownloadConfig{
 		Store:         store,
 		ClientID:      c.global.ClientUUID,
 		MaxConcurrent: maxConcurrent,

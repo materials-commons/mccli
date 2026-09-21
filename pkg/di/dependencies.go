@@ -44,7 +44,7 @@ type UploadManager interface {
 type DownloadManager interface {
 	StartWorkers(ctx context.Context)
 	StopWorkers()
-	QueueDownload(req download.Request) (string, error)
+	QueueDownload(req download.DownloadRequest) (string, error)
 	Result(transferID string) (download.Result, bool)
 }
 
@@ -78,7 +78,7 @@ type Dependencies struct {
 	NewRemoteClient        func(project config.Project, global config.Global) (RemoteClient, error)
 	NewDefaultRemoteClient func(global config.Global) (RemoteClient, error)
 	NewUploadManager       func(cfg upload.Config) (UploadManager, error)
-	NewDownloadManager     func(cfg download.Config) (DownloadManager, error)
+	NewDownloadManager     func(cfg download.DownloadConfig) (DownloadManager, error)
 	NewWebSocket           func(cfg WebSocketConfig) WebSocketRunner
 
 	Now func() time.Time
@@ -100,8 +100,8 @@ func Production() Dependencies {
 		NewUploadManager: func(cfg upload.Config) (UploadManager, error) {
 			return upload.NewManager(cfg)
 		},
-		NewDownloadManager: func(cfg download.Config) (DownloadManager, error) {
-			return download.NewManager(cfg)
+		NewDownloadManager: func(cfg download.DownloadConfig) (DownloadManager, error) {
+			return download.NewDownloadManager(cfg)
 		},
 		NewWebSocket: func(cfg WebSocketConfig) WebSocketRunner {
 			return &wsclient.Client{

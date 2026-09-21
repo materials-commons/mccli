@@ -24,7 +24,7 @@ type downloaderRunner interface {
 }
 
 // Factory creates downloaders. It is injectable for tests.
-type Factory func(req Request) downloaderRunner
+type Factory func(req DownloadRequest) downloaderRunner
 
 // Result describes the outcome of one download.
 type Result struct {
@@ -42,8 +42,8 @@ type ActiveDownload struct {
 	ProgressPct   float64
 }
 
-// Config configures a Manager.
-type Config struct {
+// DownloadConfig configures a DownloadManager.
+type DownloadConfig struct {
 	// SendQueue is optional. If set, individual downloads may emit completion
 	// messages to it.
 	SendQueue     *wsclient.Queue[wsclient.OutboundMessage]
@@ -54,8 +54,8 @@ type Config struct {
 	Progress      transfer.Reporter
 }
 
-// Manager manages queued concurrent downloads.
-type Manager struct {
+// DownloadManager manages queued concurrent downloads.
+type DownloadManager struct {
 	sendQueue *wsclient.Queue[wsclient.OutboundMessage]
 	store     FileRecordStore
 
@@ -76,8 +76,8 @@ type Manager struct {
 	factory Factory
 }
 
-// NewManager creates a download manager.
-func NewManager(cfg Config) (*Manager, error) {
+// NewDownloadManager creates a download manager.
+func NewDownloadManager(cfg DownloadConfig) (*DownloadManager, error) {
 	if cfg.Store == nil {
 		return nil, fmt.Errorf("file record store is required")
 	}
@@ -88,7 +88,7 @@ func NewManager(cfg Config) (*Manager, error) {
 		cfg.MaxConcurrent = 3
 	}
 
-	m := &Manager{
+	m := &DownloadManager{
 		sendQueue:       cfg.SendQueue,
 		store:           cfg.Store,
 		clientID:        cfg.ClientID,
@@ -100,7 +100,7 @@ func NewManager(cfg Config) (*Manager, error) {
 	}
 
 	if m.factory == nil {
-		m.factory = func(req Request) downloaderRunner {
+		m.factory = func(req DownloadRequest) downloaderRunner {
 			return NewDownloader(DownloaderConfig{
 				SendQueue: m.sendQueue,
 				Store:     m.store,
@@ -115,7 +115,7 @@ func NewManager(cfg Config) (*Manager, error) {
 }
 
 // StartWorkers starts background download workers.
-func (m *Manager) StartWorkers(ctx context.Context) {
+func (m *DownloadManager) StartWorkers(ctx context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -145,7 +145,7 @@ func (m *Manager) StartWorkers(ctx context.Context) {
 }
 
 // StopWorkers stops workers and waits for them to exit.
-func (m *Manager) StopWorkers() {
+func (m *DownloadManager) StopWorkers() {
 	m.mu.Lock()
 	cancel := m.cancel
 	done := m.done
@@ -161,7 +161,7 @@ func (m *Manager) StopWorkers() {
 }
 
 // Running reports whether workers are running.
-func (m *Manager) Running() bool {
+func (m *DownloadManager) Running() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -169,7 +169,7 @@ func (m *Manager) Running() bool {
 }
 
 // QueueDownload enqueues one download and returns its transfer ID.
-func (m *Manager) QueueDownload(req Request) (string, error) {
+func (m *DownloadManager) QueueDownload(req DownloadRequest) (string, error) {
 	if req.ClientID == "" {
 		req.ClientID = m.clientID
 	}
@@ -191,7 +191,7 @@ func (m *Manager) QueueDownload(req Request) (string, error) {
 }
 
 // Result returns the result for a transfer.
-func (m *Manager) Result(transferID string) (Result, bool) {
+func (m *DownloadManager) Result(transferID string) (Result, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -200,7 +200,7 @@ func (m *Manager) Result(transferID string) (Result, bool) {
 }
 
 // Success returns whether a transfer completed successfully.
-func (m *Manager) Success(transferID string) (bool, bool) {
+func (m *DownloadManager) Success(transferID string) (bool, bool) {
 	result, ok := m.Result(transferID)
 	if !ok {
 		return false, false
@@ -209,7 +209,7 @@ func (m *Manager) Success(transferID string) (bool, bool) {
 }
 
 // ActiveCount returns the number of currently active downloads.
-func (m *Manager) ActiveCount() int {
+func (m *DownloadManager) ActiveCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -217,7 +217,7 @@ func (m *Manager) ActiveCount() int {
 }
 
 // ActiveDownloads returns currently active downloads.
-func (m *Manager) ActiveDownloads() []ActiveDownload {
+func (m *DownloadManager) ActiveDownloads() []ActiveDownload {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -245,7 +245,7 @@ func (m *Manager) ActiveDownloads() []ActiveDownload {
 }
 
 // PauseDownload pauses an active download.
-func (m *Manager) PauseDownload(transferID string) bool {
+func (m *DownloadManager) PauseDownload(transferID string) bool {
 	m.mu.Lock()
 	downloader := m.activeDownloads[transferID]
 	m.mu.Unlock()
@@ -259,7 +259,7 @@ func (m *Manager) PauseDownload(transferID string) bool {
 }
 
 // ResumeDownload resumes an active download.
-func (m *Manager) ResumeDownload(transferID string) bool {
+func (m *DownloadManager) ResumeDownload(transferID string) bool {
 	m.mu.Lock()
 	downloader := m.activeDownloads[transferID]
 	m.mu.Unlock()
@@ -273,7 +273,7 @@ func (m *Manager) ResumeDownload(transferID string) bool {
 }
 
 // CancelDownload cancels an active download.
-func (m *Manager) CancelDownload(transferID string) bool {
+func (m *DownloadManager) CancelDownload(transferID string) bool {
 	m.mu.Lock()
 	downloader := m.activeDownloads[transferID]
 	m.mu.Unlock()
@@ -286,7 +286,7 @@ func (m *Manager) CancelDownload(transferID string) bool {
 	return true
 }
 
-func (m *Manager) worker(ctx context.Context) {
+func (m *DownloadManager) worker(ctx context.Context) {
 	defer m.wg.Done()
 
 	for {
@@ -299,7 +299,7 @@ func (m *Manager) worker(ctx context.Context) {
 	}
 }
 
-func (m *Manager) runDownloader(ctx context.Context, downloader downloaderRunner) {
+func (m *DownloadManager) runDownloader(ctx context.Context, downloader downloaderRunner) {
 	transferID := downloader.TransferIDValue()
 
 	m.mu.Lock()

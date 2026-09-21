@@ -59,7 +59,7 @@ func TestContainerLoadCommandContextDoesNotInitializeCommandSpecificServices(t *
 			uploadCalls++
 			return fakeUploadManager{}, nil
 		},
-		NewDownloadManager: func(cfg download.Config) (di.DownloadManager, error) {
+		NewDownloadManager: func(cfg download.DownloadConfig) (di.DownloadManager, error) {
 			downloadCalls++
 			return fakeDownloadManager{}, nil
 		},
@@ -239,7 +239,7 @@ func (fakeDownloadManager) StartWorkers(ctx context.Context) {}
 
 func (fakeDownloadManager) StopWorkers() {}
 
-func (fakeDownloadManager) QueueDownload(req download.Request) (string, error) {
+func (fakeDownloadManager) QueueDownload(req download.DownloadRequest) (string, error) {
 	return "download-1", nil
 }
 

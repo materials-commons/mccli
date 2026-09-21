@@ -39,13 +39,13 @@ type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-// Config configures one Downloader.
+// DownloadConfig configures one Downloader.
 type DownloaderConfig struct {
 	SendQueue *wsclient.Queue[wsclient.OutboundMessage]
 	Store     FileRecordStore
 	ClientID  string
 
-	Request Request
+	Request DownloadRequest
 
 	TransferID string
 	ChunkSize  int64
@@ -61,7 +61,7 @@ type Downloader struct {
 	Store     FileRecordStore
 	ClientID  string
 
-	Request    Request
+	Request    DownloadRequest
 	TransferID string
 	ChunkSize  int64
 	HTTPClient HTTPClient

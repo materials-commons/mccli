@@ -6,8 +6,8 @@ import (
 	"github.com/materials-commons/mccli/pkg/reconcile"
 )
 
-// Request describes one file download request.
-type Request struct {
+// DownloadRequest describes one file download request.
+type DownloadRequest struct {
 	ProjectID int
 	ClientID  string
 
