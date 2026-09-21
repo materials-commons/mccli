@@ -12,7 +12,6 @@ import (
 	"github.com/materials-commons/mccli/pkg/config"
 	"github.com/materials-commons/mccli/pkg/di"
 	"github.com/materials-commons/mccli/pkg/mc"
-	"github.com/materials-commons/mccli/pkg/remote"
 	"github.com/materials-commons/mccli/pkg/setup"
 	"github.com/urfave/cli/v3"
 )
@@ -125,13 +124,13 @@ func (r *initRunner) Run(ctx context.Context, opts initOpts) error {
 	return setup.CreateLocalProject(ctx, projectDir, proj.ID)
 }
 
-func (r *initRunner) getRemoteClient(cfg config.Global) (remote.ProjectCreater, error) {
+func (r *initRunner) getRemoteClient(cfg config.Global) (mc.ProjectCreater, error) {
 	remoteAny, err := r.deps.NewDefaultRemoteClient(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	remoteClient, ok := remoteAny.(remote.ProjectCreater)
+	remoteClient, ok := remoteAny.(mc.ProjectCreater)
 	if !ok {
 		return nil, errors.New("remote client is not a ProjectGetter")
 	}

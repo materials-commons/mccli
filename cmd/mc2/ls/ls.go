@@ -15,7 +15,6 @@ import (
 	"github.com/materials-commons/mccli/pkg/di"
 	"github.com/materials-commons/mccli/pkg/mc"
 	"github.com/materials-commons/mccli/pkg/reconcile"
-	remote2 "github.com/materials-commons/mccli/pkg/remote"
 	"github.com/materials-commons/mccli/pkg/services"
 )
 
@@ -73,7 +72,7 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
-	remote, ok := remoteAny.(remote2.FileDirectoryGetter)
+	remote, ok := remoteAny.(mc.FileDirectoryGetter)
 	if !ok {
 		return fmt.Errorf("remote is not a FileGetter")
 	}
@@ -115,7 +114,7 @@ type listRequest struct {
 	project    config.Project
 	translator mc.ProjectPathTranslator
 	store      di.Store
-	remote     remote2.FileDirectoryGetter
+	remote     mc.FileDirectoryGetter
 	reconciler *reconcile.Reconciler
 	localPath  string
 	now        func() time.Time

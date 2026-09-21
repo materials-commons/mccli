@@ -1,4 +1,4 @@
-package remote
+package mc
 
 import (
 	mcapi "github.com/materials-commons/gomcapi"

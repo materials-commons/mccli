@@ -11,7 +11,6 @@ import (
 	"github.com/materials-commons/mccli/pkg/di"
 	"github.com/materials-commons/mccli/pkg/mc"
 	"github.com/materials-commons/mccli/pkg/reconcile"
-	remote2 "github.com/materials-commons/mccli/pkg/remote"
 	"github.com/materials-commons/mccli/pkg/services"
 	"github.com/materials-commons/mccli/pkg/transfer"
 	"github.com/materials-commons/mccli/pkg/wsclient"
@@ -59,7 +58,7 @@ func newUploader(ctx context.Context, deps di.Dependencies, opts Options) (*uplo
 	}
 
 	// Cast it to just the interface we need.
-	remote, ok := remoteAny.(remote2.FileGetter)
+	remote, ok := remoteAny.(mc.FileGetter)
 	if !ok {
 		return nil, fmt.Errorf("remote is not a FileGetter")
 	}

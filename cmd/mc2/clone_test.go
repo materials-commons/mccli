@@ -12,7 +12,6 @@ import (
 	"github.com/materials-commons/mccli/pkg/di"
 	"github.com/materials-commons/mccli/pkg/filedb"
 	"github.com/materials-commons/mccli/pkg/mc"
-	"github.com/materials-commons/mccli/pkg/remote"
 )
 
 type fakeProjectGetter struct {
@@ -27,7 +26,7 @@ func (f *fakeProjectGetter) GetProject(id int) (*mcmodel.Project, error) {
 	return f.project, nil
 }
 
-func testDeps(getter remote.ProjectGetter, getterErr error) di.Dependencies {
+func testDeps(getter mc.ProjectGetter, getterErr error) di.Dependencies {
 	return di.Dependencies{
 		LoadGlobal: func(ctx context.Context, path string) (config.Global, error) {
 			return config.Global{

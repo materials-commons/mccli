@@ -9,7 +9,7 @@ import (
 
 	"github.com/materials-commons/mccli/pkg/config"
 	"github.com/materials-commons/mccli/pkg/di"
-	"github.com/materials-commons/mccli/pkg/remote"
+	"github.com/materials-commons/mccli/pkg/mc"
 )
 
 type fakeLoginer struct {
@@ -20,7 +20,7 @@ type fakeLoginer struct {
 	lastPassword string
 }
 
-var _ remote.Loginer = (*fakeLoginer)(nil)
+var _ mc.Loginer = (*fakeLoginer)(nil)
 
 func (f *fakeLoginer) Login(username, password string) (string, error) {
 	f.loginCalls++

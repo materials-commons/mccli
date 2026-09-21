@@ -15,7 +15,6 @@ import (
 	"github.com/materials-commons/mccli/pkg/filedb"
 	"github.com/materials-commons/mccli/pkg/mc"
 	"github.com/materials-commons/mccli/pkg/reconcile"
-	remote2 "github.com/materials-commons/mccli/pkg/remote"
 	"github.com/materials-commons/mccli/pkg/services"
 	"github.com/materials-commons/mccli/pkg/transfer"
 	"github.com/urfave/cli/v3"
@@ -125,7 +124,7 @@ func (r downRunner) Run(ctx context.Context, opts downOpts) error {
 		return err
 	}
 
-	remote, ok := remoteAny.(remote2.FileDirectoryGetter)
+	remote, ok := remoteAny.(mc.FileDirectoryGetter)
 	if !ok {
 		return fmt.Errorf("remote is not a FileGetter")
 	}
@@ -182,7 +181,7 @@ type queueRequest struct {
 	remoteCfg  config.Remote
 	manager    di.DownloadManager
 	store      di.Store
-	remote     remote2.FileDirectoryGetter
+	remote     mc.FileDirectoryGetter
 	translator mc.ProjectPathTranslator
 	reconciler *reconcile.Reconciler
 }

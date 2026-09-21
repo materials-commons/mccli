@@ -13,7 +13,6 @@ import (
 	"github.com/materials-commons/mccli/pkg/di"
 	"github.com/materials-commons/mccli/pkg/filedb"
 	"github.com/materials-commons/mccli/pkg/mc"
-	"github.com/materials-commons/mccli/pkg/remote"
 )
 
 type fakeProjectCreater struct {
@@ -30,7 +29,7 @@ func (f *fakeProjectCreater) CreateProject(req mcapi.CreateProjectRequest) (*mcm
 	return f.project, nil
 }
 
-func testInitDeps(creater remote.ProjectCreater, createrErr error) di.Dependencies {
+func testInitDeps(creater mc.ProjectCreater, createrErr error) di.Dependencies {
 	return di.Dependencies{
 		LoadGlobal: func(ctx context.Context, path string) (config.Global, error) {
 			return config.Global{

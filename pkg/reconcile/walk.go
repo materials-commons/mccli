@@ -14,7 +14,6 @@ import (
 	mcapi "github.com/materials-commons/gomcapi"
 	"github.com/materials-commons/mccli/pkg/filedb"
 	"github.com/materials-commons/mccli/pkg/mc"
-	remote2 "github.com/materials-commons/mccli/pkg/remote"
 )
 
 var (
@@ -218,7 +217,7 @@ func LocalNodeListDir(translator mc.ProjectPathTranslator, now func() time.Time)
 
 // RemoteListDir returns a ListDirFunc that lists remote Materials Commons
 // directory entries by translating localDir to its remote project path.
-func RemoteListDir(projectID int, translator mc.ProjectPathTranslator, remote remote2.DirectoryLister) ListDirFunc {
+func RemoteListDir(projectID int, translator mc.ProjectPathTranslator, remote mc.DirectoryLister) ListDirFunc {
 	remoteOnly := RemoteOnlyListDir(projectID, translator, remote)
 
 	return func(ctx context.Context, localDir string) ([]Observation, error) {
@@ -238,7 +237,7 @@ func RemoteListDir(projectID int, translator mc.ProjectPathTranslator, remote re
 // Commons directory entries using WalkNode.RemotePath.
 //
 // This function supports remote-only recursive walking.
-func RemoteOnlyListDir(projectID int, translator mc.ProjectPathTranslator, remote remote2.DirectoryLister) NodeListDirFunc {
+func RemoteOnlyListDir(projectID int, translator mc.ProjectPathTranslator, remote mc.DirectoryLister) NodeListDirFunc {
 	return func(ctx context.Context, node WalkNode) ([]Observation, error) {
 		if remote == nil {
 			return nil, fmt.Errorf("remote directory lister is required")

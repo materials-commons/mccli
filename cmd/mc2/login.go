@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/materials-commons/mccli/pkg/config"
 	"github.com/materials-commons/mccli/pkg/di"
-	"github.com/materials-commons/mccli/pkg/remote"
+	"github.com/materials-commons/mccli/pkg/mc"
 	"github.com/urfave/cli/v3"
 	"golang.org/x/term"
 )
@@ -61,13 +61,13 @@ func (r loginRunner) Run(ctx context.Context, opts loginOpts) error {
 	return nil
 }
 
-func (r loginRunner) getRemoteClient(cfg config.Global) (remote.Loginer, error) {
+func (r loginRunner) getRemoteClient(cfg config.Global) (mc.Loginer, error) {
 	remoteAny, err := r.deps.NewDefaultRemoteClient(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	remoteClient, ok := remoteAny.(remote.Loginer)
+	remoteClient, ok := remoteAny.(mc.Loginer)
 	if !ok {
 		return nil, errors.New("remote client is not a remote.Loginer")
 	}
@@ -75,10 +75,10 @@ func (r loginRunner) getRemoteClient(cfg config.Global) (remote.Loginer, error) 
 	return remoteClient, nil
 }
 
-func (r loginRunner) getBaseRemoteClient(mcapiURL string) (remote.Loginer, error) {
+func (r loginRunner) getBaseRemoteClient(mcapiURL string) (mc.Loginer, error) {
 	remoteAny := di.NewBaseRemoteClient(mcapiURL)
 
-	remoteClient, ok := remoteAny.(remote.Loginer)
+	remoteClient, ok := remoteAny.(mc.Loginer)
 	if !ok {
 		return nil, errors.New("remote client is not a remote.Loginer")
 	}

@@ -7,7 +7,6 @@ import (
 	"github.com/materials-commons/mccli/pkg/config"
 	"github.com/materials-commons/mccli/pkg/di"
 	"github.com/materials-commons/mccli/pkg/mc"
-	"github.com/materials-commons/mccli/pkg/remote"
 	"github.com/materials-commons/mccli/pkg/setup"
 	"github.com/urfave/cli/v3"
 )
@@ -73,13 +72,13 @@ func (r *cloneRunner) Run(ctx context.Context, projectID int) error {
 }
 
 // getRemotelient creates an instance of the client and then casts it to a ProjectGetter.
-func (r *cloneRunner) getRemoteClient(cfg config.Global) (remote.ProjectGetter, error) {
+func (r *cloneRunner) getRemoteClient(cfg config.Global) (mc.ProjectGetter, error) {
 	remoteAny, err := r.deps.NewDefaultRemoteClient(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	remoteClient, ok := remoteAny.(remote.ProjectGetter)
+	remoteClient, ok := remoteAny.(mc.ProjectGetter)
 	if !ok {
 		return nil, errors.New("remote client is not a ProjectGetter")
 	}
