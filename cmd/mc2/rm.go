@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 
-	"github.com/materials-commons/mccli/pkg/di"
+	"github.com/materials-commons/mccli/internal/di"
 	"github.com/urfave/cli/v3"
 )
 

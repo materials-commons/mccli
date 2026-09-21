@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/materials-commons/mccli/pkg/config"
-	mclogging "github.com/materials-commons/mccli/pkg/logging"
+	"github.com/materials-commons/mccli/internal/config"
+	mclogging "github.com/materials-commons/mccli/internal/logging"
 	"github.com/urfave/cli/v3"
 )
 

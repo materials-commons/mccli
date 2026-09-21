@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/materials-commons/mccli/pkg/filedb"
-	"github.com/materials-commons/mccli/pkg/mc"
-	"github.com/materials-commons/mccli/pkg/reconcile"
+	"github.com/materials-commons/mccli/internal/filedb"
+	"github.com/materials-commons/mccli/internal/mc"
+	"github.com/materials-commons/mccli/internal/reconcile"
 	"github.com/olekukonko/tablewriter"
 	"github.com/olekukonko/tablewriter/tw"
 )

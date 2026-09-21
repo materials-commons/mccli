@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/materials-commons/mccli/pkg/config"
-	"github.com/materials-commons/mccli/pkg/di"
-	"github.com/materials-commons/mccli/pkg/mc"
+	"github.com/materials-commons/mccli/internal/config"
+	"github.com/materials-commons/mccli/internal/di"
+	"github.com/materials-commons/mccli/internal/mc"
 	"github.com/urfave/cli/v3"
 	"golang.org/x/term"
 )

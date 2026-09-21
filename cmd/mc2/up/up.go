@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/materials-commons/mccli/pkg/di"
+	"github.com/materials-commons/mccli/internal/di"
 )
 
 // Options contains user-facing mc2 up command options.

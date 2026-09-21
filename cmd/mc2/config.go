@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/materials-commons/mccli/pkg/di"
-	mclogging "github.com/materials-commons/mccli/pkg/logging"
+	"github.com/materials-commons/mccli/internal/di"
+	mclogging "github.com/materials-commons/mccli/internal/logging"
 	"github.com/urfave/cli/v3"
 )
 

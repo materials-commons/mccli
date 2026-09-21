@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 
-	"github.com/materials-commons/mccli/pkg/app"
-	"github.com/materials-commons/mccli/pkg/config"
-	"github.com/materials-commons/mccli/pkg/di"
-	"github.com/materials-commons/mccli/pkg/mc"
+	"github.com/materials-commons/mccli/internal/app"
+	"github.com/materials-commons/mccli/internal/config"
+	"github.com/materials-commons/mccli/internal/di"
+	"github.com/materials-commons/mccli/internal/mc"
 	"github.com/urfave/cli/v3"
 )
 

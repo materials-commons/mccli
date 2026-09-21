@@ -14,9 +14,9 @@ import (
 
 	mcapi "github.com/materials-commons/gomcapi"
 	"github.com/materials-commons/hydra/pkg/mcdb/mcmodel"
-	"github.com/materials-commons/mccli/pkg/config"
-	"github.com/materials-commons/mccli/pkg/di"
-	"github.com/materials-commons/mccli/pkg/filedb"
+	"github.com/materials-commons/mccli/internal/config"
+	"github.com/materials-commons/mccli/internal/di"
+	"github.com/materials-commons/mccli/internal/filedb"
 )
 
 func TestRunnerListsMergedDirectory(t *testing.T) {

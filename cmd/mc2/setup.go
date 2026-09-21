@@ -9,7 +9,7 @@ import (
 
 	"charm.land/huh/v2"
 	"github.com/creativeprojects/go-selfupdate"
-	"github.com/materials-commons/mccli/pkg/config"
+	"github.com/materials-commons/mccli/internal/config"
 	"github.com/urfave/cli/v3"
 )
 

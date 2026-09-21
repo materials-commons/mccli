@@ -1,0 +1,176 @@
+// Package di contains shared dependency wiring for mc2 command packages.
+//
+// Command packages should stay focused on command behavior. This package owns
+// production dependency construction and small interfaces used by multiple
+// commands.
+package di
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	mcapi "github.com/materials-commons/gomcapi"
+	"github.com/materials-commons/mccli/internal/config"
+	"github.com/materials-commons/mccli/internal/filedb"
+	"github.com/materials-commons/mccli/internal/reconcile"
+	"github.com/materials-commons/mccli/internal/transfer"
+	"github.com/materials-commons/mccli/internal/wsclient"
+)
+
+// Store is the project file database behavior used by command packages.
+//
+// It intentionally includes the union of methods currently needed by ls and up.
+// Commands should still use only the subset they need.
+type Store interface {
+	reconcile.DirectoryRecordGetter
+	reconcile.FileRecordGetter
+
+	Close(ctx context.Context) error
+	Upsert(ctx context.Context, record filedb.FileRecord) error
+}
+
+// UploadManager queues and runs websocket uploads.
+type UploadManager interface {
+	StartWorkers(ctx context.Context)
+	StopWorkers()
+	QueueUpload(req transfer.UploadRequest) (string, error)
+	HandleMessage(msg wsclient.TextMessage)
+	Result(transferID string) (transfer.UploadResult, bool)
+}
+
+// DownloadManager queues and runs HTTP Range downloads.
+type DownloadManager interface {
+	StartWorkers(ctx context.Context)
+	StopWorkers()
+	QueueDownload(req transfer.DownloadRequest) (string, error)
+	Result(transferID string) (transfer.DownloadResult, bool)
+}
+
+// WebSocketRunner runs a websocket client.
+type WebSocketRunner interface {
+	Run(ctx context.Context) error
+}
+
+// WebSocketConfig configures the websocket runner dependency.
+type WebSocketConfig struct {
+	URL        string
+	Token      string
+	ClientID   string
+	Outbound   *wsclient.Queue[wsclient.OutboundMessage]
+	Handle     wsclient.Handler
+	ProjectIDs []int
+}
+
+type RemoteClient = any
+
+// Dependencies contains injectable command dependencies shared by command
+// packages.
+//
+// These are constructors only. They should not be interpreted as a fully
+// initialized command dependency graph. Higher-level packages decide which
+// services are needed and request them lazily.
+type Dependencies struct {
+	LoadProject            func(ctx context.Context, start string) (config.Project, error)
+	LoadGlobal             func(ctx context.Context, path string) (config.Global, error)
+	OpenStore              func(ctx context.Context, projectRoot string) (Store, error)
+	NewRemoteClient        func(project config.Project, global config.Global) (RemoteClient, error)
+	NewDefaultRemoteClient func(global config.Global) (RemoteClient, error)
+	NewUploadManager       func(cfg transfer.UploadConfig) (UploadManager, error)
+	NewDownloadManager     func(cfg transfer.DownloadConfig) (DownloadManager, error)
+	NewWebSocket           func(cfg WebSocketConfig) WebSocketRunner
+
+	Now func() time.Time
+}
+
+// Production returns the default production factory set.
+//
+// Nothing returned here is constructed eagerly except the function values
+// themselves. Command-specific service construction belongs in pkg/services.
+func Production() Dependencies {
+	return Dependencies{
+		LoadProject: config.LoadProject,
+		LoadGlobal:  config.LoadGlobal,
+		OpenStore: func(ctx context.Context, projectRoot string) (Store, error) {
+			return filedb.Open(ctx, projectRoot)
+		},
+		NewRemoteClient:        NewRemoteClient,
+		NewDefaultRemoteClient: NewDefaultRemoteClient,
+		NewUploadManager: func(cfg transfer.UploadConfig) (UploadManager, error) {
+			return transfer.NewUploadManager(cfg)
+		},
+		NewDownloadManager: func(cfg transfer.DownloadConfig) (DownloadManager, error) {
+			return transfer.NewDownloadManager(cfg)
+		},
+		NewWebSocket: func(cfg WebSocketConfig) WebSocketRunner {
+			return &wsclient.Client{
+				URL:        cfg.URL,
+				Token:      cfg.Token,
+				ClientID:   cfg.ClientID,
+				Outbound:   cfg.Outbound,
+				Handle:     cfg.Handle,
+				ProjectIDs: cfg.ProjectIDs,
+			}
+		},
+		Now: time.Now,
+	}
+}
+
+// WithDefaults fills any nil dependency fields with production defaults.
+func WithDefaults(deps Dependencies) Dependencies {
+	prod := Production()
+
+	if deps.LoadProject == nil {
+		deps.LoadProject = prod.LoadProject
+	}
+	if deps.LoadGlobal == nil {
+		deps.LoadGlobal = prod.LoadGlobal
+	}
+	if deps.OpenStore == nil {
+		deps.OpenStore = prod.OpenStore
+	}
+	if deps.NewRemoteClient == nil {
+		deps.NewRemoteClient = prod.NewRemoteClient
+	}
+	if deps.NewUploadManager == nil {
+		deps.NewUploadManager = prod.NewUploadManager
+	}
+	if deps.NewDownloadManager == nil {
+		deps.NewDownloadManager = prod.NewDownloadManager
+	}
+	if deps.NewWebSocket == nil {
+		deps.NewWebSocket = prod.NewWebSocket
+	}
+	if deps.Now == nil {
+		deps.Now = prod.Now
+	}
+
+	return deps
+}
+
+// NewRemoteClient creates a RemoteClient client for the project's configured remote.
+func NewRemoteClient(project config.Project, global config.Global) (RemoteClient, error) {
+	remoteCfg, ok := global.FindRemote(project.Remote.Email, project.Remote.MCURL)
+	if !ok {
+		return nil, fmt.Errorf("remote %s %s is not configured in global config", project.Remote.Email, project.Remote.MCURL)
+	}
+	if remoteCfg.APIKey == "" {
+		return nil, fmt.Errorf("remote %s %s is missing an API key", project.Remote.Email, project.Remote.MCURL)
+	}
+
+	return mcapi.NewClient(&mcapi.ClientArgs{
+		APIKey:  remoteCfg.APIKey,
+		BaseURL: remoteCfg.MCURL,
+	}), nil
+}
+
+func NewDefaultRemoteClient(global config.Global) (RemoteClient, error) {
+	return mcapi.NewClient(&mcapi.ClientArgs{
+		APIKey:  global.DefaultRemote.APIKey,
+		BaseURL: global.DefaultRemote.MCURL,
+	}), nil
+}
+
+func NewBaseRemoteClient(mcapiURL string) RemoteClient {
+	return mcapi.NewClient(&mcapi.ClientArgs{BaseURL: mcapiURL})
+}

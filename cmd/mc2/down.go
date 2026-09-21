@@ -10,13 +10,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/materials-commons/mccli/pkg/config"
-	"github.com/materials-commons/mccli/pkg/di"
-	"github.com/materials-commons/mccli/pkg/filedb"
-	"github.com/materials-commons/mccli/pkg/mc"
-	"github.com/materials-commons/mccli/pkg/reconcile"
-	"github.com/materials-commons/mccli/pkg/services"
-	"github.com/materials-commons/mccli/pkg/transfer"
+	"github.com/materials-commons/mccli/internal/config"
+	"github.com/materials-commons/mccli/internal/di"
+	"github.com/materials-commons/mccli/internal/filedb"
+	"github.com/materials-commons/mccli/internal/mc"
+	"github.com/materials-commons/mccli/internal/reconcile"
+	"github.com/materials-commons/mccli/internal/services"
+	"github.com/materials-commons/mccli/internal/transfer"
 	"github.com/urfave/cli/v3"
 )
 
