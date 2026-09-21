@@ -155,13 +155,13 @@ Core idea:
 
 Important files:
 
-- `types.go`
+- `upload_types.go`
 - `local.go`
 - `observe.go`
 - `reconciler.go`
 - `walk.go`
 
-#### `types.go`
+#### `upload_types.go`
 
 Important types:
 

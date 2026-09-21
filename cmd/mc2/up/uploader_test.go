@@ -11,7 +11,7 @@ import (
 	"github.com/materials-commons/hydra/pkg/mcdb/mcmodel"
 	"github.com/materials-commons/mccli/pkg/config"
 	"github.com/materials-commons/mccli/pkg/di"
-	"github.com/materials-commons/mccli/pkg/upload"
+	"github.com/materials-commons/mccli/pkg/transfer"
 )
 
 func TestNewUploaderRequiresClientUUID(t *testing.T) {
@@ -104,7 +104,7 @@ func TestNewUploaderReturnsUploadManagerError(t *testing.T) {
 	wantErr := errors.New("upload manager exploded")
 
 	deps := testDeps(projectRoot, store, &fakeRemote{files: map[string]mcmodel.File{}}, newFakeManager())
-	deps.NewUploadManager = func(cfg upload.Config) (di.UploadManager, error) {
+	deps.NewUploadManager = func(cfg transfer.UploadConfig) (di.UploadManager, error) {
 		return nil, wantErr
 	}
 

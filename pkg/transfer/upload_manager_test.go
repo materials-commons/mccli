@@ -1,4 +1,4 @@
-package upload
+package transfer
 
 import (
 	"context"
@@ -14,34 +14,34 @@ import (
 func TestNewManagerValidation(t *testing.T) {
 	tests := []struct {
 		name string
-		cfg  Config
+		cfg  UploadConfig
 	}{
 		{
 			name: "missing send queue",
-			cfg: Config{
-				Store:    &fakeStore{},
+			cfg: UploadConfig{
+				Store:    &fakeUploadStore{},
 				ClientID: "client-1",
 			},
 		},
 		{
 			name: "missing store",
-			cfg: Config{
+			cfg: UploadConfig{
 				SendQueue: wsclient.NewQueue[wsclient.OutboundMessage](),
 				ClientID:  "client-1",
 			},
 		},
 		{
 			name: "missing client id",
-			cfg: Config{
+			cfg: UploadConfig{
 				SendQueue: wsclient.NewQueue[wsclient.OutboundMessage](),
-				Store:     &fakeStore{},
+				Store:     &fakeUploadStore{},
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewManager(tt.cfg)
+			_, err := NewUploadManager(tt.cfg)
 			if err == nil {
 				t.Fatal("NewManager() error = nil, want error")
 			}
@@ -50,7 +50,7 @@ func TestNewManagerValidation(t *testing.T) {
 }
 
 func TestNewManagerDefaultsMaxConcurrent(t *testing.T) {
-	manager := newTestManager(t, Config{})
+	manager := newTestManager(t, UploadConfig{})
 
 	if manager.maxConcurrent != 3 {
 		t.Fatalf("maxConcurrent = %d, want 3", manager.maxConcurrent)
@@ -58,16 +58,16 @@ func TestNewManagerDefaultsMaxConcurrent(t *testing.T) {
 }
 
 func TestQueueUploadUsesFactoryAndReturnsTransferID(t *testing.T) {
-	var gotReq Request
+	var gotReq UploadRequest
 
-	manager := newTestManager(t, Config{
-		Factory: func(req Request) uploaderRunner {
+	manager := newTestManager(t, UploadConfig{
+		Factory: func(req UploadRequest) uploaderRunner {
 			gotReq = req
 			return &fakeUploader{transferID: "transfer-1"}
 		},
 	})
 
-	transferID, err := manager.QueueUpload(Request{ProjectID: 123})
+	transferID, err := manager.QueueUpload(UploadRequest{ProjectID: 123})
 	if err != nil {
 		t.Fatalf("QueueUpload() error = %v", err)
 	}
@@ -84,13 +84,13 @@ func TestQueueUploadUsesFactoryAndReturnsTransferID(t *testing.T) {
 }
 
 func TestQueueUploadAssignsTransferIDWhenMissing(t *testing.T) {
-	manager := newTestManager(t, Config{
-		Factory: func(req Request) uploaderRunner {
+	manager := newTestManager(t, UploadConfig{
+		Factory: func(req UploadRequest) uploaderRunner {
 			return &fakeUploader{}
 		},
 	})
 
-	transferID, err := manager.QueueUpload(Request{})
+	transferID, err := manager.QueueUpload(UploadRequest{})
 	if err != nil {
 		t.Fatalf("QueueUpload() error = %v", err)
 	}
@@ -101,14 +101,14 @@ func TestQueueUploadAssignsTransferIDWhenMissing(t *testing.T) {
 }
 
 func TestQueueUploadFailsWhenQueueClosed(t *testing.T) {
-	manager := newTestManager(t, Config{
-		Factory: func(req Request) uploaderRunner {
+	manager := newTestManager(t, UploadConfig{
+		Factory: func(req UploadRequest) uploaderRunner {
 			return &fakeUploader{transferID: "transfer-1"}
 		},
 	})
 	manager.uploadQueue.Close()
 
-	_, err := manager.QueueUpload(Request{})
+	_, err := manager.QueueUpload(UploadRequest{})
 	if err == nil {
 		t.Fatal("QueueUpload() error = nil, want error")
 	}
@@ -118,9 +118,9 @@ func TestManagerWorkerRecordsSuccessfulResult(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	manager := newTestManager(t, Config{
+	manager := newTestManager(t, UploadConfig{
 		MaxConcurrent: 1,
-		Factory: func(req Request) uploaderRunner {
+		Factory: func(req UploadRequest) uploaderRunner {
 			return &fakeUploader{
 				transferID: "transfer-1",
 				result:     true,
@@ -130,7 +130,7 @@ func TestManagerWorkerRecordsSuccessfulResult(t *testing.T) {
 
 	manager.StartWorkers(ctx)
 
-	transferID, err := manager.QueueUpload(Request{})
+	transferID, err := manager.QueueUpload(UploadRequest{})
 	if err != nil {
 		t.Fatalf("QueueUpload() error = %v", err)
 	}
@@ -153,9 +153,9 @@ func TestManagerWorkerRecordsFailedResult(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	manager := newTestManager(t, Config{
+	manager := newTestManager(t, UploadConfig{
 		MaxConcurrent: 1,
-		Factory: func(req Request) uploaderRunner {
+		Factory: func(req UploadRequest) uploaderRunner {
 			return &fakeUploader{
 				transferID: "transfer-1",
 				result:     false,
@@ -165,7 +165,7 @@ func TestManagerWorkerRecordsFailedResult(t *testing.T) {
 
 	manager.StartWorkers(ctx)
 
-	transferID, err := manager.QueueUpload(Request{})
+	transferID, err := manager.QueueUpload(UploadRequest{})
 	if err != nil {
 		t.Fatalf("QueueUpload() error = %v", err)
 	}
@@ -191,9 +191,9 @@ func TestManagerHonorsMaxConcurrent(t *testing.T) {
 	started := make(chan string, 10)
 	release := make(chan struct{})
 
-	manager := newTestManager(t, Config{
+	manager := newTestManager(t, UploadConfig{
 		MaxConcurrent: 2,
-		Factory: func(req Request) uploaderRunner {
+		Factory: func(req UploadRequest) uploaderRunner {
 			id := fmt.Sprintf("transfer-%d", req.ProjectID)
 			return &fakeUploader{
 				transferID: id,
@@ -209,7 +209,7 @@ func TestManagerHonorsMaxConcurrent(t *testing.T) {
 	manager.StartWorkers(ctx)
 
 	for i := 0; i < 5; i++ {
-		if _, err := manager.QueueUpload(Request{ProjectID: i}); err != nil {
+		if _, err := manager.QueueUpload(UploadRequest{ProjectID: i}); err != nil {
 			t.Fatalf("QueueUpload(%d) error = %v", i, err)
 		}
 	}
@@ -227,7 +227,7 @@ func TestManagerHonorsMaxConcurrent(t *testing.T) {
 }
 
 func TestManagerHandleMessageRoutesToActiveUploader(t *testing.T) {
-	manager := newTestManager(t, Config{})
+	manager := newTestManager(t, UploadConfig{})
 
 	uploader := &fakeUploader{transferID: "transfer-1"}
 
@@ -253,7 +253,7 @@ func TestManagerHandleMessageRoutesToActiveUploader(t *testing.T) {
 }
 
 func TestManagerHandleMessageIgnoresUnknownTransfer(t *testing.T) {
-	manager := newTestManager(t, Config{})
+	manager := newTestManager(t, UploadConfig{})
 
 	msg := wsclient.TextMessage{
 		"command": "TRANSFER_ACCEPT",
@@ -272,9 +272,9 @@ func TestManagerStartWorkersIsIdempotent(t *testing.T) {
 	started := make(chan struct{}, 10)
 	release := make(chan struct{})
 
-	manager := newTestManager(t, Config{
+	manager := newTestManager(t, UploadConfig{
 		MaxConcurrent: 1,
-		Factory: func(req Request) uploaderRunner {
+		Factory: func(req UploadRequest) uploaderRunner {
 			return &fakeUploader{
 				transferID: fmt.Sprintf("transfer-%d", req.ProjectID),
 				result:     true,
@@ -291,7 +291,7 @@ func TestManagerStartWorkersIsIdempotent(t *testing.T) {
 	manager.StartWorkers(ctx)
 
 	for i := 0; i < 3; i++ {
-		if _, err := manager.QueueUpload(Request{ProjectID: i}); err != nil {
+		if _, err := manager.QueueUpload(UploadRequest{ProjectID: i}); err != nil {
 			t.Fatalf("QueueUpload(%d) error = %v", i, err)
 		}
 	}
@@ -311,9 +311,9 @@ func TestManagerStartWorkersIsIdempotent(t *testing.T) {
 func TestManagerStopWorkersStopsWorkers(t *testing.T) {
 	ctx := context.Background()
 
-	manager := newTestManager(t, Config{
+	manager := newTestManager(t, UploadConfig{
 		MaxConcurrent: 1,
-		Factory: func(req Request) uploaderRunner {
+		Factory: func(req UploadRequest) uploaderRunner {
 			return &fakeUploader{
 				transferID: "transfer-1",
 				result:     true,
@@ -339,9 +339,9 @@ func TestManagerWorkerStoresUploadError(t *testing.T) {
 
 	uploadErr := fmt.Errorf("network exploded")
 
-	manager := newTestManager(t, Config{
+	manager := newTestManager(t, UploadConfig{
 		MaxConcurrent: 1,
-		Factory: func(req Request) uploaderRunner {
+		Factory: func(req UploadRequest) uploaderRunner {
 			return &fakeUploader{
 				transferID: "transfer-1",
 				err:        uploadErr,
@@ -351,7 +351,7 @@ func TestManagerWorkerStoresUploadError(t *testing.T) {
 
 	manager.StartWorkers(ctx)
 
-	transferID, err := manager.QueueUpload(Request{})
+	transferID, err := manager.QueueUpload(UploadRequest{})
 	if err != nil {
 		t.Fatalf("QueueUpload() error = %v", err)
 	}
@@ -377,9 +377,9 @@ func TestManagerWorkerRecoversPanic(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	manager := newTestManager(t, Config{
+	manager := newTestManager(t, UploadConfig{
 		MaxConcurrent: 1,
-		Factory: func(req Request) uploaderRunner {
+		Factory: func(req UploadRequest) uploaderRunner {
 			return &fakeUploader{
 				transferID: "transfer-1",
 				onUpload: func() {
@@ -391,7 +391,7 @@ func TestManagerWorkerRecoversPanic(t *testing.T) {
 
 	manager.StartWorkers(ctx)
 
-	transferID, err := manager.QueueUpload(Request{})
+	transferID, err := manager.QueueUpload(UploadRequest{})
 	if err != nil {
 		t.Fatalf("QueueUpload() error = %v", err)
 	}
@@ -414,7 +414,7 @@ func TestManagerWorkerRecoversPanic(t *testing.T) {
 }
 
 func TestManagerHandleMessageIgnoresNonUploadCommand(t *testing.T) {
-	manager := newTestManager(t, Config{})
+	manager := newTestManager(t, UploadConfig{})
 
 	uploader := &fakeUploader{transferID: "transfer-1"}
 
@@ -435,7 +435,7 @@ func TestManagerHandleMessageIgnoresNonUploadCommand(t *testing.T) {
 }
 
 func TestManagerPauseResumeCancelActiveUpload(t *testing.T) {
-	manager := newTestManager(t, Config{})
+	manager := newTestManager(t, UploadConfig{})
 
 	uploader := &fakeUploader{transferID: "transfer-1"}
 
@@ -468,7 +468,7 @@ func TestManagerPauseResumeCancelActiveUpload(t *testing.T) {
 }
 
 func TestManagerPauseResumeCancelMissingUpload(t *testing.T) {
-	manager := newTestManager(t, Config{})
+	manager := newTestManager(t, UploadConfig{})
 
 	if manager.PauseUpload("missing") {
 		t.Fatal("PauseUpload(missing) = true, want false")
@@ -482,19 +482,19 @@ func TestManagerPauseResumeCancelMissingUpload(t *testing.T) {
 }
 
 func TestManagerQueueUploadRejectsNilUploader(t *testing.T) {
-	manager := newTestManager(t, Config{
-		Factory: func(req Request) uploaderRunner {
+	manager := newTestManager(t, UploadConfig{
+		Factory: func(req UploadRequest) uploaderRunner {
 			return nil
 		},
 	})
 
-	_, err := manager.QueueUpload(Request{})
+	_, err := manager.QueueUpload(UploadRequest{})
 	if err == nil {
 		t.Fatal("QueueUpload() error = nil, want error")
 	}
 }
 
-func newTestManager(t *testing.T, cfg Config) *Manager {
+func newTestManager(t *testing.T, cfg UploadConfig) *UploadManager {
 	t.Helper()
 
 	if cfg.SendQueue == nil {
@@ -502,14 +502,14 @@ func newTestManager(t *testing.T, cfg Config) *Manager {
 	}
 
 	if cfg.Store == nil {
-		cfg.Store = &fakeStore{}
+		cfg.Store = &fakeUploadStore{}
 	}
 
 	if cfg.ClientID == "" {
 		cfg.ClientID = "client-1"
 	}
 
-	manager, err := NewManager(cfg)
+	manager, err := NewUploadManager(cfg)
 	if err != nil {
 		t.Fatalf("NewManager() error = %v", err)
 	}
@@ -531,13 +531,13 @@ func waitFor(t *testing.T, timeout time.Duration, fn func() bool) {
 	t.Fatal("condition not met before timeout")
 }
 
-type fakeStore struct {
+type fakeUploadStore struct {
 	mu      sync.Mutex
 	records []filedb.FileRecord
 	err     error
 }
 
-func (f *fakeStore) Upsert(ctx context.Context, record filedb.FileRecord) error {
+func (f *fakeUploadStore) Upsert(ctx context.Context, record filedb.FileRecord) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 

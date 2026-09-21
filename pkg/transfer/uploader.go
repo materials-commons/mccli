@@ -1,4 +1,4 @@
-package upload
+package transfer
 
 import (
 	"bufio"
@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/materials-commons/mccli/pkg/filedb"
-	"github.com/materials-commons/mccli/pkg/transfer"
 	"github.com/materials-commons/mccli/pkg/wsclient"
 )
 
@@ -46,17 +45,12 @@ const (
 	defaultFinalizationTimeout       = 30 * time.Second
 )
 
-// FileRecordStore persists uploaded file state.
-type FileRecordStore interface {
-	Upsert(ctx context.Context, record filedb.FileRecord) error
-}
-
 // UploaderConfig configures one Uploader.
 type UploaderConfig struct {
 	SendQueue *wsclient.Queue[wsclient.OutboundMessage]
 	Store     FileRecordStore
 
-	Request  Request
+	Request  UploadRequest
 	ClientID string
 
 	ChunkSize  int64
@@ -66,7 +60,7 @@ type UploaderConfig struct {
 	ACKTimeout          time.Duration
 	FinalizationTimeout time.Duration
 
-	Progress transfer.Reporter
+	Progress Reporter
 }
 
 // Uploader uploads one file over the websocket protocol.
@@ -74,7 +68,7 @@ type Uploader struct {
 	SendQueue *wsclient.Queue[wsclient.OutboundMessage]
 	Store     FileRecordStore
 
-	Request  Request
+	Request  UploadRequest
 	ClientID string
 
 	TransferID string
@@ -86,7 +80,7 @@ type Uploader struct {
 	ACKTimeout          time.Duration
 	FinalizationTimeout time.Duration
 
-	Progress transfer.Reporter
+	Progress Reporter
 
 	responseQueue *wsclient.Queue[wsclient.TextMessage]
 
@@ -176,38 +170,38 @@ func (u *Uploader) Upload(ctx context.Context) error {
 
 	u.resetTransferState()
 
-	u.reportProgress(0, local.Size, transfer.StatusStarting, nil)
+	u.reportProgress(0, local.Size, StatusStarting, nil)
 
 	if err := u.sendTransferInit(ctx); err != nil {
-		u.reportProgress(u.currentBytesSent(), local.Size, transfer.StatusFailed, err)
+		u.reportProgress(u.currentBytesSent(), local.Size, StatusFailed, err)
 		return err
 	}
 
 	if err := u.waitForAcceptance(ctx); err != nil {
 		if errors.Is(err, ErrAlreadyUploaded) {
-			u.reportProgress(local.Size, local.Size, transfer.StatusAlreadyUploaded, nil)
+			u.reportProgress(local.Size, local.Size, StatusAlreadyUploaded, nil)
 			return nil
 		}
-		u.reportProgress(u.currentBytesSent(), local.Size, transfer.StatusFailed, err)
+		u.reportProgress(u.currentBytesSent(), local.Size, StatusFailed, err)
 		return err
 	}
 
 	if err := u.sendChunksWindowed(ctx); err != nil {
-		u.reportProgress(u.currentBytesSent(), local.Size, transfer.StatusFailed, err)
+		u.reportProgress(u.currentBytesSent(), local.Size, StatusFailed, err)
 		return err
 	}
 
 	if err := u.sendTransferComplete(ctx); err != nil {
-		u.reportProgress(u.currentBytesSent(), local.Size, transfer.StatusFailed, err)
+		u.reportProgress(u.currentBytesSent(), local.Size, StatusFailed, err)
 		return err
 	}
 
 	if err := u.waitForFinalization(ctx); err != nil {
-		u.reportProgress(u.currentBytesSent(), local.Size, transfer.StatusFailed, err)
+		u.reportProgress(u.currentBytesSent(), local.Size, StatusFailed, err)
 		return err
 	}
 
-	u.reportProgress(local.Size, local.Size, transfer.StatusComplete, nil)
+	u.reportProgress(local.Size, local.Size, StatusComplete, nil)
 
 	return nil
 }
@@ -538,7 +532,7 @@ func (u *Uploader) processACKs(ctx context.Context, totalChunks int64) error {
 			currentBytesSent := u.bytesSent
 			u.mu.Unlock()
 
-			u.reportProgress(currentBytesSent, u.Request.Observation.LocalEntry.Size, transfer.StatusUploading, nil)
+			u.reportProgress(currentBytesSent, u.Request.Observation.LocalEntry.Size, StatusUploading, nil)
 
 		case "CHUNK_ERROR":
 			reason, _ := payload["error"].(string)
@@ -670,7 +664,7 @@ func (u *Uploader) validateResponseTransferID(payload map[string]any) error {
 	return nil
 }
 
-func (u *Uploader) reportProgress(bytesSent int64, totalBytes int64, status transfer.Status, err error) {
+func (u *Uploader) reportProgress(bytesSent int64, totalBytes int64, status Status, err error) {
 	if u.Progress == nil {
 		return
 	}
@@ -680,7 +674,7 @@ func (u *Uploader) reportProgress(bytesSent int64, totalBytes int64, status tran
 		localPath = u.Request.Observation.LocalEntry.Path
 	}
 
-	u.Progress.ReportTransferProgress(transfer.Event{
+	u.Progress.ReportTransferProgress(Event{
 		TransferID: u.TransferID,
 		LocalPath:  localPath,
 		RemotePath: u.Request.Observation.RemotePath,

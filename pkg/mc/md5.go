@@ -1,6 +1,6 @@
 // Package checksum provides file checksum utilities used by upload, download,
 // scan, and reconciliation code.
-package checksum
+package mc
 
 import (
 	"context"

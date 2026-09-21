@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"path"
 
-	"github.com/materials-commons/mccli/pkg/checksum"
 	"github.com/materials-commons/mccli/pkg/conv"
 	"github.com/materials-commons/mccli/pkg/filedb"
+	"github.com/materials-commons/mccli/pkg/mc"
 )
 
 var (
@@ -51,7 +51,7 @@ func New(mode Mode) *Reconciler {
 	return &Reconciler{
 		mode: mode,
 		checksum: func(ctx context.Context, localPath string) (string, error) {
-			return checksum.MD5File(ctx, localPath)
+			return mc.MD5File(ctx, localPath)
 		},
 	}
 }

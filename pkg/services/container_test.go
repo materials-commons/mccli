@@ -13,7 +13,6 @@ import (
 	"github.com/materials-commons/mccli/pkg/di"
 	"github.com/materials-commons/mccli/pkg/filedb"
 	"github.com/materials-commons/mccli/pkg/transfer"
-	"github.com/materials-commons/mccli/pkg/upload"
 	"github.com/materials-commons/mccli/pkg/wsclient"
 )
 
@@ -55,7 +54,7 @@ func TestContainerLoadCommandContextDoesNotInitializeCommandSpecificServices(t *
 			remoteCalls++
 			return &fakeRemote{}, nil
 		},
-		NewUploadManager: func(cfg upload.Config) (di.UploadManager, error) {
+		NewUploadManager: func(cfg transfer.UploadConfig) (di.UploadManager, error) {
 			uploadCalls++
 			return fakeUploadManager{}, nil
 		},
@@ -223,14 +222,14 @@ func (fakeUploadManager) StartWorkers(ctx context.Context) {}
 
 func (fakeUploadManager) StopWorkers() {}
 
-func (fakeUploadManager) QueueUpload(req upload.Request) (string, error) {
+func (fakeUploadManager) QueueUpload(req transfer.UploadRequest) (string, error) {
 	return "upload-1", nil
 }
 
 func (fakeUploadManager) HandleMessage(msg wsclient.TextMessage) {}
 
-func (fakeUploadManager) Result(transferID string) (upload.Result, bool) {
-	return upload.Result{Success: true}, true
+func (fakeUploadManager) Result(transferID string) (transfer.UploadResult, bool) {
+	return transfer.UploadResult{Success: true}, true
 }
 
 type fakeDownloadManager struct{}

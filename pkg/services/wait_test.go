@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/materials-commons/mccli/pkg/transfer"
-	"github.com/materials-commons/mccli/pkg/upload"
 )
 
 func TestWaitForUploadsReturnsImmediatelyForEmptyTransfers(t *testing.T) {
@@ -19,7 +18,7 @@ func TestWaitForUploadsReturnsResultError(t *testing.T) {
 	wantErr := errors.New("upload failed")
 
 	err := WaitForUploads(context.Background(), fakeWaitUploadManager{
-		result: upload.Result{
+		result: transfer.UploadResult{
 			Success: false,
 			Err:     wantErr,
 		},
@@ -55,11 +54,11 @@ func TestWaitForDownloadsReturnsResultError(t *testing.T) {
 
 type fakeWaitUploadManager struct {
 	fakeUploadManager
-	result upload.Result
+	result transfer.UploadResult
 	ok     bool
 }
 
-func (m fakeWaitUploadManager) Result(transferID string) (upload.Result, bool) {
+func (m fakeWaitUploadManager) Result(transferID string) (transfer.UploadResult, bool) {
 	return m.result, m.ok
 }
 

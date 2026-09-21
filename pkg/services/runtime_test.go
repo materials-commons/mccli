@@ -8,7 +8,6 @@ import (
 	"github.com/materials-commons/mccli/pkg/config"
 	"github.com/materials-commons/mccli/pkg/di"
 	"github.com/materials-commons/mccli/pkg/transfer"
-	"github.com/materials-commons/mccli/pkg/upload"
 	"github.com/materials-commons/mccli/pkg/wsclient"
 )
 
@@ -97,14 +96,14 @@ func (m *recordingUploadManager) StopWorkers() {
 	*m.events = append(*m.events, "upload:stop")
 }
 
-func (m *recordingUploadManager) QueueUpload(req upload.Request) (string, error) {
+func (m *recordingUploadManager) QueueUpload(req transfer.UploadRequest) (string, error) {
 	return "upload-1", nil
 }
 
 func (m *recordingUploadManager) HandleMessage(msg wsclient.TextMessage) {}
 
-func (m *recordingUploadManager) Result(transferID string) (upload.Result, bool) {
-	return upload.Result{Success: true}, true
+func (m *recordingUploadManager) Result(transferID string) (transfer.UploadResult, bool) {
+	return transfer.UploadResult{Success: true}, true
 }
 
 type recordingDownloadManager struct {
@@ -164,7 +163,7 @@ func testDependencies() di.Dependencies {
 		NewRemoteClient: func(project config.Project, global config.Global) (di.RemoteClient, error) {
 			return &fakeRemote{}, nil
 		},
-		NewUploadManager: func(cfg upload.Config) (di.UploadManager, error) {
+		NewUploadManager: func(cfg transfer.UploadConfig) (di.UploadManager, error) {
 			return fakeUploadManager{}, nil
 		},
 		NewDownloadManager: func(cfg transfer.DownloadConfig) (di.DownloadManager, error) {

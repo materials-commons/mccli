@@ -13,7 +13,7 @@ import (
 	"github.com/materials-commons/mccli/pkg/reconcile"
 	remote2 "github.com/materials-commons/mccli/pkg/remote"
 	"github.com/materials-commons/mccli/pkg/services"
-	"github.com/materials-commons/mccli/pkg/upload"
+	"github.com/materials-commons/mccli/pkg/transfer"
 	"github.com/materials-commons/mccli/pkg/wsclient"
 )
 
@@ -271,7 +271,7 @@ func uploadFile(ctx context.Context, req queueRequest, localPath string) (string
 		return "", false, fmt.Errorf("cannot upload %q: local entry is missing", localPath)
 	}
 
-	transferID, err := req.manager.QueueUpload(upload.Request{
+	transferID, err := req.manager.QueueUpload(transfer.UploadRequest{
 		ProjectID:     req.project.ProjectID,
 		ClientID:      "",
 		Observation:   state.Observation,

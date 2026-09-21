@@ -16,7 +16,7 @@ import (
 	"github.com/materials-commons/mccli/pkg/config"
 	"github.com/materials-commons/mccli/pkg/di"
 	"github.com/materials-commons/mccli/pkg/filedb"
-	"github.com/materials-commons/mccli/pkg/upload"
+	"github.com/materials-commons/mccli/pkg/transfer"
 	"github.com/materials-commons/mccli/pkg/wsclient"
 )
 
@@ -189,7 +189,7 @@ func testDeps(projectRoot string, store di.Store, remote di.RemoteClient, manage
 		NewRemoteClient: func(project config.Project, global config.Global) (di.RemoteClient, error) {
 			return remote, nil
 		},
-		NewUploadManager: func(cfg upload.Config) (di.UploadManager, error) {
+		NewUploadManager: func(cfg transfer.UploadConfig) (di.UploadManager, error) {
 			manager.sendQueue = cfg.SendQueue
 			return manager, nil
 		},
@@ -232,12 +232,12 @@ func fakeNotFound() error {
 
 type fakeManager struct {
 	mu       sync.Mutex
-	requests []upload.Request
-	results  map[string]upload.Result
+	requests []transfer.UploadRequest
+	results  map[string]transfer.UploadResult
 	counter  int
 
 	sendQueue *wsclient.Queue[wsclient.OutboundMessage]
-	dbQueue   *wsclient.Queue[upload.DBWriteRequest]
+	dbQueue   *wsclient.Queue[transfer.DBWriteRequest]
 
 	queueErr      error
 	resultSuccess bool
@@ -249,7 +249,7 @@ type fakeManager struct {
 
 func newFakeManager() *fakeManager {
 	return &fakeManager{
-		results:       map[string]upload.Result{},
+		results:       map[string]transfer.UploadResult{},
 		resultSuccess: true,
 	}
 }
@@ -268,7 +268,7 @@ func (f *fakeManager) StopWorkers() {
 	f.stopCount++
 }
 
-func (f *fakeManager) QueueUpload(req upload.Request) (string, error) {
+func (f *fakeManager) QueueUpload(req transfer.UploadRequest) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -276,7 +276,7 @@ func (f *fakeManager) QueueUpload(req upload.Request) (string, error) {
 	id := fmt.Sprintf("transfer-%d", f.counter)
 
 	f.requests = append(f.requests, req)
-	f.results[id] = upload.Result{
+	f.results[id] = transfer.UploadResult{
 		TransferID: id,
 		Success:    f.resultSuccess,
 		Err:        f.resultErr,
@@ -291,12 +291,12 @@ func (f *fakeManager) QueueUpload(req upload.Request) (string, error) {
 
 func (f *fakeManager) HandleMessage(msg wsclient.TextMessage) {}
 
-func (f *fakeManager) Result(transferID string) (upload.Result, bool) {
+func (f *fakeManager) Result(transferID string) (transfer.UploadResult, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	if f.hideResults {
-		return upload.Result{}, false
+		return transfer.UploadResult{}, false
 	}
 
 	result, ok := f.results[transferID]

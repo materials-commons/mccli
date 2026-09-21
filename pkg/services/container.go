@@ -9,7 +9,6 @@ import (
 	"github.com/materials-commons/mccli/pkg/di"
 	"github.com/materials-commons/mccli/pkg/projectpath"
 	"github.com/materials-commons/mccli/pkg/transfer"
-	"github.com/materials-commons/mccli/pkg/upload"
 	"github.com/materials-commons/mccli/pkg/wsclient"
 )
 
@@ -182,11 +181,11 @@ func (c *Container) UploadManager(ctx context.Context, opts UploadManagerOptions
 		maxConcurrent = 3
 	}
 
-	progressFactory := upload.NewMPBProgressFactory(opts.Out)
-	progress := upload.NewUploadProgress(progressFactory)
+	progressFactory := transfer.NewMPBProgressFactory(opts.Out)
+	progress := transfer.NewUploadProgress(progressFactory)
 	c.uploadProgressWait = progress.Wait
 
-	manager, err := c.deps.NewUploadManager(upload.Config{
+	manager, err := c.deps.NewUploadManager(transfer.UploadConfig{
 		SendQueue:     c.SendQueue(),
 		Store:         store,
 		ClientID:      c.global.ClientUUID,
@@ -224,8 +223,8 @@ func (c *Container) DownloadManager(ctx context.Context, opts DownloadManagerOpt
 		maxConcurrent = 3
 	}
 
-	progressFactory := upload.NewMPBProgressFactory(opts.Out)
-	progress := upload.NewUploadProgress(progressFactory)
+	progressFactory := transfer.NewMPBProgressFactory(opts.Out)
+	progress := transfer.NewUploadProgress(progressFactory)
 	c.uploadProgressWait = progress.Wait
 
 	manager, err := c.deps.NewDownloadManager(transfer.DownloadConfig{

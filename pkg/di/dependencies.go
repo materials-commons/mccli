@@ -15,7 +15,6 @@ import (
 	"github.com/materials-commons/mccli/pkg/filedb"
 	"github.com/materials-commons/mccli/pkg/reconcile"
 	"github.com/materials-commons/mccli/pkg/transfer"
-	"github.com/materials-commons/mccli/pkg/upload"
 	"github.com/materials-commons/mccli/pkg/wsclient"
 )
 
@@ -35,9 +34,9 @@ type Store interface {
 type UploadManager interface {
 	StartWorkers(ctx context.Context)
 	StopWorkers()
-	QueueUpload(req upload.Request) (string, error)
+	QueueUpload(req transfer.UploadRequest) (string, error)
 	HandleMessage(msg wsclient.TextMessage)
-	Result(transferID string) (upload.Result, bool)
+	Result(transferID string) (transfer.UploadResult, bool)
 }
 
 // DownloadManager queues and runs HTTP Range downloads.
@@ -77,7 +76,7 @@ type Dependencies struct {
 	OpenStore              func(ctx context.Context, projectRoot string) (Store, error)
 	NewRemoteClient        func(project config.Project, global config.Global) (RemoteClient, error)
 	NewDefaultRemoteClient func(global config.Global) (RemoteClient, error)
-	NewUploadManager       func(cfg upload.Config) (UploadManager, error)
+	NewUploadManager       func(cfg transfer.UploadConfig) (UploadManager, error)
 	NewDownloadManager     func(cfg transfer.DownloadConfig) (DownloadManager, error)
 	NewWebSocket           func(cfg WebSocketConfig) WebSocketRunner
 
@@ -97,8 +96,8 @@ func Production() Dependencies {
 		},
 		NewRemoteClient:        NewRemoteClient,
 		NewDefaultRemoteClient: NewDefaultRemoteClient,
-		NewUploadManager: func(cfg upload.Config) (UploadManager, error) {
-			return upload.NewManager(cfg)
+		NewUploadManager: func(cfg transfer.UploadConfig) (UploadManager, error) {
+			return transfer.NewUploadManager(cfg)
 		},
 		NewDownloadManager: func(cfg transfer.DownloadConfig) (DownloadManager, error) {
 			return transfer.NewDownloadManager(cfg)
