@@ -1,4 +1,4 @@
-package down
+package main
 
 import (
 	"context"
@@ -31,7 +31,7 @@ func TestNormalizeInputRemotePath(t *testing.T) {
 }
 
 func TestRunRequiresPath(t *testing.T) {
-	err := Runner{}.Run(context.Background(), Options{
+	err := downRunner{}.Run(context.Background(), downOpts{
 		WorkingDir: ".",
 	})
 	if err == nil {
