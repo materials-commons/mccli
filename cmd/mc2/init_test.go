@@ -1,4 +1,4 @@
-package cmds
+package main
 
 import (
 	"context"
@@ -70,7 +70,7 @@ func TestInitRunner_Run_Success_WithProjectName(t *testing.T) {
 
 	r := &initRunner{deps: testInitDeps(creater, nil)}
 
-	opts := InitOpts{
+	opts := initOpts{
 		ProjectName: projectName,
 		Description: description,
 	}
@@ -138,7 +138,7 @@ func TestInitRunner_Run_Success_WithoutProjectName(t *testing.T) {
 
 	r := &initRunner{deps: testInitDeps(creater, nil)}
 
-	opts := InitOpts{
+	opts := initOpts{
 		ProjectName: "",
 		Description: description,
 	}
@@ -172,7 +172,7 @@ func TestInitRunner_Run_ContainsMCDir_CurrentDir(t *testing.T) {
 	creater := &fakeProjectCreater{}
 	r := &initRunner{deps: testInitDeps(creater, nil)}
 
-	err := r.Run(ctx, InitOpts{ProjectName: "NewProj"})
+	err := r.Run(ctx, initOpts{ProjectName: "NewProj"})
 	if err == nil {
 		t.Fatal("Run() error = nil, want error when .mc exists in current dir")
 	}
@@ -192,7 +192,7 @@ func TestInitRunner_Run_ContainsMCDir_SubDir(t *testing.T) {
 	creater := &fakeProjectCreater{}
 	r := &initRunner{deps: testInitDeps(creater, nil)}
 
-	err := r.Run(ctx, InitOpts{ProjectName: "NewProj"})
+	err := r.Run(ctx, initOpts{ProjectName: "NewProj"})
 	if err == nil {
 		t.Fatal("Run() error = nil, want error when .mc exists in subdirectory")
 	}
@@ -221,7 +221,7 @@ func TestInitRunner_Run_ExistingProjectInParentDir(t *testing.T) {
 	creater := &fakeProjectCreater{}
 	r := &initRunner{deps: testInitDeps(creater, nil)}
 
-	err := r.Run(ctx, InitOpts{ProjectName: "NewProj"})
+	err := r.Run(ctx, initOpts{ProjectName: "NewProj"})
 	if err == nil || err.Error() != "project already exists" {
 		t.Fatalf("Run() error = %v, want 'project already exists'", err)
 	}
@@ -240,7 +240,7 @@ func TestInitRunner_Run_LoadGlobalError(t *testing.T) {
 	}
 
 	r := &initRunner{deps: deps}
-	err := r.Run(ctx, InitOpts{ProjectName: "TestProj"})
+	err := r.Run(ctx, initOpts{ProjectName: "TestProj"})
 	if !errors.Is(err, expectedErr) {
 		t.Fatalf("Run() error = %v, want %v", err, expectedErr)
 	}
@@ -254,7 +254,7 @@ func TestInitRunner_Run_NewDefaultRemoteClientError(t *testing.T) {
 	expectedErr := errors.New("client creation error")
 	r := &initRunner{deps: testInitDeps(nil, expectedErr)}
 
-	err := r.Run(ctx, InitOpts{ProjectName: "TestProj"})
+	err := r.Run(ctx, initOpts{ProjectName: "TestProj"})
 	if !errors.Is(err, expectedErr) {
 		t.Fatalf("Run() error = %v, want %v", err, expectedErr)
 	}
@@ -275,7 +275,7 @@ func TestInitRunner_Run_RemoteClientNotProjectCreater(t *testing.T) {
 	}
 
 	r := &initRunner{deps: deps}
-	err := r.Run(ctx, InitOpts{ProjectName: "TestProj"})
+	err := r.Run(ctx, initOpts{ProjectName: "TestProj"})
 	if err == nil || err.Error() != "remote client is not a ProjectGetter" {
 		t.Fatalf("Run() error = %v, want 'remote client is not a ProjectGetter'", err)
 	}
@@ -290,7 +290,7 @@ func TestInitRunner_Run_CreateProjectError(t *testing.T) {
 	creater := &fakeProjectCreater{err: expectedErr}
 	r := &initRunner{deps: testInitDeps(creater, nil)}
 
-	err := r.Run(ctx, InitOpts{ProjectName: "TestProj"})
+	err := r.Run(ctx, initOpts{ProjectName: "TestProj"})
 	if !errors.Is(err, expectedErr) {
 		t.Fatalf("Run() error = %v, want %v", err, expectedErr)
 	}
@@ -317,7 +317,7 @@ func TestInitRunner_Run_CreateLocalProjectError(t *testing.T) {
 	}
 
 	r := &initRunner{deps: testInitDeps(creater, nil)}
-	err := r.Run(ctx, InitOpts{ProjectName: projectName})
+	err := r.Run(ctx, initOpts{ProjectName: projectName})
 	if err == nil {
 		t.Fatal("Run() error = nil, want error due to existing file conflict")
 	}
@@ -326,7 +326,7 @@ func TestInitRunner_Run_CreateLocalProjectError(t *testing.T) {
 func TestInitRunner_projectNameFromOptsOrCurrentDir(t *testing.T) {
 	t.Run("opts contains project name", func(t *testing.T) {
 		r := &initRunner{}
-		name, err := r.projectNameFromOptsOrCurrentDir(InitOpts{ProjectName: "ExplicitName"})
+		name, err := r.projectNameFromOptsOrCurrentDir(initOpts{ProjectName: "ExplicitName"})
 		if err != nil {
 			t.Fatalf("projectNameFromOptsOrCurrentDir() error = %v", err)
 		}
@@ -340,7 +340,7 @@ func TestInitRunner_projectNameFromOptsOrCurrentDir(t *testing.T) {
 		t.Chdir(workDir)
 
 		r := &initRunner{}
-		name, err := r.projectNameFromOptsOrCurrentDir(InitOpts{})
+		name, err := r.projectNameFromOptsOrCurrentDir(initOpts{})
 		if err != nil {
 			t.Fatalf("projectNameFromOptsOrCurrentDir() error = %v", err)
 		}
@@ -453,7 +453,7 @@ func TestRunInitCmd_Production(t *testing.T) {
 	// Set HOME to empty temp directory so LoadGlobal fails with no config found
 	t.Setenv("HOME", t.TempDir())
 
-	err := RunInitCmd(ctx, InitOpts{ProjectName: "TestProj"})
+	err := runInitCmd(ctx, initOpts{ProjectName: "TestProj"})
 	if err == nil {
 		t.Fatal("RunInitCmd() error = nil, want error due to missing config")
 	}
