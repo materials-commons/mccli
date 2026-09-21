@@ -16,7 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/materials-commons/mccli/pkg/filedb"
-	"github.com/materials-commons/mccli/pkg/projectpath"
+	"github.com/materials-commons/mccli/pkg/mc"
 	"github.com/materials-commons/mccli/pkg/wsclient"
 )
 
@@ -138,7 +138,7 @@ func (d *Downloader) LocalPath() (string, error) {
 		return "", fmt.Errorf("%w: remote path is required", ErrInvalidDownloadRequest)
 	}
 
-	return projectpath.RemoteToLocal(d.Request.ProjectRoot, d.Request.Observation.RemotePath)
+	return mc.RemoteToLocal(d.Request.ProjectRoot, d.Request.Observation.RemotePath)
 }
 
 // Download downloads the file and updates the file record on success.

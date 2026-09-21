@@ -7,7 +7,7 @@ import (
 
 	"github.com/materials-commons/mccli/pkg/config"
 	"github.com/materials-commons/mccli/pkg/di"
-	"github.com/materials-commons/mccli/pkg/projectpath"
+	"github.com/materials-commons/mccli/pkg/mc"
 	"github.com/materials-commons/mccli/pkg/transfer"
 	"github.com/materials-commons/mccli/pkg/wsclient"
 )
@@ -28,7 +28,7 @@ type Container struct {
 
 	store      di.Store
 	remote     di.RemoteClient
-	translator projectpath.Translator
+	translator mc.ProjectPathTranslator
 
 	sendQueue *wsclient.Queue[wsclient.OutboundMessage]
 
@@ -61,7 +61,7 @@ func (c *Container) LoadCommandContext(ctx context.Context, workingDir string) (
 
 	projectRoot := projectCfg.ProjectRoot()
 	if projectRoot == "" {
-		projectRoot, err = projectpath.FindRoot(ctx, workingDir)
+		projectRoot, err = mc.FindProjectRoot(ctx, workingDir)
 		if err != nil {
 			return nil, err
 		}
@@ -137,14 +137,14 @@ func (c *Container) Remote() (di.RemoteClient, error) {
 	return c.remote, nil
 }
 
-func (c *Container) Translator() (projectpath.Translator, error) {
+func (c *Container) Translator() (mc.ProjectPathTranslator, error) {
 	if c.projectRoot == "" {
-		return projectpath.Translator{}, fmt.Errorf("project root has not been resolved")
+		return mc.ProjectPathTranslator{}, fmt.Errorf("project root has not been resolved")
 	}
 
-	translator, err := projectpath.New(c.projectRoot)
+	translator, err := mc.NewProjectPathTranslator(c.projectRoot)
 	if err != nil {
-		return projectpath.Translator{}, err
+		return mc.ProjectPathTranslator{}, err
 	}
 
 	c.translator = translator

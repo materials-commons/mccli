@@ -1,4 +1,4 @@
-// Package projectpath translates between local filesystem paths and Materials
+// Package mc Projectpath translates between local filesystem paths and Materials
 // Commons remote project paths.
 //
 // Materials Commons project paths always use slash separators and always start
@@ -20,7 +20,7 @@
 //	    Remote Path             Local Path
 //	    -----------             ----------
 //		/Dir1/file.txt   ->    /home/gtarcea/projs/Aging/Dir1/file.txt
-package projectpath
+package mc
 
 import (
 	"context"
@@ -58,35 +58,35 @@ var (
 	ErrInvalidRemotePath = errors.New("invalid remote project path")
 )
 
-// Translator translates paths for one local Materials Commons project.
-type Translator struct {
+// ProjectPathTranslator translates paths for one local Materials Commons project.
+type ProjectPathTranslator struct {
 	projectRoot string
 }
 
-// New constructs a Translator for projectRoot.
+// NewProjectPathTranslator constructs a ProjectPathTranslator for projectRoot.
 //
 // projectRoot is converted to an absolute, cleaned local path.
-func New(projectRoot string) (Translator, error) {
+func NewProjectPathTranslator(projectRoot string) (ProjectPathTranslator, error) {
 	if projectRoot == "" {
-		return Translator{}, fmt.Errorf("project root is required")
+		return ProjectPathTranslator{}, fmt.Errorf("project root is required")
 	}
 
 	// Turn relative into absolute paths.
 	absRoot, err := filepath.Abs(projectRoot)
 	if err != nil {
-		return Translator{}, fmt.Errorf("resolve project root %q: %w", projectRoot, err)
+		return ProjectPathTranslator{}, fmt.Errorf("resolve project root %q: %w", projectRoot, err)
 	}
 
 	// Clean path to get rid of any trailing slashes, '..', etc...
 	absRoot = filepath.Clean(absRoot)
 
-	return Translator{
+	return ProjectPathTranslator{
 		projectRoot: filepath.Clean(absRoot),
 	}, nil
 }
 
 // ProjectRoot returns the absolute local project root.
-func (t Translator) ProjectRoot() string {
+func (t ProjectPathTranslator) ProjectRoot() string {
 	return t.projectRoot
 }
 
@@ -95,7 +95,7 @@ func (t Translator) ProjectRoot() string {
 //
 // The returned remote path always starts with "/". The project root itself maps
 // to "/".
-func (t Translator) LocalToRemote(localPath string) (string, error) {
+func (t ProjectPathTranslator) LocalToRemote(localPath string) (string, error) {
 	if t.projectRoot == "" {
 		return "", fmt.Errorf("project root is required")
 	}
@@ -129,12 +129,12 @@ func (t Translator) LocalToRemote(localPath string) (string, error) {
 // filesystem path beneath the project root.
 //
 // The remote project root "/" maps to the local project root.
-func (t Translator) RemoteToLocal(remotePath string) (string, error) {
+func (t ProjectPathTranslator) RemoteToLocal(remotePath string) (string, error) {
 	if t.projectRoot == "" {
 		return "", fmt.Errorf("project root is required")
 	}
 
-	cleanRemote, err := NormalizeRemote(remotePath)
+	cleanRemote, err := NormalizeRemoteProjectPath(remotePath)
 	if err != nil {
 		return "", err
 	}
@@ -162,12 +162,12 @@ func (t Translator) RemoteToLocal(remotePath string) (string, error) {
 	return filepath.Clean(absLocal), nil
 }
 
-// NormalizeRemote validates and normalizes a Materials Commons remote project
+// NormalizeRemoteProjectPath validates and normalizes a Materials Commons remote project
 // path.
 //
 // Remote paths must be absolute slash paths. Empty paths are invalid. The
 // returned path is cleaned and always starts with "/".
-func NormalizeRemote(remotePath string) (string, error) {
+func NormalizeRemoteProjectPath(remotePath string) (string, error) {
 	if remotePath == "" {
 		return "", fmt.Errorf("%w: path is empty", ErrInvalidRemotePath)
 	}
@@ -186,13 +186,13 @@ func NormalizeRemote(remotePath string) (string, error) {
 	return cleanRemote, nil
 }
 
-// FindRoot walks upward from start until it finds a directory containing
+// FindProjectRoot walks upward from start until it finds a directory containing
 // .mc/config.json.
 //
 // start may be either a file or directory path. If start does not exist,
-// FindRoot still walks from start itself, which is useful for commands that are
+// FindProjectRoot still walks from start itself, which is useful for commands that are
 // validating paths that may be created later.
-func FindRoot(ctx context.Context, start string) (string, error) {
+func FindProjectRoot(ctx context.Context, start string) (string, error) {
 	if start == "" {
 		start = "."
 	}
@@ -232,9 +232,9 @@ func FindRoot(ctx context.Context, start string) (string, error) {
 	}
 }
 
-// Exists reports whether start is inside a Materials Commons project.
-func Exists(ctx context.Context, start string) (bool, error) {
-	_, err := FindRoot(ctx, start)
+// PathExistsInProject reports whether start is inside a Materials Commons project.
+func PathExistsInProject(ctx context.Context, start string) (bool, error) {
+	_, err := FindProjectRoot(ctx, start)
 	if err == nil {
 		return true, nil
 	}
@@ -256,7 +256,7 @@ func ConfigDir(projectRoot string) string {
 
 // LocalToRemote converts localPath to a remote path using projectRoot.
 func LocalToRemote(projectRoot, localPath string) (string, error) {
-	translator, err := New(projectRoot)
+	translator, err := NewProjectPathTranslator(projectRoot)
 	if err != nil {
 		return "", err
 	}
@@ -266,7 +266,7 @@ func LocalToRemote(projectRoot, localPath string) (string, error) {
 
 // RemoteToLocal converts remotePath to a local path using projectRoot.
 func RemoteToLocal(projectRoot, remotePath string) (string, error) {
-	translator, err := New(projectRoot)
+	translator, err := NewProjectPathTranslator(projectRoot)
 	if err != nil {
 		return "", err
 	}

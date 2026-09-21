@@ -13,7 +13,7 @@ import (
 
 	mcapi "github.com/materials-commons/gomcapi"
 	"github.com/materials-commons/mccli/pkg/filedb"
-	"github.com/materials-commons/mccli/pkg/projectpath"
+	"github.com/materials-commons/mccli/pkg/mc"
 	remote2 "github.com/materials-commons/mccli/pkg/remote"
 )
 
@@ -67,7 +67,7 @@ type WalkOptions struct {
 	// Translator is used to synthesize local paths for remote-only entries
 	// during node-based recursive walks. It is optional for local-only walks,
 	// but recommended for remote-only and merged walks.
-	Translator projectpath.Translator
+	Translator mc.ProjectPathTranslator
 }
 
 // Walk walks a directory tree using listDir to observe each directory.
@@ -162,7 +162,7 @@ func WalkNodes(ctx context.Context, root WalkNode, listDir NodeListDirFunc, opti
 }
 
 // LocalListDir returns a ListDirFunc that lists local filesystem entries.
-func LocalListDir(translator projectpath.Translator, now func() time.Time) ListDirFunc {
+func LocalListDir(translator mc.ProjectPathTranslator, now func() time.Time) ListDirFunc {
 	if now == nil {
 		now = time.Now
 	}
@@ -205,7 +205,7 @@ func LocalListDir(translator projectpath.Translator, now func() time.Time) ListD
 }
 
 // LocalNodeListDir adapts LocalListDir for WalkNodes.
-func LocalNodeListDir(translator projectpath.Translator, now func() time.Time) NodeListDirFunc {
+func LocalNodeListDir(translator mc.ProjectPathTranslator, now func() time.Time) NodeListDirFunc {
 	local := LocalListDir(translator, now)
 
 	return func(ctx context.Context, node WalkNode) ([]Observation, error) {
@@ -218,7 +218,7 @@ func LocalNodeListDir(translator projectpath.Translator, now func() time.Time) N
 
 // RemoteListDir returns a ListDirFunc that lists remote Materials Commons
 // directory entries by translating localDir to its remote project path.
-func RemoteListDir(projectID int, translator projectpath.Translator, remote remote2.DirectoryLister) ListDirFunc {
+func RemoteListDir(projectID int, translator mc.ProjectPathTranslator, remote remote2.DirectoryLister) ListDirFunc {
 	remoteOnly := RemoteOnlyListDir(projectID, translator, remote)
 
 	return func(ctx context.Context, localDir string) ([]Observation, error) {
@@ -238,7 +238,7 @@ func RemoteListDir(projectID int, translator projectpath.Translator, remote remo
 // Commons directory entries using WalkNode.RemotePath.
 //
 // This function supports remote-only recursive walking.
-func RemoteOnlyListDir(projectID int, translator projectpath.Translator, remote remote2.DirectoryLister) NodeListDirFunc {
+func RemoteOnlyListDir(projectID int, translator mc.ProjectPathTranslator, remote remote2.DirectoryLister) NodeListDirFunc {
 	return func(ctx context.Context, node WalkNode) ([]Observation, error) {
 		if remote == nil {
 			return nil, fmt.Errorf("remote directory lister is required")
@@ -291,7 +291,7 @@ func RemoteOnlyListDir(projectID int, translator projectpath.Translator, remote 
 
 // MergedListDir returns a ListDirFunc that merges local and remote directory
 // entries by name.
-func MergedListDir(translator projectpath.Translator, localListDir ListDirFunc, remoteListDir ListDirFunc) ListDirFunc {
+func MergedListDir(translator mc.ProjectPathTranslator, localListDir ListDirFunc, remoteListDir ListDirFunc) ListDirFunc {
 	mergedNode := MergedNodeListDir(
 		translator,
 		func(ctx context.Context, node WalkNode) ([]Observation, error) {
@@ -326,7 +326,7 @@ func MergedListDir(translator projectpath.Translator, localListDir ListDirFunc, 
 //
 // Unlike MergedListDir, this supports remote-only nodes because the remote side
 // can list using WalkNode.RemotePath even when WalkNode.LocalPath does not exist.
-func MergedNodeListDir(translator projectpath.Translator, localListDir NodeListDirFunc, remoteListDir NodeListDirFunc) NodeListDirFunc {
+func MergedNodeListDir(translator mc.ProjectPathTranslator, localListDir NodeListDirFunc, remoteListDir NodeListDirFunc) NodeListDirFunc {
 	return func(ctx context.Context, node WalkNode) ([]Observation, error) {
 		if localListDir == nil {
 			return nil, fmt.Errorf("local node list directory function is required")
@@ -436,7 +436,7 @@ func WalkAndReconcile(
 	ctx context.Context,
 	root string,
 	listDir ListDirFunc,
-	translator projectpath.Translator,
+	translator mc.ProjectPathTranslator,
 	records DirectoryRecordGetter,
 	reconciler *Reconciler,
 	options WalkOptions,
@@ -549,7 +549,7 @@ func ChainIgnore(extra IgnoreFunc) IgnoreFunc {
 	}
 }
 
-func filterObservations(observations []Observation, ignore IgnoreFunc, translator projectpath.Translator) []Observation {
+func filterObservations(observations []Observation, ignore IgnoreFunc, translator mc.ProjectPathTranslator) []Observation {
 	filtered := make([]Observation, 0, len(observations))
 
 	for _, obs := range observations {
@@ -593,7 +593,7 @@ func observationIsDir(obs Observation) bool {
 	return obs.RemoteEntry != nil && obs.RemoteEntry.Kind == KindDir
 }
 
-func walkNodeFromObservation(obs Observation, translator projectpath.Translator) (WalkNode, error) {
+func walkNodeFromObservation(obs Observation, translator mc.ProjectPathTranslator) (WalkNode, error) {
 	node := WalkNode{
 		RemotePath: obs.RemotePath,
 	}
@@ -608,13 +608,13 @@ func walkNodeFromObservation(obs Observation, translator projectpath.Translator)
 	return normalizeWalkNode(node, translator)
 }
 
-func normalizeWalkNode(node WalkNode, translator projectpath.Translator) (WalkNode, error) {
+func normalizeWalkNode(node WalkNode, translator mc.ProjectPathTranslator) (WalkNode, error) {
 	if node.LocalPath == "" && node.RemotePath == "" {
 		return WalkNode{}, fmt.Errorf("%w: local or remote path is required", ErrInvalidWalkNode)
 	}
 
 	if node.RemotePath != "" {
-		normalized, err := projectpath.NormalizeRemote(node.RemotePath)
+		normalized, err := mc.NormalizeRemoteProjectPath(node.RemotePath)
 		if err != nil {
 			return WalkNode{}, fmt.Errorf("%w: %v", ErrInvalidWalkNode, err)
 		}

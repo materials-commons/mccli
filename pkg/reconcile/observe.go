@@ -11,7 +11,7 @@ import (
 
 	"github.com/materials-commons/hydra/pkg/mcdb/mcmodel"
 	"github.com/materials-commons/mccli/pkg/filedb"
-	"github.com/materials-commons/mccli/pkg/projectpath"
+	"github.com/materials-commons/mccli/pkg/mc"
 )
 
 // FileRecordGetter loads persisted file state for a Materials Commons remote
@@ -31,7 +31,7 @@ type RemoteFileGetter interface {
 // the pure Reconciler.
 type ObservationRunner struct {
 	ProjectID  int
-	Translator projectpath.Translator
+	Translator mc.ProjectPathTranslator
 	Records    FileRecordGetter
 	Remote     RemoteFileGetter
 	Reconciler *Reconciler
@@ -45,7 +45,7 @@ type FileState struct {
 }
 
 // NewObservationRunner creates an ObservationRunner.
-func NewObservationRunner(projectID int, translator projectpath.Translator, records FileRecordGetter, remote RemoteFileGetter, mode Mode) *ObservationRunner {
+func NewObservationRunner(projectID int, translator mc.ProjectPathTranslator, records FileRecordGetter, remote RemoteFileGetter, mode Mode) *ObservationRunner {
 	return &ObservationRunner{
 		ProjectID:  projectID,
 		Translator: translator,
@@ -151,7 +151,7 @@ func (r *ObservationRunner) ObserveAndReconcile(ctx context.Context, localPath s
 // ObserveLocal observes localPath and converts it into a LocalEntry.
 //
 // If localPath does not exist, ObserveLocal returns nil, nil.
-func observeLocal(ctx context.Context, translator projectpath.Translator, localPath string, now time.Time) (*LocalEntry, error) {
+func observeLocal(ctx context.Context, translator mc.ProjectPathTranslator, localPath string, now time.Time) (*LocalEntry, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

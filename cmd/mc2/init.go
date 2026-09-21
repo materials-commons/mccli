@@ -11,7 +11,7 @@ import (
 	mcapi "github.com/materials-commons/gomcapi"
 	"github.com/materials-commons/mccli/pkg/config"
 	"github.com/materials-commons/mccli/pkg/di"
-	"github.com/materials-commons/mccli/pkg/projectpath"
+	"github.com/materials-commons/mccli/pkg/mc"
 	"github.com/materials-commons/mccli/pkg/remote"
 	"github.com/materials-commons/mccli/pkg/setup"
 	"github.com/urfave/cli/v3"
@@ -85,7 +85,7 @@ func (r *initRunner) Run(ctx context.Context, opts initOpts) error {
 	}
 
 	// Check if we are attempting to create a project in an existing project.
-	if _, err := projectpath.FindRoot(ctx, "."); err == nil {
+	if _, err := mc.FindProjectRoot(ctx, "."); err == nil {
 		// If error is nil, then we found an existing project root.
 		fmt.Println("You are attempting to create a project in an existing project or one of the subdirectories is already a project. In either case this is not allowed.")
 		return errors.New("project already exists")
@@ -97,7 +97,7 @@ func (r *initRunner) Run(ctx context.Context, opts initOpts) error {
 	}
 
 	// Clean the project name for the directory path
-	projectDir := projectpath.CleanProjectDirName(projectName)
+	projectDir := mc.CleanProjectDirName(projectName)
 
 	// Load Global config and create the remote client
 	globalConfig, err := r.deps.LoadGlobal(ctx, "")

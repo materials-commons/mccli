@@ -13,7 +13,7 @@ import (
 	mcapi "github.com/materials-commons/gomcapi"
 	"github.com/materials-commons/hydra/pkg/mcdb/mcmodel"
 	"github.com/materials-commons/mccli/pkg/filedb"
-	"github.com/materials-commons/mccli/pkg/projectpath"
+	"github.com/materials-commons/mccli/pkg/mc"
 )
 
 func TestObservationRunnerLocalOnlyUpload(t *testing.T) {
@@ -295,7 +295,7 @@ func TestObservationRunnerUnconfiguredTranslatorReturnsInvalidObservation(t *tes
 
 	runner := NewObservationRunner(
 		123,
-		projectpath.Translator{},
+		mc.ProjectPathTranslator{},
 		fakeRecordStore{},
 		&fakeRemoteGetter{},
 		ModeStatus,
@@ -436,12 +436,12 @@ func (g *fakeRemoteGetter) GetFileByPath(projectID int, remotePath string) (*mcm
 	return g.file, nil
 }
 
-func mustTranslator(t *testing.T, projectRoot string) projectpath.Translator {
+func mustTranslator(t *testing.T, projectRoot string) mc.ProjectPathTranslator {
 	t.Helper()
 
-	translator, err := projectpath.New(projectRoot)
+	translator, err := mc.NewProjectPathTranslator(projectRoot)
 	if err != nil {
-		t.Fatalf("projectpath.New() error = %v", err)
+		t.Fatalf("mc.New() error = %v", err)
 	}
 
 	return translator

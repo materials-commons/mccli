@@ -13,7 +13,7 @@ import (
 	"github.com/materials-commons/mccli/pkg/config"
 	"github.com/materials-commons/mccli/pkg/di"
 	"github.com/materials-commons/mccli/pkg/filedb"
-	"github.com/materials-commons/mccli/pkg/projectpath"
+	"github.com/materials-commons/mccli/pkg/mc"
 	"github.com/materials-commons/mccli/pkg/reconcile"
 	remote2 "github.com/materials-commons/mccli/pkg/remote"
 	"github.com/materials-commons/mccli/pkg/services"
@@ -183,7 +183,7 @@ type queueRequest struct {
 	manager    di.DownloadManager
 	store      di.Store
 	remote     remote2.FileDirectoryGetter
-	translator projectpath.Translator
+	translator mc.ProjectPathTranslator
 	reconciler *reconcile.Reconciler
 }
 
@@ -384,5 +384,5 @@ func normalizeInputRemotePath(inputPath string) (string, error) {
 		cleaned = "/"
 	}
 
-	return projectpath.NormalizeRemote(cleaned)
+	return mc.NormalizeRemoteProjectPath(cleaned)
 }

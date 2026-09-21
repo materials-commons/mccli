@@ -6,7 +6,7 @@ import (
 
 	"github.com/materials-commons/mccli/pkg/config"
 	"github.com/materials-commons/mccli/pkg/di"
-	"github.com/materials-commons/mccli/pkg/projectpath"
+	"github.com/materials-commons/mccli/pkg/mc"
 	"github.com/materials-commons/mccli/pkg/remote"
 	"github.com/materials-commons/mccli/pkg/setup"
 	"github.com/urfave/cli/v3"
@@ -66,7 +66,7 @@ func (r *cloneRunner) Run(ctx context.Context, projectID int) error {
 	// Clean the project name of any special characters and names to make sure
 	// it is a valid directory name and that it is easy to type by removing
 	// special characters.
-	projectDirName := projectpath.CleanProjectDirName(project.Name)
+	projectDirName := mc.CleanProjectDirName(project.Name)
 
 	// CreateLocalProject will create the project directory and initialize it.
 	return setup.CreateLocalProject(ctx, projectDirName, project.ID)

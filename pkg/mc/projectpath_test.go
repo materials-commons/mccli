@@ -1,4 +1,4 @@
-package projectpath
+package mc
 
 import (
 	"context"
@@ -85,7 +85,7 @@ func TestRemoteToLocalRequiresAbsoluteRemotePath(t *testing.T) {
 }
 
 func TestNormalizeRemoteCleansPath(t *testing.T) {
-	got, err := NormalizeRemote("/Dir1/../Dir2//file.txt")
+	got, err := NormalizeRemoteProjectPath("/Dir1/../Dir2//file.txt")
 	if err != nil {
 		t.Fatalf("NormalizeRemote() error = %v", err)
 	}
@@ -110,7 +110,7 @@ func TestFindRootFromNestedDirectory(t *testing.T) {
 		t.Fatalf("MkdirAll(nested) error = %v", err)
 	}
 
-	got, err := FindRoot(ctx, nested)
+	got, err := FindProjectRoot(ctx, nested)
 	if err != nil {
 		t.Fatalf("FindRoot() error = %v", err)
 	}
@@ -138,7 +138,7 @@ func TestFindRootFromFile(t *testing.T) {
 		t.Fatalf("WriteFile(file) error = %v", err)
 	}
 
-	got, err := FindRoot(ctx, filePath)
+	got, err := FindProjectRoot(ctx, filePath)
 	if err != nil {
 		t.Fatalf("FindRoot() error = %v", err)
 	}
@@ -149,7 +149,7 @@ func TestFindRootFromFile(t *testing.T) {
 }
 
 func TestFindRootNoProject(t *testing.T) {
-	_, err := FindRoot(context.Background(), t.TempDir())
+	_, err := FindProjectRoot(context.Background(), t.TempDir())
 	if !errors.Is(err, ErrNoProject) {
 		t.Fatalf("FindRoot() error = %v, want ErrNoProject", err)
 	}
@@ -166,7 +166,7 @@ func TestExists(t *testing.T) {
 		t.Fatalf("WriteFile(config) error = %v", err)
 	}
 
-	exists, err := Exists(ctx, projectRoot)
+	exists, err := PathExistsInProject(ctx, projectRoot)
 	if err != nil {
 		t.Fatalf("Exists() error = %v", err)
 	}
@@ -174,7 +174,7 @@ func TestExists(t *testing.T) {
 		t.Fatal("Exists() = false, want true")
 	}
 
-	exists, err = Exists(ctx, t.TempDir())
+	exists, err = PathExistsInProject(ctx, t.TempDir())
 	if err != nil {
 		t.Fatalf("Exists() outside project error = %v", err)
 	}

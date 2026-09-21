@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 
 	mclogging "github.com/materials-commons/mccli/pkg/logging"
-	"github.com/materials-commons/mccli/pkg/projectpath"
+	"github.com/materials-commons/mccli/pkg/mc"
 )
 
 // Project is the local project configuration stored in $PROJECT/.mc/config.json.
@@ -43,12 +43,12 @@ func (p Project) Path() string {
 func LoadProject(ctx context.Context, start string) (Project, error) {
 	// project config will be in $PROJECT/.mc/config.json. We could be
 	// in any directory, so search for the project root.
-	projectRoot, err := projectpath.FindRoot(ctx, start)
+	projectRoot, err := mc.FindProjectRoot(ctx, start)
 	if err != nil {
 		return Project{}, err
 	}
 
-	path := projectpath.ConfigPath(projectRoot)
+	path := mc.ConfigPath(projectRoot)
 	logger := mclogging.Logger(ctx)
 	logger.Debug("loading project config", "project_root", projectRoot, "path", path)
 
@@ -98,7 +98,7 @@ func SaveProject(ctx context.Context, projectRoot string, cfg Project) error {
 		return fmt.Errorf("%w: project root is required", ErrInvalidConfig)
 	}
 
-	path := projectpath.ConfigPath(projectRoot)
+	path := mc.ConfigPath(projectRoot)
 
 	logger := mclogging.Logger(ctx)
 	logger.Debug("saving project config", "project_root", projectRoot, "path", path)

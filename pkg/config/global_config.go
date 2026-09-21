@@ -22,7 +22,7 @@ import (
 
 	"github.com/google/uuid"
 	mclogging "github.com/materials-commons/mccli/pkg/logging"
-	"github.com/materials-commons/mccli/pkg/projectpath"
+	"github.com/materials-commons/mccli/pkg/mc"
 )
 
 const (
@@ -32,10 +32,10 @@ const (
 
 	// ConfigFileName is the JSON file name used for both global and project
 	// configuration.
-	ConfigFileName = projectpath.ConfigFileName
+	ConfigFileName = mc.ConfigFileName
 
 	// ProjectConfigDirName is the local project metadata directory name.
-	ProjectConfigDirName = projectpath.ProjectConfigDirName
+	ProjectConfigDirName = mc.ProjectConfigDirName
 )
 
 var (

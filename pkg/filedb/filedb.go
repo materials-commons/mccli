@@ -22,7 +22,7 @@ import (
 
 	"github.com/libtnb/sqlite"
 	mclogging "github.com/materials-commons/mccli/pkg/logging"
-	"github.com/materials-commons/mccli/pkg/projectpath"
+	"github.com/materials-commons/mccli/pkg/mc"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	gormlogger "gorm.io/gorm/logger"
@@ -47,7 +47,7 @@ var (
 //
 //	$PROJECT/.mc/mc2.sqlite
 func DBPath(projectRoot string) string {
-	return filepath.Join(projectpath.ConfigDir(projectRoot), DatabaseFileName)
+	return filepath.Join(mc.ConfigDir(projectRoot), DatabaseFileName)
 }
 
 // FileRecord stores local and remote state for one project path.

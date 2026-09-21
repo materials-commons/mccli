@@ -9,7 +9,7 @@ import (
 
 	"github.com/materials-commons/mccli/pkg/config"
 	"github.com/materials-commons/mccli/pkg/di"
-	"github.com/materials-commons/mccli/pkg/projectpath"
+	"github.com/materials-commons/mccli/pkg/mc"
 	"github.com/materials-commons/mccli/pkg/reconcile"
 	remote2 "github.com/materials-commons/mccli/pkg/remote"
 	"github.com/materials-commons/mccli/pkg/services"
@@ -22,7 +22,7 @@ type uploader struct {
 	project    config.Project
 	manager    di.UploadManager
 	observer   *reconcile.ObservationRunner
-	translator projectpath.Translator
+	translator mc.ProjectPathTranslator
 	now        func() time.Time
 	runtime    *services.Runtime
 }
@@ -155,7 +155,7 @@ type queueRequest struct {
 	project    config.Project
 	manager    di.UploadManager
 	observer   *reconcile.ObservationRunner
-	translator projectpath.Translator
+	translator mc.ProjectPathTranslator
 	now        func() time.Time
 }
 

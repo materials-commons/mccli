@@ -13,7 +13,7 @@ import (
 
 	"github.com/materials-commons/mccli/pkg/config"
 	"github.com/materials-commons/mccli/pkg/di"
-	"github.com/materials-commons/mccli/pkg/projectpath"
+	"github.com/materials-commons/mccli/pkg/mc"
 	"github.com/materials-commons/mccli/pkg/reconcile"
 	remote2 "github.com/materials-commons/mccli/pkg/remote"
 	"github.com/materials-commons/mccli/pkg/services"
@@ -113,7 +113,7 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 type listRequest struct {
 	opts       Options
 	project    config.Project
-	translator projectpath.Translator
+	translator mc.ProjectPathTranslator
 	store      di.Store
 	remote     remote2.FileDirectoryGetter
 	reconciler *reconcile.Reconciler

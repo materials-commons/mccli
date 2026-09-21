@@ -12,7 +12,7 @@ import (
 	"github.com/materials-commons/mccli/pkg/config"
 	"github.com/materials-commons/mccli/pkg/di"
 	"github.com/materials-commons/mccli/pkg/filedb"
-	"github.com/materials-commons/mccli/pkg/projectpath"
+	"github.com/materials-commons/mccli/pkg/mc"
 	"github.com/materials-commons/mccli/pkg/remote"
 )
 
@@ -56,7 +56,7 @@ func TestInitRunner_Run_Success_WithProjectName(t *testing.T) {
 	t.Chdir(workDir)
 
 	projectName := "Init Project / Spec: 1"
-	expectedDirName := projectpath.CleanProjectDirName(projectName)
+	expectedDirName := mc.CleanProjectDirName(projectName)
 	projectID := 101
 	description := "A test project description"
 
@@ -124,7 +124,7 @@ func TestInitRunner_Run_Success_WithoutProjectName(t *testing.T) {
 	t.Chdir(workDir)
 
 	expectedProjectName := filepath.Base(workDir)
-	expectedDirName := projectpath.CleanProjectDirName(expectedProjectName)
+	expectedDirName := mc.CleanProjectDirName(expectedProjectName)
 	projectID := 102
 	description := "Description without project name"
 
@@ -302,7 +302,7 @@ func TestInitRunner_Run_CreateLocalProjectError(t *testing.T) {
 	t.Chdir(workDir)
 
 	projectName := "ConflictingFileProject"
-	expectedDirName := projectpath.CleanProjectDirName(projectName)
+	expectedDirName := mc.CleanProjectDirName(projectName)
 
 	// Create a regular file with the same name as the project directory
 	if err := os.WriteFile(filepath.Join(workDir, expectedDirName), []byte("conflict"), 0o644); err != nil {

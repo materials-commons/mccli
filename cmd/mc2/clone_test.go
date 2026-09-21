@@ -11,7 +11,7 @@ import (
 	"github.com/materials-commons/mccli/pkg/config"
 	"github.com/materials-commons/mccli/pkg/di"
 	"github.com/materials-commons/mccli/pkg/filedb"
-	"github.com/materials-commons/mccli/pkg/projectpath"
+	"github.com/materials-commons/mccli/pkg/mc"
 	"github.com/materials-commons/mccli/pkg/remote"
 )
 
@@ -53,7 +53,7 @@ func TestRunner_Run_Success(t *testing.T) {
 	t.Chdir(workDir)
 
 	projectName := "Test Project / Spec: 1"
-	expectedDirName := projectpath.CleanProjectDirName(projectName)
+	expectedDirName := mc.CleanProjectDirName(projectName)
 	projectID := 42
 
 	getter := &fakeProjectGetter{
@@ -177,7 +177,7 @@ func TestRunner_Run_MkdirError(t *testing.T) {
 	t.Chdir(workDir)
 
 	projectName := "ConflictingFileProject"
-	expectedDirName := projectpath.CleanProjectDirName(projectName)
+	expectedDirName := mc.CleanProjectDirName(projectName)
 
 	// Create a regular file with the same name as the project directory
 	if err := os.WriteFile(filepath.Join(workDir, expectedDirName), []byte("conflict"), 0o644); err != nil {
@@ -204,7 +204,7 @@ func TestRunner_Run_SaveProjectError(t *testing.T) {
 	t.Chdir(workDir)
 
 	projectName := "ProjectWithConfigDirConflict"
-	expectedDirName := projectpath.CleanProjectDirName(projectName)
+	expectedDirName := mc.CleanProjectDirName(projectName)
 
 	// Pre-create .mc/config.json as a directory so SaveProject fails
 	configPath := filepath.Join(workDir, expectedDirName, ".mc", "config.json")
@@ -232,7 +232,7 @@ func TestRunner_Run_OpenDBError(t *testing.T) {
 	t.Chdir(workDir)
 
 	projectName := "ProjectWithDBDirConflict"
-	expectedDirName := projectpath.CleanProjectDirName(projectName)
+	expectedDirName := mc.CleanProjectDirName(projectName)
 
 	// Pre-create .mc/mc2.sqlite as a directory so filedb.Open fails
 	dbPath := filepath.Join(workDir, expectedDirName, ".mc", "mc2.sqlite")
