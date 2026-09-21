@@ -1,4 +1,4 @@
-package cmds
+package main
 
 import (
 	"context"
@@ -212,7 +212,7 @@ func TestLoginRunner_promptForPassword(t *testing.T) {
 func TestLoginRunner_setupGlobalConfig(t *testing.T) {
 	r := loginRunner{}
 	ctx := context.Background()
-	opts := LoginOpts{MCAPIUrl: "https://example.com/api"}
+	opts := loginOpts{MCAPIUrl: "https://example.com/api"}
 
 	t.Run("getBaseRemoteClient error propagates", func(t *testing.T) {
 		err := r.setupGlobalConfig(ctx, opts)
@@ -224,7 +224,7 @@ func TestLoginRunner_setupGlobalConfig(t *testing.T) {
 
 func TestLoginRunner_loginToExisting(t *testing.T) {
 	ctx := context.Background()
-	opts := LoginOpts{MCAPIUrl: "https://example.com/api"}
+	opts := loginOpts{MCAPIUrl: "https://example.com/api"}
 	globalCfg := config.Global{
 		DefaultRemote: config.Remote{
 			Email: "user@example.com",
@@ -269,7 +269,7 @@ func TestLoginRunner_loginToExisting(t *testing.T) {
 
 func TestLoginRunner_Run(t *testing.T) {
 	ctx := context.Background()
-	opts := LoginOpts{MCAPIUrl: "https://example.com/api"}
+	opts := loginOpts{MCAPIUrl: "https://example.com/api"}
 
 	t.Run("LoadGlobal error calls setupGlobalConfig which propagates getBaseRemoteClient error", func(t *testing.T) {
 		r := loginRunner{
@@ -339,8 +339,8 @@ func TestRunLoginCmd_Production(t *testing.T) {
 	ctx := context.Background()
 	t.Setenv("HOME", t.TempDir())
 
-	opts := LoginOpts{MCAPIUrl: "https://example.com/api"}
-	err := RunLoginCmd(ctx, opts)
+	opts := loginOpts{MCAPIUrl: "https://example.com/api"}
+	err := runLoginCmd(ctx, opts)
 	if err == nil || err.Error() != "remote client is not a remote.Loginer" {
 		t.Fatalf("RunLoginCmd() error = %v, want 'remote client is not a remote.Loginer'", err)
 	}
