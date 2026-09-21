@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 
-	"github.com/materials-commons/mccli/pkg/cmds"
+	"github.com/materials-commons/mccli/pkg/di"
 	"github.com/urfave/cli/v3"
 )
 
@@ -24,11 +24,28 @@ func rmCommand() *cli.Command {
 			},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			opts := cmds.RmOpts{
+			opts := rmOpts{
 				Recursive:  cmd.Bool("recursive"),
 				RemoteOnly: cmd.Bool("remote-only"),
 			}
-			return cmds.RunRmCmd(ctx, opts, cmd.Args().Slice())
+			return runRmCmd(ctx, opts, cmd.Args().Slice())
 		},
 	}
+}
+
+type rmOpts struct {
+	Recursive  bool
+	RemoteOnly bool
+}
+
+type rmRunner struct {
+	deps di.Dependencies
+}
+
+func runRmCmd(ctx context.Context, opts rmOpts, args []string) error {
+	return rmRunner{deps: di.Production()}.run(ctx, opts, args)
+}
+
+func (r rmRunner) run(ctx context.Context, opts rmOpts, args []string) error {
+	return nil
 }
