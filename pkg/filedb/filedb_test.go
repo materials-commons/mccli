@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/materials-commons/mccli/pkg/conv"
+	"github.com/materials-commons/mccli/pkg/mc"
 )
 
 func TestOpenCreatesDatabase(t *testing.T) {
@@ -35,8 +35,8 @@ func TestUpsertAndGetByPath(t *testing.T) {
 	store := openTestStore(t, ctx)
 
 	record := testRecord("/Dir1/file.txt")
-	record.RemoteFileID = conv.Int64Ptr(123)
-	record.RemoteChecksum = conv.StringPtr("remote-checksum")
+	record.RemoteFileID = mc.ToInt64Ptr(123)
+	record.RemoteChecksum = mc.ToStringPtr("remote-checksum")
 
 	// Insert new record
 	if err := store.Upsert(ctx, record); err != nil {
@@ -66,10 +66,10 @@ func TestUpsertPreservesExistingNullableValues(t *testing.T) {
 	store := openTestStore(t, ctx)
 
 	first := testRecord("/Dir1/file.txt")
-	first.LocalChecksum = conv.StringPtr("local-checksum-1")
-	first.RemoteFileID = conv.Int64Ptr(123)
-	first.RemoteChecksum = conv.StringPtr("remote-checksum-1")
-	first.Status = conv.StringPtr("uploaded")
+	first.LocalChecksum = mc.ToStringPtr("local-checksum-1")
+	first.RemoteFileID = mc.ToInt64Ptr(123)
+	first.RemoteChecksum = mc.ToStringPtr("remote-checksum-1")
+	first.Status = mc.ToStringPtr("uploaded")
 
 	if err := store.Upsert(ctx, first); err != nil {
 		t.Fatalf("first Upsert() error = %v", err)
@@ -246,7 +246,7 @@ func TestUpsertRejectsEmptyLocalChecksum(t *testing.T) {
 	store := openTestStore(t, ctx)
 
 	record := testRecord("/Dir1/file.txt")
-	record.LocalChecksum = conv.StringPtr("")
+	record.LocalChecksum = mc.ToStringPtr("")
 
 	err := store.Upsert(ctx, record)
 	if !errors.Is(err, ErrInvalidRecord) {
@@ -259,7 +259,7 @@ func TestUpsertRejectsEmptyRemoteChecksum(t *testing.T) {
 	store := openTestStore(t, ctx)
 
 	record := testRecord("/Dir1/file.txt")
-	record.RemoteChecksum = conv.StringPtr("")
+	record.RemoteChecksum = mc.ToStringPtr("")
 
 	err := store.Upsert(ctx, record)
 	if !errors.Is(err, ErrInvalidRecord) {
@@ -418,14 +418,14 @@ func TestClearRemoteByPathClearsRemoteFields(t *testing.T) {
 	store := openTestStore(t, ctx)
 
 	record := testRecord("/Dir1/file.txt")
-	record.RemoteFileID = conv.Int64Ptr(123)
-	record.RemoteSize = conv.Int64Ptr(456)
-	record.RemoteCTimeNS = conv.Int64Ptr(789)
-	record.RemoteChecksum = conv.StringPtr("remote-md5")
-	record.RemoteLastSeenTS = conv.Int64Ptr(111)
-	record.Status = conv.StringPtr("uploaded")
-	record.Origin = conv.StringPtr("upload")
-	record.TransferID = conv.StringPtr("transfer-1")
+	record.RemoteFileID = mc.ToInt64Ptr(123)
+	record.RemoteSize = mc.ToInt64Ptr(456)
+	record.RemoteCTimeNS = mc.ToInt64Ptr(789)
+	record.RemoteChecksum = mc.ToStringPtr("remote-md5")
+	record.RemoteLastSeenTS = mc.ToInt64Ptr(111)
+	record.Status = mc.ToStringPtr("uploaded")
+	record.Origin = mc.ToStringPtr("upload")
+	record.TransferID = mc.ToStringPtr("transfer-1")
 
 	if err := store.Upsert(ctx, record); err != nil {
 		t.Fatalf("Upsert() error = %v", err)
@@ -481,8 +481,8 @@ func TestUpsertNilRemoteFieldsPreservesExistingRemoteFields(t *testing.T) {
 	store := openTestStore(t, ctx)
 
 	first := testRecord("/Dir1/file.txt")
-	first.RemoteFileID = conv.Int64Ptr(123)
-	first.RemoteChecksum = conv.StringPtr("remote-md5")
+	first.RemoteFileID = mc.ToInt64Ptr(123)
+	first.RemoteChecksum = mc.ToStringPtr("remote-md5")
 
 	if err := store.Upsert(ctx, first); err != nil {
 		t.Fatalf("first Upsert() error = %v", err)

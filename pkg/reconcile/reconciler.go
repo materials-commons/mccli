@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"path"
 
-	"github.com/materials-commons/mccli/pkg/conv"
 	"github.com/materials-commons/mccli/pkg/filedb"
 	"github.com/materials-commons/mccli/pkg/mc"
 )
@@ -559,7 +558,7 @@ func recordWithRemote(obs Observation, record filedb.FileRecord) filedb.FileReco
 	record.RemoteFileID = obs.RemoteEntry.RemoteFileID
 	record.RemoteSize = &obs.RemoteEntry.Size
 	record.RemoteCTimeNS = &obs.RemoteEntry.CTimeNS
-	record.RemoteChecksum = conv.StringPtrWithNil(obs.RemoteEntry.Checksum)
+	record.RemoteChecksum = mc.ToStringPtrWithNil(obs.RemoteEntry.Checksum)
 
 	return record
 }

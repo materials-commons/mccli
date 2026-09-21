@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/materials-commons/mccli/pkg/conv"
 	"github.com/materials-commons/mccli/pkg/filedb"
+	"github.com/materials-commons/mccli/pkg/mc"
 	"github.com/materials-commons/mccli/pkg/reconcile"
 	"github.com/materials-commons/mccli/pkg/wsclient"
 )
@@ -270,7 +270,7 @@ func remoteEntry(id int64, size int64, checksum string) *reconcile.RemoteEntry {
 		Name:         "file.txt",
 		Dir:          "/",
 		Kind:         reconcile.KindFile,
-		RemoteFileID: conv.Int64Ptr(id),
+		RemoteFileID: mc.ToInt64Ptr(id),
 		Size:         size,
 		Checksum:     checksum,
 	}

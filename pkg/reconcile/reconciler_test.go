@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/materials-commons/mccli/pkg/conv"
 	"github.com/materials-commons/mccli/pkg/filedb"
+	"github.com/materials-commons/mccli/pkg/mc"
 )
 
 func TestReconcileLocalOnlyUpload(t *testing.T) {
@@ -1017,7 +1017,7 @@ func TestReconcileRootRemoteOnlyDirectorySkips(t *testing.T) {
 		Name:         "/",
 		Dir:          "/",
 		Kind:         KindDir,
-		RemoteFileID: conv.Int64Ptr(1),
+		RemoteFileID: mc.ToInt64Ptr(1),
 	}
 
 	decision, err := r.Reconcile(ctx, Observation{

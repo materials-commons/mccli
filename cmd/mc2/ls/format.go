@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/materials-commons/mccli/pkg/conv"
 	"github.com/materials-commons/mccli/pkg/filedb"
+	"github.com/materials-commons/mccli/pkg/mc"
 	"github.com/materials-commons/mccli/pkg/reconcile"
 	"github.com/olekukonko/tablewriter"
 	"github.com/olekukonko/tablewriter/tw"
@@ -107,7 +107,7 @@ func fullRow(state reconcile.FileState) []string {
 		rUpdated = formatOptionalUnixNano(record.RemoteCTimeNS)
 		rSize = humanizeOptional(record.RemoteSize)
 		rType = remoteRecordKindCode(record)
-		rID = conv.Int64PtrString(record.RemoteFileID)
+		rID = mc.ToInt64PtrString(record.RemoteFileID)
 	}
 
 	return []string{
