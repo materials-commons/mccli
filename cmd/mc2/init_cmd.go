@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 
 	mcapi "github.com/materials-commons/gomcapi"
-	"github.com/materials-commons/mccli/internal/app"
 	"github.com/materials-commons/mccli/internal/config"
 	"github.com/materials-commons/mccli/internal/di"
 	"github.com/materials-commons/mccli/internal/mc"
@@ -121,7 +120,7 @@ func (r *initRunner) Run(ctx context.Context, opts initOpts) error {
 	}
 
 	// Now set up the project by creating the directory, its config and metadata.
-	return app.CreateLocalProject(ctx, projectDir, proj.ID)
+	return CreateLocalProject(ctx, projectDir, proj.ID)
 }
 
 func (r *initRunner) getRemoteClient(cfg config.Global) (mc.ProjectCreater, error) {

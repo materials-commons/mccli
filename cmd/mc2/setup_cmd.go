@@ -36,9 +36,15 @@ func runSetupCmd(config config.Global, cfgLoadErr error) error {
 func (r *setupRunner) run(config config.Global, cfgLoadErr error) error {
 	// Show the user the initial setup form. This will prompt them to install
 	// any missing tools.
-	if err := r.runInitialSetupForm(); err != nil {
+	continueSetup, err := r.runInitialSetupForm()
+	switch {
+	case err != nil:
 		return err
+	case !continueSetup:
+		return nil
 	}
+
+	// If we are here, then the user has chosen to continue setup.
 
 	if err := r.promptForAuth(config); err != nil {
 		return err
@@ -80,11 +86,10 @@ func (r *setupRunner) run(config config.Global, cfgLoadErr error) error {
 	return nil
 }
 
-func (r *setupRunner) runInitialSetupForm() error {
+func (r *setupRunner) runInitialSetupForm() (bool, error) {
 
-	welcome := `Welcome to the Materials Commons CLI setup wizard.
-Here you will configure mccli to connect to a Materials Commons server, and setup optional features.
-You can rerun this wizard at any time by running 'mc2 setup'.
+	welcome := `Welcome to the Materials Commons CLI setup wizard. Here you will configure mccli to connect to a Materials Commons
+server, and setup optional features.You can rerun this wizard at any time by running 'mc2 setup'.
 
 You will be taken through the following steps:
 
@@ -99,20 +104,24 @@ You will be taken through the following steps:
    the option to configure where your projects are located on your computer. This is optional, but it is recommended.
    Doing this will allow you to search and find files across multiple projects from anywhere on your computer.
 `
+	continueSetup := true
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewNote().
 				Title("Materials Commons CLI Setup").
-				Description(welcome).
-				Next(true).
-				NextLabel("Next")),
+				Description(welcome),
+			huh.NewConfirm().
+				Title("Continue setup?").
+				Value(&continueSetup).
+				Affirmative("Next").
+				Negative("Quit")),
 	)
 
 	if err := form.Run(); err != nil {
-		return err
+		return false, err
 	}
 
-	return nil
+	return continueSetup, nil
 }
 
 func (r *setupRunner) promptForAuth(cfg config.Global) error {

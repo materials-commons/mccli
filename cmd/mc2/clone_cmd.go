@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/materials-commons/mccli/internal/app"
 	"github.com/materials-commons/mccli/internal/config"
 	"github.com/materials-commons/mccli/internal/di"
 	"github.com/materials-commons/mccli/internal/mc"
@@ -68,7 +67,7 @@ func (r *cloneRunner) Run(ctx context.Context, projectID int) error {
 	projectDirName := mc.CleanProjectDirName(project.Name)
 
 	// CreateLocalProject will create the project directory and initialize it.
-	return app.CreateLocalProject(ctx, projectDirName, project.ID)
+	return CreateLocalProject(ctx, projectDirName, project.ID)
 }
 
 // getRemotelient creates an instance of the client and then casts it to a ProjectGetter.

@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/materials-commons/mccli/internal/mc"
 )
 
 func TestLoadProjectFromNestedDirectory(t *testing.T) {
@@ -21,7 +23,7 @@ func TestLoadProjectFromNestedDirectory(t *testing.T) {
 
 	const input = `{"remote": {"mcurl": "https://spelljammer/api", "email": "gtarcea@umich.edu"}, "project_id": 438, "project_uuid": "ddd3c23a-a85c-4afa-ad3d-3950c63776f0", "experiment_id": null, "experiment_uuid": null, "remote_updatetime": null, "globus_upload_id": null, "globus_download_id": null}`
 
-	configPath := filepath.Join(projectRoot, ProjectConfigDirName, ConfigFileName)
+	configPath := filepath.Join(projectRoot, ProjectConfigDirName, mc.ProjectConfigFileName)
 	if err := os.WriteFile(configPath, []byte(input), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}

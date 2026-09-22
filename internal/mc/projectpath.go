@@ -39,9 +39,9 @@ const (
 	// ProjectConfigDirName is the local project metadata directory name.
 	ProjectConfigDirName = ".mc"
 
-	// ConfigFileName is the JSON file name used for local project
+	// ProjectConfigFileName is the JSON file name used for local project
 	// configuration.
-	ConfigFileName = "config.json"
+	ProjectConfigFileName = "config.json"
 )
 
 var (
@@ -246,7 +246,7 @@ func PathExistsInProject(ctx context.Context, start string) (bool, error) {
 
 // ConfigPath returns $PROJECT/.mc/config.json.
 func ConfigPath(projectRoot string) string {
-	return filepath.Join(projectRoot, ProjectConfigDirName, ConfigFileName)
+	return filepath.Join(projectRoot, ProjectConfigDirName, ProjectConfigFileName)
 }
 
 // ConfigDir returns $PROJECT/.mc.

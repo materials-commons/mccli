@@ -30,9 +30,9 @@ const (
 	// stores the global Materials Commons configuration.
 	GlobalConfigDirName = ".materialscommons"
 
-	// ConfigFileName is the JSON file name used for both global and project
+	// GlobalConfigFileName is the JSON file name used for both global and project
 	// configuration.
-	ConfigFileName = mc.ConfigFileName
+	GlobalConfigFileName = "config.json"
 
 	// ProjectConfigDirName is the local project metadata directory name.
 	ProjectConfigDirName = mc.ProjectConfigDirName
@@ -181,7 +181,7 @@ func DefaultGlobalConfigPath() (string, error) {
 		return "", fmt.Errorf("find user home directory: %w", err)
 	}
 
-	return filepath.Join(home, GlobalConfigDirName, ConfigFileName), nil
+	return filepath.Join(home, GlobalConfigDirName, GlobalConfigFileName), nil
 }
 
 // LoadGlobal reads a global configuration file.
