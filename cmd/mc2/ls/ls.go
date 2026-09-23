@@ -133,9 +133,9 @@ func (r Runner) listPath(ctx context.Context, req listRequest) error {
 }
 
 func listDirectory(ctx context.Context, req listRequest) error {
-	localList := reconcile.MakeLocalNodeListDirFunc(req.translator, req.now)
-	remoteList := reconcile.MakeRemoteOnlyListDirFunc(req.project.ProjectID, req.translator, req.remote)
-	mergedList := reconcile.MakeMergedNodeListDirFunc(req.translator, localList, remoteList)
+	localListDirFunc := reconcile.MakeLocalNodeListDirFunc(req.translator, req.now)
+	remoteListDirFunc := reconcile.MakeRemoteOnlyListDirFunc(req.project.ProjectID, req.translator, req.remote)
+	mergedListDirFunc := reconcile.MakeMergedNodeListDirFunc(req.translator, localListDirFunc, remoteListDirFunc)
 
 	node := reconcile.WalkNode{
 		LocalPath: req.localPath,
@@ -153,17 +153,18 @@ func listDirectory(ctx context.Context, req listRequest) error {
 		Translator: req.translator,
 	}
 
-	return reconcile.WalkNodesAndReconcile(
-		ctx,
-		node,
-		mergedList,
-		req.store,
-		req.reconciler,
-		options,
-		func(ctx context.Context, node reconcile.WalkNode, states map[string]reconcile.FileState) error {
+	walkParams := reconcile.WalkNodesAndReconcileParams{
+		Root: node,
+		ListDir: mergedListDirFunc,
+		DirRecordsGetter: req.store,
+		Reconciler: req.reconciler,
+		Options: options,
+		CallbackFunc: func(ctx context.Context, node reconcile.WalkNode, states map[string]reconcile.FileState) error {
 			return printStates(req.opts.Out, states, req.opts.Action)
 		},
-	)
+	}
+
+	return reconcile.WalkNodesAndReconcile(ctx, walkParams)
 }
 
 func listSinglePath(ctx context.Context, req listRequest) error {
