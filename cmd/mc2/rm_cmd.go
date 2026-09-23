@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/materials-commons/mccli/internal/config"
 	"github.com/materials-commons/mccli/internal/di"
+	"github.com/materials-commons/mccli/internal/filedb"
 	"github.com/materials-commons/mccli/internal/mc"
 	"github.com/materials-commons/mccli/internal/reconcile"
 	"github.com/materials-commons/mccli/internal/services"
@@ -206,16 +208,41 @@ func (r *remover) normalizeRemotePath(path string) (string, error) {
 func (r *remover) removePath(ctx context.Context, remotePath string) error {
 	remoteFile, err := r.remoteGetter.GetFileByPath(r.project.ProjectID, remotePath)
 	if err != nil {
+		// The remote called returned an error, lets check if its not found.
 		if reconcile.IsRemoteNotFound(err) {
+			// The file doesn't exist on the remote. We might remove it depending on the
+			// flags the user specified.
 			return r.possiblyRemoveLocalOnlyPath(ctx, remotePath)
 		}
+
+		// The error wasn't not found. Since we don't know the state of the remote file, we can't remove it.
+		// TODO: What about if the force flag is set?
 		return fmt.Errorf("get remote file by path %q: %w", remotePath, err)
 	}
 
-	// Continue here
-	_ = remoteFile
+	// If we are here, then we found a remote file.
 
-	return nil
+	// Convert the remote file into a reconciler remote entry.
+	remoteEntry, err := reconcile.RemoteEntryFromMCFile(remoteFile)
+	if err != nil {
+		return err
+	}
+
+	if remoteEntry == nil {
+		// The remote entry is nil, and no error. Candidate for removal depending on flags.
+		return r.possiblyRemoveLocalOnlyPath(ctx, remotePath)
+	}
+
+	if remoteEntry.Kind == reconcile.KindDir {
+		return r.removeDirectory(ctx, remoteEntry.Path)
+	}
+
+	return r.removeFile(ctx, reconcile.Observation{
+		RemotePath:  remoteEntry.Path,
+		Name:        remoteEntry.Name,
+		Dir:         remoteEntry.Dir,
+		RemoteEntry: remoteEntry,
+	})
 }
 
 func (r *remover) possiblyRemoveLocalOnlyPath(ctx context.Context, remotePath string) error {
@@ -235,6 +262,156 @@ func (r *remover) possiblyRemoveLocalOnlyPath(ctx context.Context, remotePath st
 	}
 
 	return nil
+}
+
+func (r *remover) removeDirectory(ctx context.Context, remoteDir string) error {
+	if !r.opts.Recursive {
+		return fmt.Errorf("%s is a directory; use --recursive to remove directory", remoteDir)
+	}
+
+	// Construct a local and remote directory walker.
+
+	// First create the local list dir func
+	localListDirFunc := reconcile.LocalNodeListDir(r.translator, nil)
+
+	// Then create the remote list dir func
+	remoteListDirFunc := reconcile.RemoteOnlyListDir(r.project.ProjectID, r.translator, r.remoteGetter)
+
+	// Finally created the merged local/remote list dir func
+	mergedListDirFunc := reconcile.MergedNodeListDir(r.translator, localListDirFunc, remoteListDirFunc)
+
+	walkOptions := reconcile.WalkOptions{
+		Recursive:  true,
+		Translator: r.translator,
+	}
+
+	return reconcile.WalkNodesAndReconcile(ctx, reconcile.WalkNode{RemotePath: remoteDir}, mergedListDirFunc, r.store,
+		r.reconciler, walkOptions, func(ctx context.Context, node reconcile.WalkNode, states map[string]reconcile.FileState) error {
+			for _, state := range states {
+				if !stateIsFile(state) {
+					continue
+				}
+
+				if err := r.removeFileFromState(ctx, state); err != nil {
+					return err
+				}
+			}
+
+			return nil
+		})
+}
+
+func (r *remover) removeFileFromState(ctx context.Context, state reconcile.FileState) error {
+	if !shouldRemoveFile(r.opts, state) {
+		_, _ = fmt.Fprintf(r.opts.Out, "Skipping %s - %s\n", state.Observation.RemotePath, state.Decision.Reason)
+		return nil
+	}
+
+	remotePath := state.Observation.RemotePath
+	localPath, err := r.translator.RemoteToLocal(remotePath)
+	if err != nil {
+		return fmt.Errorf("failed to translate remote path %s to local path: %w", remotePath, err)
+	}
+
+	if r.opts.DryRun {
+		fmt.Fprintf(r.opts.Out, "Would remove %s\n", remotePath)
+		return nil
+	}
+
+	if r.opts.LocalOnly {
+		if err := r.removeLocalFile(localPath); err != nil {
+			return err
+		}
+	}
+
+	if r.opts.RemoteOnly {
+		if err := r.removeRemoteFile(ctx, state); err != nil {
+			return err
+		}
+	}
+
+	if err := r.store.DeleteByPath(ctx, remotePath); err != nil && errors.Is(err, filedb.ErrRecordNotFound) {
+		return err
+	}
+
+	fmt.Fprintf(r.opts.Out, "Removed %s\n", remotePath)
+	return nil
+}
+
+func (r *remover) removeRemoteFile(ctx context.Context, state reconcile.FileState) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	switch {
+	case state.Observation.RemoteEntry == nil:
+		// Remote file doesn't exist, nothing to do
+		return nil
+
+	case state.Observation.RemoteEntry.RemoteFileID == nil:
+		// Remote file exists, but for some reason there is no id...
+		return fmt.Errorf("cannot remove %q: remote file id is missing", state.Observation.RemotePath)
+
+	default:
+		// Delete the remote file
+		fileID := int(*state.Observation.RemoteEntry.RemoteFileID)
+		if err := r.remoteFileDeleter.DeleteFile(r.project.ProjectID, fileID); err != nil {
+			return fmt.Errorf("remove remote file %q: %w", state.Observation.RemotePath, err)
+		}
+
+		return nil
+	}
+}
+
+func (r *remover) removeFile(ctx context.Context, observation reconcile.Observation) error {
+	return nil
+}
+
+func (r *remover) removeLocalFile(path string) error {
+	return nil
+}
+
+func shouldRemoveFile(opts rmOpts, state reconcile.FileState) bool {
+	if opts.Force {
+		// Force flag so skip all checks and return true
+		return true
+	}
+
+	switch state.Decision.Action {
+	case reconcile.ActionDownload:
+		// If the action is Download, then we know that the file has been previously seen and we can delete it.
+		return true
+	case reconcile.ActionConflict, reconcile.ActionUpload, reconcile.ActionDBUpdate:
+		// If the action is Conflict, Upload, or DBUpdate, then we know that the file has not been previously seen,
+		// or we aren't sure on the state. So don't delete it.
+		return false
+	case reconcile.ActionSkip:
+		// If we are skipping the file, then there isn't anything to do to it. Right now that means only delete
+		// it if there is a remote entry. If there isn't a remote entry, then this is a file we haven't seen
+		// before. That case should be covered by ActionUpload, but just in case we return false if the remote
+		// entry doesn't exist.
+		return state.Observation.RemoteEntry != nil
+	default:
+		// The default case is don't delete. All actions should have been covered by previous checks. This covers
+		// the case where a new action was added, and this method hasn't been updated to handle it.
+		return false
+	}
+}
+
+func stateIsFile(state reconcile.FileState) bool {
+	switch {
+	case state.Observation.LocalEntry != nil && state.Observation.LocalEntry.Kind == reconcile.KindFile:
+		// Local entry exists and is a file
+		return true
+
+	case state.Observation.RemoteEntry != nil && state.Observation.RemoteEntry.Kind == reconcile.KindFile:
+		// Remote entry exists and is a file
+		return true
+
+	default:
+		// Neither entry exists or is a file
+		return false
+	}
 }
 
 func getRemoverRemotes(container *services.Container) (mc.FileDirectoryGetter, mc.FileDeleter, error) {

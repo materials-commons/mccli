@@ -26,6 +26,7 @@ type Store interface {
 	reconcile.DirectoryRecordGetter
 	reconcile.FileRecordGetter
 
+	DeleteByPath(ctx context.Context, filePath string) error
 	Close(ctx context.Context) error
 	Upsert(ctx context.Context, record filedb.FileRecord) error
 }

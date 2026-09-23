@@ -178,6 +178,11 @@ func makeServiceTestProject(t *testing.T) string {
 
 type fakeStore struct{}
 
+func (fakeStore) DeleteByPath(ctx context.Context, filePath string) error {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (fakeStore) Close(ctx context.Context) error {
 	return nil
 }

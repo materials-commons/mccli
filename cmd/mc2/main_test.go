@@ -30,7 +30,7 @@ func TestNewCommandLayout(t *testing.T) {
 	}
 
 	for _, name := range wantCommands {
-		if findCommand(cmd, name) == nil {
+		if commandExists(cmd, name) == nil {
 			t.Errorf("missing subcommand %q", name)
 		}
 	}
@@ -63,7 +63,7 @@ func TestImportantFlags(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.command+"/"+tt.flag, func(t *testing.T) {
-			subcommand := findCommand(cmd, tt.command)
+			subcommand := commandExists(cmd, tt.command)
 			if subcommand == nil {
 				t.Fatalf("missing subcommand %q", tt.command)
 			}
@@ -117,7 +117,7 @@ func TestImportantFlags(t *testing.T) {
 //	}
 //}
 
-func findCommand(cmd *cli.Command, name string) *cli.Command {
+func commandExists(cmd *cli.Command, name string) *cli.Command {
 	for _, subcommand := range cmd.Commands {
 		if subcommand.Name == name {
 			return subcommand
