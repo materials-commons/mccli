@@ -407,18 +407,29 @@ func TestWalkNodesAndReconcileRemoteOnly(t *testing.T) {
 	records := fakeDirectoryRecordStore{}
 	reconciler := New(ModeDownload)
 
-	var gotStates map[string]FileState
-	err := WalkNodesAndReconcile(ctx, WalkNode{
-		LocalPath:  projectRoot,
-		RemotePath: "/",
-	}, listDir, records, reconciler, WalkOptions{
+	walkOpts := WalkOptions{
 		Recursive:  false,
 		Ignore:     ChainIgnore(nil),
 		Translator: translator,
-	}, func(ctx context.Context, node WalkNode, states map[string]FileState) error {
-		gotStates = states
-		return nil
-	})
+	}
+	var gotStates map[string]FileState
+
+	walkParams := WalkNodesAndReconcileParams{
+		Root: WalkNode{
+			LocalPath:  projectRoot,
+			RemotePath: "/",
+		},
+		ListDir:          listDir,
+		DirRecordsGetter: records,
+		Reconciler:       reconciler,
+		Options:          walkOpts,
+		CallbackFunc: func(ctx context.Context, node WalkNode, states map[string]FileState) error {
+			gotStates = states
+			return nil
+		},
+	}
+
+	err := WalkNodesAndReconcile(ctx, walkParams)
 	if err != nil {
 		t.Fatalf("WalkNodesAndReconcile() error = %v", err)
 	}
@@ -473,18 +484,28 @@ func TestMergedNodeListDirRecursesIntoRemoteOnlyDirectory(t *testing.T) {
 
 	merged := MakeMergedNodeListDirFunc(translator, localListDir, remoteListDir)
 
-	var visited []string
-	err := WalkNodes(ctx, WalkNode{
-		LocalPath:  projectRoot,
-		RemotePath: "/",
-	}, merged, WalkOptions{
+	walkOpts := WalkOptions{
 		Recursive:  true,
 		Ignore:     ChainIgnore(nil),
 		Translator: translator,
-	}, func(ctx context.Context, node WalkNode, observations []Observation) error {
-		visited = append(visited, node.RemotePath)
-		return nil
-	})
+	}
+
+	var visited []string
+
+	walkParams := WalkNodesParams{
+		Root: WalkNode{
+			LocalPath:  projectRoot,
+			RemotePath: "/",
+		},
+		ListDir: merged,
+		Options: walkOpts,
+		CallbackFunc: func(ctx context.Context, node WalkNode, observations []Observation) error {
+			visited = append(visited, node.RemotePath)
+			return nil
+		},
+	}
+
+	err := WalkNodes(ctx, walkParams)
 	if err != nil {
 		t.Fatalf("WalkNodes() error = %v", err)
 	}
@@ -501,11 +522,17 @@ func TestMergedNodeListDirRecursesIntoRemoteOnlyDirectory(t *testing.T) {
 }
 
 func TestWalkNodesEmptyRootReturnsInvalidWalkNode(t *testing.T) {
-	err := WalkNodes(context.Background(), WalkNode{}, func(ctx context.Context, node WalkNode) ([]Observation, error) {
-		return nil, nil
-	}, WalkOptions{}, func(ctx context.Context, node WalkNode, observations []Observation) error {
-		return nil
-	})
+	walkParams := WalkNodesParams{
+		Root: WalkNode{},
+		ListDir: func(ctx context.Context, node WalkNode) ([]Observation, error) {
+			return nil, nil
+		},
+		Options: WalkOptions{},
+		CallbackFunc: func(ctx context.Context, node WalkNode, observations []Observation) error {
+			return nil
+		},
+	}
+	err := WalkNodes(context.Background(), walkParams)
 
 	if !errors.Is(err, ErrInvalidWalkNode) {
 		t.Fatalf("WalkNodes() error = %v, want ErrInvalidWalkNode", err)
@@ -513,13 +540,19 @@ func TestWalkNodesEmptyRootReturnsInvalidWalkNode(t *testing.T) {
 }
 
 func TestWalkNodesRelativeRemotePathReturnsInvalidWalkNode(t *testing.T) {
-	err := WalkNodes(context.Background(), WalkNode{
-		RemotePath: "Dir1",
-	}, func(ctx context.Context, node WalkNode) ([]Observation, error) {
-		return nil, nil
-	}, WalkOptions{}, func(ctx context.Context, node WalkNode, observations []Observation) error {
-		return nil
-	})
+	walkParams := WalkNodesParams{
+		Root: WalkNode{
+			RemotePath: "Dir1",
+		},
+		ListDir: func(ctx context.Context, node WalkNode) ([]Observation, error) {
+			return nil, nil
+		},
+		Options: WalkOptions{},
+		CallbackFunc: func(ctx context.Context, node WalkNode, observations []Observation) error {
+			return nil
+		},
+	}
+	err := WalkNodes(context.Background(), walkParams)
 
 	if !errors.Is(err, ErrInvalidWalkNode) {
 		t.Fatalf("WalkNodes() error = %v, want ErrInvalidWalkNode", err)
@@ -531,17 +564,27 @@ func TestWalkNodesSynthesizesLocalPathForRemoteOnlyNode(t *testing.T) {
 	projectRoot := t.TempDir()
 	translator := mustTranslator(t, projectRoot)
 
-	var gotNode WalkNode
-	err := WalkNodes(ctx, WalkNode{
-		RemotePath: "/RemoteDir",
-	}, func(ctx context.Context, node WalkNode) ([]Observation, error) {
-		return nil, nil
-	}, WalkOptions{
+	walkOpts := WalkOptions{
 		Translator: translator,
-	}, func(ctx context.Context, node WalkNode, observations []Observation) error {
-		gotNode = node
-		return nil
-	})
+	}
+
+	var gotNode WalkNode
+
+	walkParams := WalkNodesParams{
+		Root: WalkNode{
+			RemotePath: "/RemoteDir",
+		},
+		ListDir: func(ctx context.Context, node WalkNode) ([]Observation, error) {
+			return nil, nil
+		},
+		Options: walkOpts,
+		CallbackFunc: func(ctx context.Context, node WalkNode, observations []Observation) error {
+			gotNode = node
+			return nil
+		},
+	}
+
+	err := WalkNodes(ctx, walkParams)
 	if err != nil {
 		t.Fatalf("WalkNodes() error = %v", err)
 	}
@@ -587,20 +630,30 @@ func TestWalkNodesIgnoreUsesSynthesizedLocalPathForRemoteOnlyEntry(t *testing.T)
 		}, nil
 	}
 
-	var got []Observation
-	err := WalkNodes(ctx, WalkNode{
-		LocalPath:  projectRoot,
-		RemotePath: "/",
-	}, listDir, WalkOptions{
+	walkOpts := WalkOptions{
 		Recursive:  false,
 		Translator: translator,
 		Ignore: func(pathValue string, isDir bool) bool {
 			return filepath.Base(pathValue) == "SkipMe"
 		},
-	}, func(ctx context.Context, node WalkNode, observations []Observation) error {
-		got = observations
-		return nil
-	})
+	}
+
+	var got []Observation
+
+	walkParams := WalkNodesParams{
+		Root: WalkNode{
+			LocalPath:  projectRoot,
+			RemotePath: "/",
+		},
+		ListDir: listDir,
+		Options: walkOpts,
+		CallbackFunc: func(ctx context.Context, node WalkNode, observations []Observation) error {
+			got = observations
+			return nil
+		},
+	}
+
+	err := WalkNodes(ctx, walkParams)
 	if err != nil {
 		t.Fatalf("WalkNodes() error = %v", err)
 	}
@@ -644,19 +697,20 @@ func TestRemoteOnlyListDirRejectsMalformedRemoteEntry(t *testing.T) {
 func TestWalkNodesAndReconcileMissingRemotePathReturnsInvalidWalkNode(t *testing.T) {
 	ctx := context.Background()
 
-	err := WalkNodesAndReconcile(
-		ctx,
-		WalkNode{LocalPath: "/tmp/project"},
-		func(ctx context.Context, node WalkNode) ([]Observation, error) {
+	walkParams := WalkNodesAndReconcileParams{
+		Root: WalkNode{LocalPath: "/tmp/project"},
+		ListDir: func(ctx context.Context, node WalkNode) ([]Observation, error) {
 			return nil, nil
 		},
-		fakeDirectoryRecordStore{},
-		New(ModeStatus),
-		WalkOptions{},
-		func(ctx context.Context, node WalkNode, states map[string]FileState) error {
+		DirRecordsGetter: fakeDirectoryRecordStore{},
+		Reconciler:       New(ModeStatus),
+		Options:          WalkOptions{},
+		CallbackFunc: func(ctx context.Context, node WalkNode, states map[string]FileState) error {
 			return nil
 		},
-	)
+	}
+
+	err := WalkNodesAndReconcile(ctx, walkParams)
 
 	if !errors.Is(err, ErrInvalidWalkNode) {
 		t.Fatalf("WalkNodesAndReconcile() error = %v, want ErrInvalidWalkNode", err)
@@ -667,12 +721,18 @@ func TestWalkNodesContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	err := WalkNodes(ctx, WalkNode{RemotePath: "/"}, func(ctx context.Context, node WalkNode) ([]Observation, error) {
-		t.Fatal("listDir should not be called after context cancellation")
-		return nil, nil
-	}, WalkOptions{}, func(ctx context.Context, node WalkNode, observations []Observation) error {
-		return nil
-	})
+	walkParams := WalkNodesParams{
+		Root: WalkNode{RemotePath: "/"},
+		ListDir: func(ctx context.Context, node WalkNode) ([]Observation, error) {
+			t.Fatal("listDir should not be called after context cancellation")
+			return nil, nil
+		},
+		Options: WalkOptions{},
+		CallbackFunc: func(ctx context.Context, node WalkNode, observations []Observation) error {
+			return nil
+		},
+	}
+	err := WalkNodes(ctx, walkParams)
 
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("WalkNodes() error = %v, want context.Canceled", err)
@@ -683,11 +743,18 @@ func TestWalkNodesCallbackErrorIsReturned(t *testing.T) {
 	ctx := context.Background()
 	callbackErr := fmt.Errorf("callback failed")
 
-	err := WalkNodes(ctx, WalkNode{RemotePath: "/"}, func(ctx context.Context, node WalkNode) ([]Observation, error) {
-		return nil, nil
-	}, WalkOptions{}, func(ctx context.Context, node WalkNode, observations []Observation) error {
-		return callbackErr
-	})
+	walkParams := WalkNodesParams{
+		Root: WalkNode{RemotePath: "/"},
+		ListDir: func(ctx context.Context, node WalkNode) ([]Observation, error) {
+			return nil, nil
+		},
+		Options: WalkOptions{},
+		CallbackFunc: func(ctx context.Context, node WalkNode, observations []Observation) error {
+			return callbackErr
+		},
+	}
+
+	err := WalkNodes(ctx, walkParams)
 
 	if !errors.Is(err, callbackErr) {
 		t.Fatalf("WalkNodes() error = %v, want callbackErr", err)
