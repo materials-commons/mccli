@@ -247,7 +247,12 @@ func uploadDirectory(ctx context.Context, req queueRequest, localDir string) ([]
 
 	node := reconcile.WalkNode{LocalPath: localDir, RemotePath: remotePath}
 
-	err = reconcile.WalkNodes(ctx, node, localListFn, options, uploadFn)
+	err = reconcile.WalkNodes(ctx, reconcile.WalkNodesParams{
+		Root:         node,
+		ListDir:      localListFn,
+		Options:      options,
+		CallbackFunc: uploadFn,
+	})
 	if err != nil {
 		return nil, err
 	}

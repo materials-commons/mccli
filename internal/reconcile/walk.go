@@ -36,6 +36,9 @@ type ListDirFunc func(ctx context.Context, localDir string) ([]Observation, erro
 // WalkFunc is called once for each listed local directory.
 type WalkFunc func(ctx context.Context, localDir string, observations []Observation) error
 
+// WalkReconcileFunc is called once per local directory with reconciled file states.
+type WalkReconcileFunc func(ctx context.Context, localDir string, states map[string]FileState) error
+
 // WalkNode identifies one directory in a project walk.
 //
 // LocalPath is the local filesystem path for the node when it exists or can be
@@ -53,6 +56,9 @@ type NodeListDirFunc func(ctx context.Context, node WalkNode) ([]Observation, er
 // WalkNodeFunc is called once for each listed node.
 type WalkNodeFunc func(ctx context.Context, node WalkNode, observations []Observation) error
 
+// WalkNodeReconcileFunc is called once per walk node with reconciled file states.
+type WalkNodeReconcileFunc func(ctx context.Context, node WalkNode, states map[string]FileState) error
+
 // DirectoryRecordGetter loads persisted file state for a remote directory path.
 type DirectoryRecordGetter interface {
 	ListByDir(ctx context.Context, dir string) ([]filedb.FileRecord, error)
@@ -69,38 +75,58 @@ type WalkOptions struct {
 	Translator mc.ProjectPathTranslator
 }
 
+type WalkParams struct {
+	Root         string
+	ListDir      ListDirFunc
+	Options      WalkOptions
+	CallbackFunc WalkFunc
+}
+
 // Walk walks a directory tree using listDir to observe each directory.
 //
-// Walk is local-path oriented. Use WalkNodes for remote-only or mixed local/
-// remote walks.
-func Walk(ctx context.Context, root string, listDir ListDirFunc, options WalkOptions, fn WalkFunc) error {
-	if listDir == nil {
+// Walk is local-path-oriented. Use WalkNodes for remote-only or mixed
+// local/remote walks.
+func Walk(ctx context.Context, params WalkParams) error {
+	if params.ListDir == nil {
 		return fmt.Errorf("list directory function is required")
 	}
-	if fn == nil {
+	if params.CallbackFunc == nil {
 		return fmt.Errorf("walk callback is required")
 	}
 
-	return WalkNodes(ctx, WalkNode{LocalPath: root}, func(ctx context.Context, node WalkNode) ([]Observation, error) {
-		return listDir(ctx, node.LocalPath)
-	}, options, func(ctx context.Context, node WalkNode, observations []Observation) error {
-		return fn(ctx, node.LocalPath, observations)
-	})
+	nodesParams := WalkNodesParams{
+		Root: WalkNode{LocalPath: params.Root},
+		ListDir: func(ctx context.Context, node WalkNode) ([]Observation, error) {
+			return params.ListDir(ctx, node.LocalPath)
+		},
+		Options: params.Options,
+		CallbackFunc: func(ctx context.Context, node WalkNode, observations []Observation) error {
+			return params.CallbackFunc(ctx, node.LocalPath, observations)
+		},
+	}
+	return WalkNodes(ctx, nodesParams)
+}
+
+type WalkNodesParams struct {
+	Root         WalkNode
+	ListDir      NodeListDirFunc
+	Options      WalkOptions
+	CallbackFunc WalkNodeFunc
 }
 
 // WalkNodes walks a directory tree using explicit local/remote walk nodes.
 //
 // This supports local-only, remote-only, and merged local/remote recursive
 // traversal.
-func WalkNodes(ctx context.Context, root WalkNode, listDir NodeListDirFunc, options WalkOptions, fn WalkNodeFunc) error {
-	if listDir == nil {
+func WalkNodes(ctx context.Context, params WalkNodesParams) error {
+	if params.ListDir == nil {
 		return fmt.Errorf("node list directory function is required")
 	}
-	if fn == nil {
+	if params.CallbackFunc == nil {
 		return fmt.Errorf("walk node callback is required")
 	}
 
-	root, err := normalizeWalkNode(root, options.Translator)
+	root, err := normalizeWalkNode(params.Root, params.Options.Translator)
 	if err != nil {
 		return err
 	}
@@ -115,27 +141,27 @@ func WalkNodes(ctx context.Context, root WalkNode, listDir NodeListDirFunc, opti
 		current := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 
-		current, err := normalizeWalkNode(current, options.Translator)
+		current, err := normalizeWalkNode(current, params.Options.Translator)
 		if err != nil {
 			return err
 		}
 
-		if options.Ignore != nil && current.LocalPath != "" && options.Ignore(current.LocalPath, true) {
+		if params.Options.Ignore != nil && current.LocalPath != "" && params.Options.Ignore(current.LocalPath, true) {
 			continue
 		}
 
-		observations, err := listDir(ctx, current)
+		observations, err := params.ListDir(ctx, current)
 		if err != nil {
 			return err
 		}
 
-		filtered := filterObservations(observations, options.Ignore, options.Translator)
+		filtered := filterObservations(observations, params.Options.Ignore, params.Options.Translator)
 
-		if err := fn(ctx, current, filtered); err != nil {
+		if err := params.CallbackFunc(ctx, current, filtered); err != nil {
 			return err
 		}
 
-		if !options.Recursive {
+		if !params.Options.Recursive {
 			continue
 		}
 
@@ -145,7 +171,7 @@ func WalkNodes(ctx context.Context, root WalkNode, listDir NodeListDirFunc, opti
 				continue
 			}
 
-			child, err := walkNodeFromObservation(obs, options.Translator)
+			child, err := walkNodeFromObservation(obs, params.Options.Translator)
 			if err != nil {
 				return err
 			}
@@ -158,6 +184,119 @@ func WalkNodes(ctx context.Context, root WalkNode, listDir NodeListDirFunc, opti
 	}
 
 	return nil
+}
+
+type WalkAndReconcileParams struct {
+	Root         string
+	ListDir      ListDirFunc
+	Translator   mc.ProjectPathTranslator
+	Records      DirectoryRecordGetter
+	Reconciler   *Reconciler
+	Options      WalkOptions
+	CallbackFunc WalkReconcileFunc
+}
+
+// WalkAndReconcile walks from root using listDir and reconciles each observed
+// entry.
+//
+// The callback is invoked once per directory with a map keyed by entry name.
+func WalkAndReconcile(ctx context.Context, params WalkAndReconcileParams) error {
+	remoteRoot, err := params.Translator.LocalToRemote(params.Root)
+	if err != nil {
+		return err
+	}
+
+	walkNodesAndReconcileParams := WalkNodesAndReconcileParams{
+		Root: WalkNode{LocalPath: params.Root, RemotePath: remoteRoot},
+		ListDir: func(ctx context.Context, node WalkNode) ([]Observation, error) {
+			return params.ListDir(ctx, node.LocalPath)
+		},
+		DirRecordsGetter: params.Records,
+		Reconciler:       params.Reconciler,
+		Options:          params.Options,
+		CallbackFunc: func(ctx context.Context, node WalkNode, states map[string]FileState) error {
+			return params.CallbackFunc(ctx, node.LocalPath, states)
+		},
+	}
+
+	return WalkNodesAndReconcile(ctx, walkNodesAndReconcileParams)
+}
+
+type WalkNodesAndReconcileParams struct {
+	Root             WalkNode
+	ListDir          NodeListDirFunc
+	DirRecordsGetter DirectoryRecordGetter
+	Reconciler       *Reconciler
+	Options          WalkOptions
+	CallbackFunc     WalkNodeReconcileFunc
+}
+
+// WalkNodesAndReconcile walks from root using node-aware listDir and reconciles
+// each observed entry.
+//
+// This supports remote-only recursive reconciliation.
+func WalkNodesAndReconcile(ctx context.Context, params WalkNodesAndReconcileParams) error {
+	if params.DirRecordsGetter == nil {
+		return fmt.Errorf("directory record getter is required")
+	}
+	if params.Reconciler == nil {
+		return fmt.Errorf("reconciler is required")
+	}
+	if params.CallbackFunc == nil {
+		return fmt.Errorf("walk reconcile callback is required")
+	}
+
+	walkNodesCallbackFunc := func(ctx context.Context, node WalkNode, observations []Observation) error {
+		node, err := normalizeWalkNode(node, params.Options.Translator)
+		if err != nil {
+			return err
+		}
+
+		remoteDir := node.RemotePath
+		if remoteDir == "" {
+			return fmt.Errorf("%w: remote path is required for reconciliation", ErrInvalidWalkNode)
+		}
+
+		fileRecords, err := params.DirRecordsGetter.ListByDir(ctx, remoteDir)
+		if err != nil {
+			return fmt.Errorf("list file records by dir %q: %w", remoteDir, err)
+		}
+
+		recordsByName := make(map[string]filedb.FileRecord, len(fileRecords))
+		for _, record := range fileRecords {
+			recordsByName[record.Name] = record
+		}
+
+		states := make(map[string]FileState, len(observations))
+		for _, obs := range observations {
+			record, ok := recordsByName[obs.Name]
+			if ok {
+				recordCopy := record
+				obs.FileRecord = &recordCopy
+			}
+
+			decision, err := params.Reconciler.Reconcile(ctx, obs)
+			if err != nil {
+				return fmt.Errorf("reconcile %q: %w", obs.RemotePath, err)
+			}
+
+			states[obs.Name] = FileState{
+				Observation: obs,
+				Decision:    decision,
+			}
+		}
+
+		return params.CallbackFunc(ctx, node, states)
+	}
+
+	nodesParams := WalkNodesParams{
+		Root:         params.Root,
+		ListDir:      params.ListDir,
+		Options:      params.Options,
+		CallbackFunc: walkNodesCallbackFunc,
+	}
+
+	return WalkNodes(ctx, nodesParams)
 }
 
 // MakeLocalListDirFunc returns a ListDirFunc that lists local filesystem entries.
@@ -425,107 +564,6 @@ func MakeMergedNodeListDirFunc(translator mc.ProjectPathTranslator, localListDir
 
 		return merged, nil
 	}
-}
-
-// WalkAndReconcile walks from root using listDir and reconciles each observed
-// entry.
-//
-// The callback is invoked once per directory with a map keyed by entry name.
-func WalkAndReconcile(
-	ctx context.Context,
-	root string,
-	listDir ListDirFunc,
-	translator mc.ProjectPathTranslator,
-	records DirectoryRecordGetter,
-	reconciler *Reconciler,
-	options WalkOptions,
-	fn func(ctx context.Context, localDir string, states map[string]FileState) error,
-) error {
-	remoteRoot, err := translator.LocalToRemote(root)
-	if err != nil {
-		return err
-	}
-
-	return WalkNodesAndReconcile(
-		ctx,
-		WalkNode{LocalPath: root, RemotePath: remoteRoot},
-		func(ctx context.Context, node WalkNode) ([]Observation, error) {
-			return listDir(ctx, node.LocalPath)
-		},
-		records,
-		reconciler,
-		options,
-		func(ctx context.Context, node WalkNode, states map[string]FileState) error {
-			return fn(ctx, node.LocalPath, states)
-		},
-	)
-}
-
-// WalkNodesAndReconcile walks from root using node-aware listDir and reconciles
-// each observed entry.
-//
-// This supports remote-only recursive reconciliation.
-func WalkNodesAndReconcile(
-	ctx context.Context,
-	root WalkNode,
-	listDir NodeListDirFunc,
-	records DirectoryRecordGetter,
-	reconciler *Reconciler,
-	options WalkOptions,
-	fn func(ctx context.Context, node WalkNode, states map[string]FileState) error,
-) error {
-	if records == nil {
-		return fmt.Errorf("directory record getter is required")
-	}
-	if reconciler == nil {
-		return fmt.Errorf("reconciler is required")
-	}
-	if fn == nil {
-		return fmt.Errorf("walk reconcile callback is required")
-	}
-
-	return WalkNodes(ctx, root, listDir, options, func(ctx context.Context, node WalkNode, observations []Observation) error {
-		node, err := normalizeWalkNode(node, options.Translator)
-		if err != nil {
-			return err
-		}
-
-		remoteDir := node.RemotePath
-		if remoteDir == "" {
-			return fmt.Errorf("%w: remote path is required for reconciliation", ErrInvalidWalkNode)
-		}
-
-		fileRecords, err := records.ListByDir(ctx, remoteDir)
-		if err != nil {
-			return fmt.Errorf("list file records by dir %q: %w", remoteDir, err)
-		}
-
-		recordsByName := make(map[string]filedb.FileRecord, len(fileRecords))
-		for _, record := range fileRecords {
-			recordsByName[record.Name] = record
-		}
-
-		states := make(map[string]FileState, len(observations))
-		for _, obs := range observations {
-			record, ok := recordsByName[obs.Name]
-			if ok {
-				recordCopy := record
-				obs.FileRecord = &recordCopy
-			}
-
-			decision, err := reconciler.Reconcile(ctx, obs)
-			if err != nil {
-				return fmt.Errorf("reconcile %q: %w", obs.RemotePath, err)
-			}
-
-			states[obs.Name] = FileState{
-				Observation: obs,
-				Decision:    decision,
-			}
-		}
-
-		return fn(ctx, node, states)
-	})
 }
 
 // DefaultIgnore reports whether pathValue should always be ignored.
