@@ -284,7 +284,7 @@ func (r *remover) removeDirectory(ctx context.Context, remoteDir string) error {
 		Recursive:  true,
 		Translator: r.translator,
 	}
-	
+
 	walkParams := reconcile.WalkNodesAndReconcileParams{
 		Root:             reconcile.WalkNode{RemotePath: remoteDir},
 		ListDir:          mergedListDirFunc,

@@ -60,14 +60,23 @@ func TestWalkLocalRecursive(t *testing.T) {
 	listDir := MakeLocalListDirFunc(translator, fixedNow)
 
 	var visited []string
-	err := Walk(ctx, projectRoot, listDir, WalkOptions{
+	walkOptions := WalkOptions{
 		Recursive:  true,
 		Ignore:     ChainIgnore(nil),
 		Translator: translator,
-	}, func(ctx context.Context, localDir string, observations []Observation) error {
-		visited = append(visited, localDir)
-		return nil
-	})
+	}
+
+	walkParams := WalkParams{
+		Options: walkOptions,
+		ListDir: listDir,
+		Root:    projectRoot,
+		CallbackFunc: func(ctx context.Context, localDir string, observations []Observation) error {
+			visited = append(visited, localDir)
+			return nil
+		},
+	}
+
+	err := Walk(ctx, walkParams)
 	if err != nil {
 		t.Fatalf("Walk() error = %v", err)
 	}
@@ -94,20 +103,28 @@ func TestWalkFiltersDefaultIgnoredFiles(t *testing.T) {
 
 	translator := mustTranslator(t, projectRoot)
 	listDir := MakeLocalListDirFunc(translator, fixedNow)
-
-	err := Walk(ctx, projectRoot, listDir, WalkOptions{
+	walkOpts := WalkOptions{
 		Recursive:  false,
 		Ignore:     ChainIgnore(nil),
 		Translator: translator,
-	}, func(ctx context.Context, localDir string, observations []Observation) error {
-		if len(observations) != 1 {
-			t.Fatalf("len(observations) = %d, want 1", len(observations))
-		}
-		if observations[0].Name != "keep.txt" {
-			t.Fatalf("observations[0].Name = %q, want keep.txt", observations[0].Name)
-		}
-		return nil
-	})
+	}
+
+	walkParams := WalkParams{
+		Root:    projectRoot,
+		ListDir: listDir,
+		Options: walkOpts,
+		CallbackFunc: func(ctx context.Context, localDir string, observations []Observation) error {
+			if len(observations) != 1 {
+				t.Fatalf("len(observations) = %d, want 1", len(observations))
+			}
+			if observations[0].Name != "keep.txt" {
+				t.Fatalf("observations[0].Name = %q, want keep.txt", observations[0].Name)
+			}
+			return nil
+		},
+	}
+
+	err := Walk(ctx, walkParams)
 	if err != nil {
 		t.Fatalf("Walk() error = %v", err)
 	}
@@ -257,14 +274,26 @@ func TestWalkAndReconcile(t *testing.T) {
 
 	reconciler := New(ModeUpload).WithChecksumFunc(fakeChecksum("local-md5"))
 
-	var gotStates map[string]FileState
-	err := WalkAndReconcile(ctx, projectRoot, listDir, translator, records, reconciler, WalkOptions{
+	walkOpts := WalkOptions{
 		Recursive: false,
 		Ignore:    ChainIgnore(nil),
-	}, func(ctx context.Context, localDir string, states map[string]FileState) error {
-		gotStates = states
-		return nil
-	})
+	}
+
+	var gotStates map[string]FileState
+	walkParams := WalkAndReconcileParams{
+		Root:       projectRoot,
+		ListDir:    listDir,
+		Translator: translator,
+		Reconciler: reconciler,
+		Options:    walkOpts,
+		Records:    records,
+		CallbackFunc: func(ctx context.Context, localDir string, states map[string]FileState) error {
+			gotStates = states
+			return nil
+		},
+	}
+
+	err := WalkAndReconcile(ctx, walkParams)
 	if err != nil {
 		t.Fatalf("WalkAndReconcile() error = %v", err)
 	}
@@ -315,18 +344,28 @@ func TestWalkNodesRemoteOnlyRecursive(t *testing.T) {
 
 	listDir := MakeRemoteOnlyListDirFunc(123, translator, remote)
 
-	var visited []string
-	err := WalkNodes(ctx, WalkNode{
-		LocalPath:  projectRoot,
-		RemotePath: "/",
-	}, listDir, WalkOptions{
+	walkOpts := WalkOptions{
 		Recursive:  true,
 		Ignore:     ChainIgnore(nil),
 		Translator: translator,
-	}, func(ctx context.Context, node WalkNode, observations []Observation) error {
-		visited = append(visited, node.RemotePath)
-		return nil
-	})
+	}
+
+	var visited []string
+
+	walkParams := WalkNodesParams{
+		Root: WalkNode{
+			LocalPath:  projectRoot,
+			RemotePath: "/",
+		},
+		ListDir: listDir,
+		Options: walkOpts,
+		CallbackFunc: func(ctx context.Context, node WalkNode, observations []Observation) error {
+			visited = append(visited, node.RemotePath)
+			return nil
+		},
+	}
+
+	err := WalkNodes(ctx, walkParams)
 	if err != nil {
 		t.Fatalf("WalkNodes() error = %v", err)
 	}
