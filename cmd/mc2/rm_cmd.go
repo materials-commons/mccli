@@ -284,9 +284,14 @@ func (r *remover) removeDirectory(ctx context.Context, remoteDir string) error {
 		Recursive:  true,
 		Translator: r.translator,
 	}
-
-	return reconcile.WalkNodesAndReconcile(ctx, reconcile.WalkNode{RemotePath: remoteDir}, mergedListDirFunc, r.store,
-		r.reconciler, walkOptions, func(ctx context.Context, node reconcile.WalkNode, states map[string]reconcile.FileState) error {
+	
+	walkParams := reconcile.WalkNodesAndReconcileParams{
+		Root:             reconcile.WalkNode{RemotePath: remoteDir},
+		ListDir:          mergedListDirFunc,
+		DirRecordsGetter: r.store,
+		Reconciler:       r.reconciler,
+		Options:          walkOptions,
+		CallbackFunc: func(ctx context.Context, node reconcile.WalkNode, states map[string]reconcile.FileState) error {
 			for _, state := range states {
 				if !stateIsFile(state) {
 					continue
@@ -298,7 +303,10 @@ func (r *remover) removeDirectory(ctx context.Context, remoteDir string) error {
 			}
 
 			return nil
-		})
+		},
+	}
+
+	return reconcile.WalkNodesAndReconcile(ctx, walkParams)
 }
 
 func (r *remover) removeFileFromState(ctx context.Context, state reconcile.FileState) error {

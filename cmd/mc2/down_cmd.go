@@ -245,7 +245,7 @@ func queueRemotePath(ctx context.Context, req queueRequest, remotePath string) (
 }
 
 func queueDirectoryDownloads(ctx context.Context, req queueRequest, remoteDir string) ([]string, error) {
-	remoteList := reconcile.MakeRemoteOnlyListDirFunc(req.project.ProjectID, req.translator, req.remote)
+	remoteListDirFunc := reconcile.MakeRemoteOnlyListDirFunc(req.project.ProjectID, req.translator, req.remote)
 
 	options := reconcile.WalkOptions{
 		Recursive:  req.opts.Recursive,
@@ -255,14 +255,13 @@ func queueDirectoryDownloads(ctx context.Context, req queueRequest, remoteDir st
 
 	var transferIDs []string
 
-	err := reconcile.WalkNodesAndReconcile(
-		ctx,
-		reconcile.WalkNode{RemotePath: remoteDir},
-		remoteList,
-		req.store,
-		req.reconciler,
-		options,
-		func(ctx context.Context, node reconcile.WalkNode, states map[string]reconcile.FileState) error {
+	walkParams := reconcile.WalkNodesAndReconcileParams{
+		Root: reconcile.WalkNode{RemotePath: remoteDir},
+		ListDir: remoteListDirFunc,
+		DirRecordsGetter: req.store,
+		Reconciler: req.reconciler,
+		Options: options,
+		CallbackFunc: func(ctx context.Context, node reconcile.WalkNode, states map[string]reconcile.FileState) error {
 			for _, state := range states {
 				if state.Observation.RemoteEntry == nil || state.Observation.RemoteEntry.Kind != reconcile.KindFile {
 					continue
@@ -279,7 +278,9 @@ func queueDirectoryDownloads(ctx context.Context, req queueRequest, remoteDir st
 
 			return nil
 		},
-	)
+	}
+
+	err := reconcile.WalkNodesAndReconcile(ctx, walkParams)
 	if err != nil {
 		return nil, err
 	}
