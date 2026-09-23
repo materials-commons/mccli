@@ -272,13 +272,13 @@ func (r *remover) removeDirectory(ctx context.Context, remoteDir string) error {
 	// Construct a local and remote directory walker.
 
 	// First create the local list dir func
-	localListDirFunc := reconcile.LocalNodeListDir(r.translator, nil)
+	localListDirFunc := reconcile.MakeLocalNodeListDirFunc(r.translator, nil)
 
 	// Then create the remote list dir func
-	remoteListDirFunc := reconcile.RemoteOnlyListDir(r.project.ProjectID, r.translator, r.remoteGetter)
+	remoteListDirFunc := reconcile.MakeRemoteOnlyListDirFunc(r.project.ProjectID, r.translator, r.remoteGetter)
 
 	// Finally created the merged local/remote list dir func
-	mergedListDirFunc := reconcile.MergedNodeListDir(r.translator, localListDirFunc, remoteListDirFunc)
+	mergedListDirFunc := reconcile.MakeMergedNodeListDirFunc(r.translator, localListDirFunc, remoteListDirFunc)
 
 	walkOptions := reconcile.WalkOptions{
 		Recursive:  true,

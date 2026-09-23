@@ -24,7 +24,7 @@ func TestLocalListDir(t *testing.T) {
 	}
 
 	translator := mustTranslator(t, projectRoot)
-	listDir := LocalListDir(translator, fixedNow)
+	listDir := MakeLocalListDirFunc(translator, fixedNow)
 
 	observations, err := listDir(ctx, projectRoot)
 	if err != nil {
@@ -57,7 +57,7 @@ func TestWalkLocalRecursive(t *testing.T) {
 	writeTestFile(t, filepath.Join(projectRoot, "Dir1", "child.txt"), "child")
 
 	translator := mustTranslator(t, projectRoot)
-	listDir := LocalListDir(translator, fixedNow)
+	listDir := MakeLocalListDirFunc(translator, fixedNow)
 
 	var visited []string
 	err := Walk(ctx, projectRoot, listDir, WalkOptions{
@@ -93,7 +93,7 @@ func TestWalkFiltersDefaultIgnoredFiles(t *testing.T) {
 	writeTestFile(t, filepath.Join(projectRoot, "keep.txt"), "keep")
 
 	translator := mustTranslator(t, projectRoot)
-	listDir := LocalListDir(translator, fixedNow)
+	listDir := MakeLocalListDirFunc(translator, fixedNow)
 
 	err := Walk(ctx, projectRoot, listDir, WalkOptions{
 		Recursive:  false,
@@ -133,7 +133,7 @@ func TestRemoteListDir(t *testing.T) {
 		},
 	}
 
-	listDir := RemoteListDir(123, translator, remote)
+	listDir := MakeRemoteListDirFunc(123, translator, remote)
 
 	observations, err := listDir(ctx, projectRoot)
 	if err != nil {
@@ -166,7 +166,7 @@ func TestRemoteListDirNotFoundReturnsEmpty(t *testing.T) {
 		err: &mcapi.APIError{StatusCode: http.StatusNotFound, Status: "404 Not Found"},
 	}
 
-	listDir := RemoteListDir(123, translator, remote)
+	listDir := MakeRemoteListDirFunc(123, translator, remote)
 
 	observations, err := listDir(ctx, projectRoot)
 	if err != nil {
@@ -185,8 +185,8 @@ func TestMergedListDir(t *testing.T) {
 
 	translator := mustTranslator(t, projectRoot)
 
-	localListDir := LocalListDir(translator, fixedNow)
-	remoteListDir := RemoteListDir(123, translator, &fakeRemoteDirectoryLister{
+	localListDir := MakeLocalListDirFunc(translator, fixedNow)
+	remoteListDir := MakeRemoteListDirFunc(123, translator, &fakeRemoteDirectoryLister{
 		files: []mcmodel.File{
 			{
 				ID:        10,
@@ -211,7 +211,7 @@ func TestMergedListDir(t *testing.T) {
 		},
 	})
 
-	merged := MergedListDir(translator, localListDir, remoteListDir)
+	merged := MakeMergedListDirFunc(translator, localListDir, remoteListDir)
 
 	observations, err := merged(ctx, projectRoot)
 	if err != nil {
@@ -237,7 +237,7 @@ func TestWalkAndReconcile(t *testing.T) {
 	writeTestFile(t, filepath.Join(projectRoot, "file.txt"), "hello")
 
 	translator := mustTranslator(t, projectRoot)
-	listDir := LocalListDir(translator, fixedNow)
+	listDir := MakeLocalListDirFunc(translator, fixedNow)
 
 	records := fakeDirectoryRecordStore{
 		recordsByDir: map[string][]filedb.FileRecord{
@@ -313,7 +313,7 @@ func TestWalkNodesRemoteOnlyRecursive(t *testing.T) {
 		},
 	}
 
-	listDir := RemoteOnlyListDir(123, translator, remote)
+	listDir := MakeRemoteOnlyListDirFunc(123, translator, remote)
 
 	var visited []string
 	err := WalkNodes(ctx, WalkNode{
@@ -364,7 +364,7 @@ func TestWalkNodesAndReconcileRemoteOnly(t *testing.T) {
 		},
 	}
 
-	listDir := RemoteOnlyListDir(123, translator, remote)
+	listDir := MakeRemoteOnlyListDirFunc(123, translator, remote)
 	records := fakeDirectoryRecordStore{}
 	reconciler := New(ModeDownload)
 
@@ -404,8 +404,8 @@ func TestMergedNodeListDirRecursesIntoRemoteOnlyDirectory(t *testing.T) {
 	projectRoot := t.TempDir()
 	translator := mustTranslator(t, projectRoot)
 
-	localListDir := LocalNodeListDir(translator, fixedNow)
-	remoteListDir := RemoteOnlyListDir(123, translator, &fakeRemoteDirectoryLister{
+	localListDir := MakeLocalNodeListDirFunc(translator, fixedNow)
+	remoteListDir := MakeRemoteOnlyListDirFunc(123, translator, &fakeRemoteDirectoryLister{
 		filesByPath: map[string][]mcmodel.File{
 			"/": {
 				{
@@ -432,7 +432,7 @@ func TestMergedNodeListDirRecursesIntoRemoteOnlyDirectory(t *testing.T) {
 		},
 	})
 
-	merged := MergedNodeListDir(translator, localListDir, remoteListDir)
+	merged := MakeMergedNodeListDirFunc(translator, localListDir, remoteListDir)
 
 	var visited []string
 	err := WalkNodes(ctx, WalkNode{
@@ -591,7 +591,7 @@ func TestRemoteOnlyListDirRejectsMalformedRemoteEntry(t *testing.T) {
 		},
 	}
 
-	listDir := RemoteOnlyListDir(123, translator, remote)
+	listDir := MakeRemoteOnlyListDirFunc(123, translator, remote)
 
 	_, err := listDir(ctx, WalkNode{
 		LocalPath:  projectRoot,

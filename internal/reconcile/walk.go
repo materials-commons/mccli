@@ -160,8 +160,8 @@ func WalkNodes(ctx context.Context, root WalkNode, listDir NodeListDirFunc, opti
 	return nil
 }
 
-// LocalListDir returns a ListDirFunc that lists local filesystem entries.
-func LocalListDir(translator mc.ProjectPathTranslator, now func() time.Time) ListDirFunc {
+// MakeLocalListDirFunc returns a ListDirFunc that lists local filesystem entries.
+func MakeLocalListDirFunc(translator mc.ProjectPathTranslator, now func() time.Time) ListDirFunc {
 	if now == nil {
 		now = time.Now
 	}
@@ -203,9 +203,9 @@ func LocalListDir(translator mc.ProjectPathTranslator, now func() time.Time) Lis
 	}
 }
 
-// LocalNodeListDir adapts LocalListDir for WalkNodes.
-func LocalNodeListDir(translator mc.ProjectPathTranslator, now func() time.Time) NodeListDirFunc {
-	local := LocalListDir(translator, now)
+// MakeLocalNodeListDirFunc adapts MakeLocalListDirFunc for WalkNodes.
+func MakeLocalNodeListDirFunc(translator mc.ProjectPathTranslator, now func() time.Time) NodeListDirFunc {
+	local := MakeLocalListDirFunc(translator, now)
 
 	return func(ctx context.Context, node WalkNode) ([]Observation, error) {
 		if node.LocalPath == "" {
@@ -215,10 +215,10 @@ func LocalNodeListDir(translator mc.ProjectPathTranslator, now func() time.Time)
 	}
 }
 
-// RemoteListDir returns a ListDirFunc that lists remote Materials Commons
+// MakeRemoteListDirFunc returns a ListDirFunc that lists remote Materials Commons
 // directory entries by translating localDir to its remote project path.
-func RemoteListDir(projectID int, translator mc.ProjectPathTranslator, remote mc.DirectoryLister) ListDirFunc {
-	remoteOnly := RemoteOnlyListDir(projectID, translator, remote)
+func MakeRemoteListDirFunc(projectID int, translator mc.ProjectPathTranslator, remote mc.DirectoryLister) ListDirFunc {
+	remoteOnly := MakeRemoteOnlyListDirFunc(projectID, translator, remote)
 
 	return func(ctx context.Context, localDir string) ([]Observation, error) {
 		remoteDir, err := translator.LocalToRemote(localDir)
@@ -233,11 +233,11 @@ func RemoteListDir(projectID int, translator mc.ProjectPathTranslator, remote mc
 	}
 }
 
-// RemoteOnlyListDir returns a NodeListDirFunc that lists remote Materials
+// MakeRemoteOnlyListDirFunc returns a NodeListDirFunc that lists remote Materials
 // Commons directory entries using WalkNode.RemotePath.
 //
 // This function supports remote-only recursive walking.
-func RemoteOnlyListDir(projectID int, translator mc.ProjectPathTranslator, remote mc.DirectoryLister) NodeListDirFunc {
+func MakeRemoteOnlyListDirFunc(projectID int, translator mc.ProjectPathTranslator, remote mc.DirectoryLister) NodeListDirFunc {
 	return func(ctx context.Context, node WalkNode) ([]Observation, error) {
 		if remote == nil {
 			return nil, fmt.Errorf("remote directory lister is required")
@@ -288,10 +288,10 @@ func RemoteOnlyListDir(projectID int, translator mc.ProjectPathTranslator, remot
 	}
 }
 
-// MergedListDir returns a ListDirFunc that merges local and remote directory
+// MakeMergedListDirFunc returns a ListDirFunc that merges local and remote directory
 // entries by name.
-func MergedListDir(translator mc.ProjectPathTranslator, localListDir ListDirFunc, remoteListDir ListDirFunc) ListDirFunc {
-	mergedNode := MergedNodeListDir(
+func MakeMergedListDirFunc(translator mc.ProjectPathTranslator, localListDir ListDirFunc, remoteListDir ListDirFunc) ListDirFunc {
+	mergedNode := MakeMergedNodeListDirFunc(
 		translator,
 		func(ctx context.Context, node WalkNode) ([]Observation, error) {
 			if node.LocalPath == "" {
@@ -320,12 +320,12 @@ func MergedListDir(translator mc.ProjectPathTranslator, localListDir ListDirFunc
 	}
 }
 
-// MergedNodeListDir returns a NodeListDirFunc that merges local and remote
+// MakeMergedNodeListDirFunc returns a NodeListDirFunc that merges local and remote
 // directory entries by name.
 //
-// Unlike MergedListDir, this supports remote-only nodes because the remote side
+// Unlike MakeMergedListDirFunc, this supports remote-only nodes because the remote side
 // can list using WalkNode.RemotePath even when WalkNode.LocalPath does not exist.
-func MergedNodeListDir(translator mc.ProjectPathTranslator, localListDir NodeListDirFunc, remoteListDir NodeListDirFunc) NodeListDirFunc {
+func MakeMergedNodeListDirFunc(translator mc.ProjectPathTranslator, localListDir NodeListDirFunc, remoteListDir NodeListDirFunc) NodeListDirFunc {
 	return func(ctx context.Context, node WalkNode) ([]Observation, error) {
 		if localListDir == nil {
 			return nil, fmt.Errorf("local node list directory function is required")

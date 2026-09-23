@@ -133,9 +133,9 @@ func (r Runner) listPath(ctx context.Context, req listRequest) error {
 }
 
 func listDirectory(ctx context.Context, req listRequest) error {
-	localList := reconcile.LocalNodeListDir(req.translator, req.now)
-	remoteList := reconcile.RemoteOnlyListDir(req.project.ProjectID, req.translator, req.remote)
-	mergedList := reconcile.MergedNodeListDir(req.translator, localList, remoteList)
+	localList := reconcile.MakeLocalNodeListDirFunc(req.translator, req.now)
+	remoteList := reconcile.MakeRemoteOnlyListDirFunc(req.project.ProjectID, req.translator, req.remote)
+	mergedList := reconcile.MakeMergedNodeListDirFunc(req.translator, localList, remoteList)
 
 	node := reconcile.WalkNode{
 		LocalPath: req.localPath,

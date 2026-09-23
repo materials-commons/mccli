@@ -213,7 +213,7 @@ func resolveAndQueueUploadsFromPaths(ctx context.Context, req queueRequest) ([]s
 }
 
 func uploadDirectory(ctx context.Context, req queueRequest, localDir string) ([]string, error) {
-	localListFn := reconcile.LocalNodeListDir(req.translator, req.now)
+	localListFn := reconcile.MakeLocalNodeListDirFunc(req.translator, req.now)
 
 	remotePath, err := req.translator.LocalToRemote(localDir)
 	if err != nil {

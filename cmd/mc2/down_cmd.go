@@ -245,7 +245,7 @@ func queueRemotePath(ctx context.Context, req queueRequest, remotePath string) (
 }
 
 func queueDirectoryDownloads(ctx context.Context, req queueRequest, remoteDir string) ([]string, error) {
-	remoteList := reconcile.RemoteOnlyListDir(req.project.ProjectID, req.translator, req.remote)
+	remoteList := reconcile.MakeRemoteOnlyListDirFunc(req.project.ProjectID, req.translator, req.remote)
 
 	options := reconcile.WalkOptions{
 		Recursive:  req.opts.Recursive,
