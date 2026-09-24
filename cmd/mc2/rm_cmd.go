@@ -186,40 +186,82 @@ func (r *remover) close() error {
 	return r.container.Close(context.Background())
 }
 
-// normalizeRemotePath takes a path string and normalizes it to a remote path. It performs other
-// cleanups such as conversion of "\" to "/", and taking care of relative paths in the path string.
-// Finally, it returns a remote project path. Make sure the path is in a project.
-func (r *remover) normalizeRemotePath(path string) (string, error) {
-	if path == "" {
-		path = "/"
+// normalizeRemotePath takes a user-provided path and returns a remote project path.
+//
+// It accepts:
+//   - remote project paths like "/Dir/file.txt"
+//   - relative project paths like "Dir/file.txt"
+//   - absolute local paths inside the current project
+//   - Windows-style slash separators
+//
+// It never permits removing the project root.
+func (r *remover) normalizeRemotePath(input string) (string, error) {
+	remotePath, err := r.remotePathFromInput(input)
+	if err != nil {
+		return "", err
 	}
 
-	// If the user passed an absolute local filesystem path inside the project,
-	// translate it to a remote project path instead of treating it as a remote path.
-	if r.translator.ProjectRoot() != "" && filepath.IsAbs(path) {
-		remotePath, err := r.translator.LocalToRemote(path)
-		if err == nil {
-			return mc.NormalizeRemoteProjectPath(remotePath)
-		}
-		if !errors.Is(err, mc.ErrPathOutsideProject) {
-			return "", fmt.Errorf("translate local path %q to remote path: %w", path, err)
-		}
+	if err := refuseProjectRootRemoval(remotePath); err != nil {
+		return "", err
 	}
 
-	// Convert windows paths to unix paths, clean up multiple slashes in a row.
-	inputPath := strings.ReplaceAll(path, `\`, "/")
-	inputPath = filepath.ToSlash(inputPath)
-	if !strings.HasPrefix(inputPath, "/") {
-		inputPath = "/" + inputPath
+	return remotePath, nil
+}
+
+func (r *remover) remotePathFromInput(input string) (string, error) {
+	if input == "" {
+		input = "/"
 	}
 
-	// Take care of relative paths in the path string.
-	cleanedPath := filepath.Clean(inputPath)
-	if cleanedPath == "." {
-		cleanedPath = "/"
+	if remotePath, ok, err := r.remotePathFromAbsoluteLocalInput(input); ok || err != nil {
+		return remotePath, err
 	}
 
-	return mc.NormalizeRemoteProjectPath(cleanedPath)
+	return normalizeRemotePathString(input)
+}
+
+func (r *remover) remotePathFromAbsoluteLocalInput(input string) (string, bool, error) {
+	if r.translator.ProjectRoot() == "" || !filepath.IsAbs(input) {
+		return "", false, nil
+	}
+
+	remotePath, err := r.translator.LocalToRemote(input)
+	switch {
+	case err == nil:
+		normalized, err := mc.NormalizeRemoteProjectPath(remotePath)
+		return normalized, true, err
+
+	case errors.Is(err, mc.ErrPathOutsideProject):
+		// An absolute path outside the project may still be intended as a remote
+		// Materials Commons path, e.g. "/Dir/file.txt".
+		return "", false, nil
+
+	default:
+		return "", true, fmt.Errorf("translate local path %q to remote path: %w", input, err)
+	}
+}
+
+func normalizeRemotePathString(input string) (string, error) {
+	remotePath := strings.ReplaceAll(input, `\`, "/")
+	remotePath = filepath.ToSlash(remotePath)
+
+	if !strings.HasPrefix(remotePath, "/") {
+		remotePath = "/" + remotePath
+	}
+
+	remotePath = filepath.Clean(remotePath)
+	if remotePath == "." {
+		remotePath = "/"
+	}
+
+	return mc.NormalizeRemoteProjectPath(remotePath)
+}
+
+func refuseProjectRootRemoval(remotePath string) error {
+	if remotePath == "/" {
+		return fmt.Errorf("refusing to remove project root")
+	}
+	return nil
 }
 
 func (r *remover) removePath(ctx context.Context, remotePath string) error {
@@ -394,7 +436,7 @@ func (r *remover) removeLocalOnlyReconciledFile(ctx context.Context, fileState r
 	default:
 		// err != nil, and not filedb.ErrRecordNotFound
 		// File deleted on disk, but the database returned an error.... Hmmm...
-		return err
+		return fmt.Errorf("delete file record %q after removing local path: %w", fileState.Observation.RemotePath, err)
 	}
 }
 
@@ -429,6 +471,10 @@ func (r *remover) removeDirectoryWithRootEntry(ctx context.Context, rootEntry *r
 }
 
 func (r *remover) removeDirectoryContents(ctx context.Context, remoteDir string) error {
+	if err := refuseProjectRootRemoval(remoteDir); err != nil {
+		return err
+	}
+
 	if !r.opts.Recursive {
 		return fmt.Errorf("%s is a directory; use --recursive to remove directory", remoteDir)
 	}
@@ -596,7 +642,7 @@ func (r *remover) removeFileFromState(ctx context.Context, state reconcile.FileS
 	removeRemote := r.opts.RemoteOnly || (!r.opts.LocalOnly && !r.opts.RemoteOnly)
 
 	if r.opts.DryRun {
-		fmt.Fprintf(r.opts.Out, "Would remove %s\n", remotePath)
+		fmt.Fprintf(r.opts.Out, "Would remove %s (%s)\n", remotePath, dryRunRemovalScope(removeLocal, removeRemote))
 		return nil
 	}
 
@@ -617,8 +663,13 @@ func (r *remover) removeFileFromState(ctx context.Context, state reconcile.FileS
 		}
 	}
 
-	if err := r.store.DeleteByPath(ctx, remotePath); err != nil && !errors.Is(err, filedb.ErrRecordNotFound) {
-		return err
+	// We only want to delete the database entry if the user deleted both the local and remote versions of
+	// the file. If they only specified one of the flags, then keeping the entry in the database can save us
+	// from computing the checksum on unchanged (on the file system) files.
+	if removeLocal && removeRemote {
+		if err := r.store.DeleteByPath(ctx, remotePath); err != nil && !errors.Is(err, filedb.ErrRecordNotFound) {
+			return err
+		}
 	}
 
 	fmt.Fprintf(r.opts.Out, "Removed %s\n", remotePath)
@@ -664,6 +715,19 @@ func (r *remover) loadFileRecordByPathFromDB(ctx context.Context, remotePath str
 	default:
 		// err != nil, and it's not filedb.ErrRecordNotFound
 		return filedb.FileRecord{}, false, fmt.Errorf("get file record by path %q: %w", remotePath, err)
+	}
+}
+
+func dryRunRemovalScope(removeLocal, removeRemote bool) string {
+	switch {
+	case removeLocal && removeRemote:
+		return "local and remote"
+	case removeLocal:
+		return "local"
+	case removeRemote:
+		return "remote"
+	default:
+		return "nothing"
 	}
 }
 

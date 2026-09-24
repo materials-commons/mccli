@@ -73,9 +73,9 @@ func TestRemoverNormalizeRemotePathAdversarial(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
-		{name: "empty maps to root", input: "", want: "/"},
-		{name: "dot maps to root", input: ".", want: "/"},
-		{name: "slash maps to root", input: "/", want: "/"},
+		{name: "empty refuses project root", input: "", wantErr: true},
+		{name: "dot refuses project root", input: ".", wantErr: true},
+		{name: "slash refuses project root", input: "/", wantErr: true},
 		{name: "relative gets leading slash", input: "file.txt", want: "/file.txt"},
 		{name: "absolute remains absolute", input: "/file.txt", want: "/file.txt"},
 		{name: "duplicate slashes are cleaned", input: "Dir//Sub///file.txt", want: "/Dir/Sub/file.txt"},
@@ -460,6 +460,7 @@ func TestRemoveFileFromStateAllFlagCombinations(t *testing.T) {
 
 			wantLocalRemoved := opts.LocalOnly || (!opts.LocalOnly && !opts.RemoteOnly)
 			wantRemoteRemoved := opts.RemoteOnly || (!opts.LocalOnly && !opts.RemoteOnly)
+			wantDBDeleted := wantLocalRemoved && wantRemoteRemoved
 
 			if localRemoved != wantLocalRemoved {
 				t.Fatalf("localRemoved = %t, want %t for opts %+v", localRemoved, wantLocalRemoved, opts)
@@ -467,10 +468,10 @@ func TestRemoveFileFromStateAllFlagCombinations(t *testing.T) {
 			if remoteRemoved != wantRemoteRemoved {
 				t.Fatalf("remoteRemoved = %t, want %t for opts %+v", remoteRemoved, wantRemoteRemoved, opts)
 			}
-			if !dbDeleted {
+			if dbDeleted != wantDBDeleted {
 				t.Fatalf("dbDeleted = false, want true for opts %+v", opts)
 			}
-			if store.deletedPaths[0] != "/file.txt" {
+			if wantDBDeleted && store.deletedPaths[0] != "/file.txt" {
 				t.Fatalf("deletedPaths = %#v, want [/file.txt]", store.deletedPaths)
 			}
 			if !strings.Contains(out.String(), "Removed /file.txt") {
@@ -1544,7 +1545,7 @@ func TestNormalizeRemotePathRefusesProjectRootWithoutForceRegression(t *testing.
 	r := &remover{
 		opts: rmOpts{
 			Recursive: true,
-			Force:     false,
+			Force:     true,
 		},
 	}
 
@@ -1644,7 +1645,7 @@ func TestRemoveLocalOnlyReconciledFileDBDeleteErrorIsContextualRegression(t *tes
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	dbErr := errors.New("db is locked")
+	dbErr := errors.New("delete record failed")
 	r := &remover{
 		opts: rmOpts{
 			LocalOnly: true,
@@ -1672,6 +1673,9 @@ func TestRemoveLocalOnlyReconciledFileDBDeleteErrorIsContextualRegression(t *tes
 	}
 	if !strings.Contains(err.Error(), "/file.txt") {
 		t.Fatalf("removeLocalOnlyReconciledFile() error = %v, want path context", err)
+	}
+	if !strings.Contains(err.Error(), "delete record failed") {
+		t.Fatalf("removeLocalOnlyReconciledFile() error = %v, want delete error text", err)
 	}
 }
 
