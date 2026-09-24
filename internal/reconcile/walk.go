@@ -187,13 +187,13 @@ func WalkNodes(ctx context.Context, params WalkNodesParams) error {
 }
 
 type WalkAndReconcileParams struct {
-	Root         string
-	ListDir      ListDirFunc
-	Translator   mc.ProjectPathTranslator
-	Records      DirectoryRecordGetter
-	Reconciler   *Reconciler
-	Options      WalkOptions
-	CallbackFunc WalkReconcileFunc
+	Root             string
+	ListDir          ListDirFunc
+	Translator       mc.ProjectPathTranslator
+	DirRecordsGetter DirectoryRecordGetter
+	Reconciler       *Reconciler
+	Options          WalkOptions
+	CallbackFunc     WalkReconcileFunc
 }
 
 // WalkAndReconcile walks from root using listDir and reconciles each observed
@@ -211,7 +211,7 @@ func WalkAndReconcile(ctx context.Context, params WalkAndReconcileParams) error 
 		ListDir: func(ctx context.Context, node WalkNode) ([]Observation, error) {
 			return params.ListDir(ctx, node.LocalPath)
 		},
-		DirRecordsGetter: params.Records,
+		DirRecordsGetter: params.DirRecordsGetter,
 		Reconciler:       params.Reconciler,
 		Options:          params.Options,
 		CallbackFunc: func(ctx context.Context, node WalkNode, states map[string]FileState) error {

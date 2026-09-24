@@ -281,12 +281,12 @@ func TestWalkAndReconcile(t *testing.T) {
 
 	var gotStates map[string]FileState
 	walkParams := WalkAndReconcileParams{
-		Root:       projectRoot,
-		ListDir:    listDir,
-		Translator: translator,
-		Reconciler: reconciler,
-		Options:    walkOpts,
-		Records:    records,
+		Root:             projectRoot,
+		ListDir:          listDir,
+		Translator:       translator,
+		Reconciler:       reconciler,
+		Options:          walkOpts,
+		DirRecordsGetter: records,
 		CallbackFunc: func(ctx context.Context, localDir string, states map[string]FileState) error {
 			gotStates = states
 			return nil
