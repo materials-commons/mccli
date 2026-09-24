@@ -689,8 +689,7 @@ func sortObservationsByName(observations []Observation) {
 
 // IsRemoteNotFound reports whether err is a Materials Commons 404 API error.
 func IsRemoteNotFound(err error) bool {
-	var apiErr *mcapi.APIError
-	if errors.As(err, &apiErr) {
+	if apiErr, ok := errors.AsType[*mcapi.APIError](err); ok {
 		return apiErr.StatusCode == http.StatusNotFound
 	}
 

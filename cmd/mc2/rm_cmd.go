@@ -105,15 +105,16 @@ func (r rmRunner) run(ctx context.Context, opts rmOpts, args []string) error {
 		return fmt.Errorf("failed to create remover: %w", err)
 	}
 
+	defer remover.close()
+
+	// Go through each of the file paths and remove them. Stop on the first error.
 	for _, arg := range args {
 		remotePath, err := remover.normalizeRemotePath(arg)
 		if err != nil {
-			// TODO: should we return an error here or log and continue?
 			return err
 		}
 
 		if err := remover.removePath(ctx, remotePath); err != nil {
-			// TODO: should we return an error here or log and continue?
 			return err
 		}
 	}
@@ -141,6 +142,7 @@ type remover struct {
 	remoteFileDeleter mc.FileDeleter
 	translator        mc.ProjectPathTranslator
 	reconciler        *reconcile.Reconciler
+	container         *services.Container
 }
 
 func newRemover(deps di.Dependencies, ctx context.Context, opts rmOpts) (*remover, error) {
@@ -157,30 +159,31 @@ func newRemover(deps di.Dependencies, ctx context.Context, opts rmOpts) (*remove
 	// hasn't done anything with.
 	r.reconciler = reconcile.New(reconcile.ModeDownload)
 
-	container := services.NewContainer(deps)
-	defer func() {
-		_ = container.Close(context.Background())
-	}()
+	r.container = services.NewContainer(deps)
 
-	cmdCtx, err := container.LoadCommandContext(ctx, opts.WorkingDir)
+	cmdCtx, err := r.container.LoadCommandContext(ctx, opts.WorkingDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load command context: %w", err)
 	}
 	r.project = cmdCtx.Project
 
-	if r.store, err = container.Store(ctx); err != nil {
+	if r.store, err = r.container.Store(ctx); err != nil {
 		return nil, fmt.Errorf("failed to load store: %w", err)
 	}
 
-	if r.remoteGetter, r.remoteFileDeleter, err = getRemoverRemotes(container); err != nil {
+	if r.remoteGetter, r.remoteFileDeleter, err = getRemoverRemotes(r.container); err != nil {
 		return nil, fmt.Errorf("failed to load remote removers: %w", err)
 	}
 
-	if r.translator, err = container.Translator(); err != nil {
+	if r.translator, err = r.container.Translator(); err != nil {
 		return nil, fmt.Errorf("failed to load translator: %w", err)
 	}
 
 	return &r, nil
+}
+
+func (r *remover) close() error {
+	return r.container.Close(context.Background())
 }
 
 // normalizeRemotePath takes a path string and normalizes it to a remote path. It performs other
@@ -209,30 +212,28 @@ func (r *remover) normalizeRemotePath(path string) (string, error) {
 
 func (r *remover) removePath(ctx context.Context, remotePath string) error {
 	remoteFile, err := r.remoteGetter.GetFileByPath(r.project.ProjectID, remotePath)
-	if err != nil {
-		// The remote called returned an error, let's check if it's not found.
+
+	switch {
+	case err != nil:
 		if reconcile.IsRemoteNotFound(err) {
-			// The file doesn't exist on the remote. We might remove it depending on the
-			// flags the user specified.
 			return r.possiblyRemoveLocalOnlyPath(ctx, remotePath)
 		}
-
-		// The error wasn't not found. Since we don't know the state of the remote file, we can't remove it.
-		// TODO: What about if the force flag is set?
+		// If we are here, then we got an error from the API other than NotFound.
+		// We can't proceed even if the user specified the force flag because we
+		// don't actually know if there is a remote file. If we proceed then
+		// potentially we delete local files, and not remote files, and then the
+		// next time the user does a download, the files will be re-downloaded.
 		return fmt.Errorf("get remote file by path %q: %w", remotePath, err)
+	case remoteFile == nil:
+		return fmt.Errorf("no such file %q", remotePath)
 	}
 
-	// If we are here, then we found a remote file.
+	// If we are here, then a remote file was found, and remoteFile is not nil
 
 	// Convert the remote file into a reconciler remote entry.
 	remoteEntry, err := reconcile.RemoteEntryFromMCFile(remoteFile)
 	if err != nil {
 		return err
-	}
-
-	if remoteEntry == nil {
-		// The remote entry is nil, and no error. Candidate for removal depending on flags.
-		return r.possiblyRemoveLocalOnlyPath(ctx, remotePath)
 	}
 
 	if remoteEntry.Kind == reconcile.KindDir {
@@ -350,9 +351,10 @@ func (r *remover) removeDirectory(ctx context.Context, remoteDir string) error {
 
 func (r *remover) removeDirectoryWithRootEntry(ctx context.Context, rootEntry *reconcile.RemoteEntry) error {
 	if rootEntry == nil {
-		return fmt.Errorf("directory remote entry is required")
+		return fmt.Errorf("remote entry is required")
 	}
 
+	// Remove contents of directory.
 	if err := r.removeDirectoryContents(ctx, rootEntry.Path); err != nil {
 		return err
 	}
@@ -394,7 +396,7 @@ func (r *remover) removeDirectoryContents(ctx context.Context, remoteDir string)
 		Translator: r.translator,
 	}
 
-	// A list of directories we've visited.
+	// Keep track of the list of directories we've visited.
 	var directoryStates []reconcile.FileState
 
 	walkParams := reconcile.WalkNodesAndReconcileParams{
@@ -423,22 +425,27 @@ func (r *remover) removeDirectoryContents(ctx context.Context, remoteDir string)
 		},
 	}
 
+	// Walk directories and remove files
 	if err := reconcile.WalkNodesAndReconcile(ctx, walkParams); err != nil {
 		return err
 	}
 
 	// Now that we've removed files from the directories, we need to remove the directories themselves.
+	// Create a sorted list of directories, then start removing one at a time, starting at leaf entries.
 	sort.Slice(directoryStates, func(i, j int) bool {
 		return stateRemotePathDepth(directoryStates[i]) > stateRemotePathDepth(directoryStates[j])
 	})
 
+	// Go through the list removing directories
 	for _, state := range directoryStates {
 		if err := r.removeFileFromState(ctx, state); err != nil {
 			return err
 		}
 	}
 
-	// Check if we should remove the local root, and if so, do it.
+	// Check if we should remove the local root, and if so, do it. Note that we should NEVER
+	// remove the project root (local or remote).
+	// TODO: Is this also removing the remote root?
 	removeLocalRoot := r.opts.LocalOnly || (!r.opts.LocalOnly && !r.opts.RemoteOnly)
 	if removeLocalRoot && !r.opts.DryRun {
 		localPath, err := r.translator.RemoteToLocal(remoteDir)
