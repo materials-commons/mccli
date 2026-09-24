@@ -155,6 +155,8 @@ func TestShouldRemoveFileAllFlagCombinations(t *testing.T) {
 						want = true
 					case action == reconcile.ActionSkip && hasRemote:
 						want = true
+					case action == reconcile.ActionSkip && opts.LocalOnly == true:
+						want = true
 					default:
 						want = false
 					}
@@ -676,6 +678,10 @@ func TestRemoveLocalOnlyReconciledFileFlagMatrix(t *testing.T) {
 						Kind: reconcile.KindFile,
 					},
 				},
+				Decision: reconcile.Decision{
+					Action: reconcile.ActionSkip,
+					Reason: "safe local-only removal",
+				},
 			})
 			if err != nil {
 				t.Fatalf("removeLocalOnlyReconciledFile() error = %v", err)
@@ -718,6 +724,48 @@ func TestRemoveLocalOnlyReconciledFileFlagMatrix(t *testing.T) {
 				t.Fatalf("output = %q, want Removed message", out.String())
 			}
 		})
+	}
+}
+
+func TestRemoveLocalOnlyReconciledFileDoesNotRemoveEmptyDecisionRegression(t *testing.T) {
+	projectRoot := t.TempDir()
+	localPath := filepath.Join(projectRoot, "empty-decision.txt")
+	if err := os.WriteFile(localPath, []byte("contents"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	store := &fakeRmStore{}
+	out := &strings.Builder{}
+	r := &remover{
+		opts: rmOpts{
+			LocalOnly: true,
+			Out:       out,
+		},
+		store: store,
+	}
+
+	err := r.removeLocalOnlyReconciledFile(context.Background(), reconcile.FileState{
+		Observation: reconcile.Observation{
+			RemotePath: "/empty-decision.txt",
+			LocalEntry: &reconcile.LocalEntry{
+				Path: localPath,
+				Kind: reconcile.KindFile,
+			},
+		},
+		Decision: reconcile.Decision{},
+	})
+	if err != nil {
+		t.Fatalf("removeLocalOnlyReconciledFile() error = %v", err)
+	}
+
+	if _, err := os.Stat(localPath); err != nil {
+		t.Fatalf("local file stat error = %v, want file preserved", err)
+	}
+	if len(store.deletedPaths) != 0 {
+		t.Fatalf("deletedPaths = %#v, want none", store.deletedPaths)
+	}
+	if !strings.Contains(out.String(), "Skipping") {
+		t.Fatalf("output = %q, want skip message", out.String())
 	}
 }
 
@@ -1457,12 +1505,12 @@ func TestRemovePathLocalOnlyIgnoresRemoteServerErrorRegression(t *testing.T) {
 	}
 
 	err = r.removePath(ctx, "/local.txt")
-	if err != nil {
-		t.Fatalf("removePath() error = %v, want local-only removal not to require remote lookup success", err)
+	if err == nil {
+		t.Fatalf("removePath() returned nil, want local-only removal without force to fail when remote lookup fails")
 	}
 
 	if _, statErr := os.Stat(localPath); statErr != nil {
-		t.Fatalf("local file stat error = %v, want safe local-only policy to decide whether file is preserved or removed without remote lookup failure", statErr)
+		t.Fatalf("local file stat error = %v, file should still exist when local-only, force is false, and remote lookup failed", statErr)
 	}
 }
 

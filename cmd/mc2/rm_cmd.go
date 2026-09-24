@@ -188,10 +188,22 @@ func (r *remover) close() error {
 
 // normalizeRemotePath takes a path string and normalizes it to a remote path. It performs other
 // cleanups such as conversion of "\" to "/", and taking care of relative paths in the path string.
-// Finally, it returns a remote project path.
+// Finally, it returns a remote project path. Make sure the path is in a project.
 func (r *remover) normalizeRemotePath(path string) (string, error) {
 	if path == "" {
 		path = "/"
+	}
+
+	// If the user passed an absolute local filesystem path inside the project,
+	// translate it to a remote project path instead of treating it as a remote path.
+	if r.translator.ProjectRoot() != "" && filepath.IsAbs(path) {
+		remotePath, err := r.translator.LocalToRemote(path)
+		if err == nil {
+			return mc.NormalizeRemoteProjectPath(remotePath)
+		}
+		if !errors.Is(err, mc.ErrPathOutsideProject) {
+			return "", fmt.Errorf("translate local path %q to remote path: %w", path, err)
+		}
 	}
 
 	// Convert windows paths to unix paths, clean up multiple slashes in a row.
@@ -218,6 +230,14 @@ func (r *remover) removePath(ctx context.Context, remotePath string) error {
 		if reconcile.IsRemoteNotFound(err) {
 			return r.possiblyRemoveLocalOnlyPath(ctx, remotePath)
 		}
+
+		// If the user is doing local only delete, and they have specified the force flag, then
+		// we should proceed even if the remote api call failed. For example, the user could
+		// be in a place with no internet connection, and they want to cleanup local state.
+		if r.opts.LocalOnly && r.opts.Force {
+			return r.forceRemoveLocalPath(ctx, remotePath)
+		}
+
 		// If we are here, then we got an error from the API other than NotFound.
 		// We can't proceed even if the user specified the force flag because we
 		// don't actually know if there is a remote file. If we proceed then
@@ -246,6 +266,39 @@ func (r *remover) removePath(ctx context.Context, remotePath string) error {
 		Dir:         remoteEntry.Dir,
 		RemoteEntry: remoteEntry,
 	})
+}
+
+func (r *remover) forceRemoveLocalPath(ctx context.Context, remotePath string) error {
+	localPath, err := r.translator.RemoteToLocal(remotePath)
+	if err != nil {
+		return fmt.Errorf("translate remote path %q: %w", remotePath, err)
+	}
+
+	localEntry, err := reconcile.ObserveLocal(ctx, r.translator, localPath, time.Now())
+	switch {
+	case err != nil:
+		return fmt.Errorf("observe local path %q: %w", localPath, err)
+
+	case localEntry == nil:
+		_, _ = fmt.Fprintf(r.opts.Out, "%s: No such file or directory\n", remotePath)
+		return nil
+	}
+
+	if r.opts.DryRun {
+		fmt.Fprintf(r.opts.Out, "Would remove %s\n", remotePath)
+		return nil
+	}
+
+	if err := r.removeLocalPath(localEntry.Path, localEntry.Kind); err != nil {
+		return fmt.Errorf("remove local path %q: %w", localEntry.Path, err)
+	}
+
+	if err := r.store.DeleteByPath(ctx, remotePath); err != nil && !errors.Is(err, filedb.ErrRecordNotFound) {
+		return err
+	}
+
+	fmt.Fprintf(r.opts.Out, "Removed %s\n", remotePath)
+	return nil
 }
 
 func (r *remover) possiblyRemoveLocalOnlyPath(ctx context.Context, remotePath string) error {
@@ -629,10 +682,11 @@ func shouldRemoveFile(opts rmOpts, state reconcile.FileState) bool {
 		// or we aren't sure on the state. So don't delete it.
 		return false
 	case reconcile.ActionSkip:
-		// If we are skipping the file, then there isn't anything to do to it. Right now that means only delete
-		// it if there is a remote entry. If there isn't a remote entry, then this is a file we haven't seen
-		// before. That case should be covered by ActionUpload, but just in case we return false if the remote
-		// entry doesn't exist.
+		// If we are skipping the file, then we have two cases. If the user specified LocalOnly, then
+		// we can delete the file because the decision action means there is nothing to do, so the
+		// file is safely stored on the remote. Otherwise, if LocalOnly isn't specified, then we can
+		// delete the file if there is a remote entry. Again, that means this file was uploaded at
+		// some point, and the user has elected to get rid of all instances of it.
 		if opts.LocalOnly {
 			return true
 		}
