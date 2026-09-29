@@ -65,14 +65,19 @@ func TestUploaderWaitForAcceptanceAcceptAdjustsChunkSize(t *testing.T) {
 }
 
 func TestUploaderWaitForAcceptanceRejectAlreadyUploaded(t *testing.T) {
-	uploader, _ := makeUploader(t, []byte("hello world"), 5, 10, nil)
+	store := &fakeUploadStore{}
+	uploader, _ := makeUploaderWithStore(t, []byte("hello world"), 5, 10, nil, store)
 	uploader.TransferID = "transfer-1"
 
+	remoteChecksum := "remote-md5"
 	uploader.HandleResponse(wsclient.TextMessage{
-		"command": "TRANSFER_REJECT",
+		"command": "TRANSFER_ALREADY_UPLOADED",
 		"payload": map[string]any{
-			"transfer_id": "transfer-1",
-			"reason":      "file already uploaded",
+			"transfer_id":        "transfer-1",
+			"file_checksum":      remoteChecksum,
+			"file_size":          int64(11),
+			"file_id":            int64(42),
+			"file_created_at_ns": int64(123456789),
 		},
 	})
 
@@ -81,8 +86,31 @@ func TestUploaderWaitForAcceptanceRejectAlreadyUploaded(t *testing.T) {
 		t.Fatalf("waitForAcceptance() error = %v, want ErrAlreadyUploaded", err)
 	}
 
-	if !uploader.alreadyUploaded {
-		t.Fatal("alreadyUploaded = false, want true")
+	store.mu.Lock()
+	defer store.mu.Unlock()
+
+	if len(store.records) != 1 {
+		t.Fatalf("len(store.records) = %d, want 1", len(store.records))
+	}
+
+	record := store.records[0]
+	if record.Path != "/example.txt" {
+		t.Fatalf("record.Path = %q, want /example.txt", record.Path)
+	}
+	if record.RemoteChecksum == nil || *record.RemoteChecksum != remoteChecksum {
+		t.Fatalf("record.RemoteChecksum = %v, want %q", record.RemoteChecksum, remoteChecksum)
+	}
+	if record.RemoteSize == nil || *record.RemoteSize != 11 {
+		t.Fatalf("record.RemoteSize = %v, want 11", record.RemoteSize)
+	}
+	if record.RemoteFileID == nil || *record.RemoteFileID != 42 {
+		t.Fatalf("record.RemoteFileID = %v, want 42", record.RemoteFileID)
+	}
+	if record.RemoteCTimeNS == nil || *record.RemoteCTimeNS != 123456789 {
+		t.Fatalf("record.RemoteCTimeNS = %v, want 123456789", record.RemoteCTimeNS)
+	}
+	if record.LocalLastSeenTS == 0 {
+		t.Fatal("record.LocalLastSeenTS = 0, want updated timestamp")
 	}
 }
 
