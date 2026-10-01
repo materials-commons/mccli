@@ -141,26 +141,6 @@ func mkdirCommand() *cli.Command {
 	}
 }
 
-func mvCommand() *cli.Command {
-	return &cli.Command{
-		Name:      "mv",
-		Usage:     "Move or rename files and directories locally and remotely",
-		ArgsUsage: "src target",
-		Description: strings.TrimSpace(`
-Use "mc2 mv <src> <target>" to move and/or rename a file or directory.
-Use "mc2 mv <src> ... <directory>" to move a list of files or directories
-into an existing directory.
-`),
-		Flags: []cli.Flag{
-			&cli.BoolFlag{
-				Name:  "remote-only",
-				Usage: "Move files only on the Materials Commons server",
-			},
-		},
-		Action: notYetImplemented("mv"),
-	}
-}
-
 func projCommand() *cli.Command {
 	return &cli.Command{
 		Name:   "proj",
