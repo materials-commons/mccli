@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/materials-commons/mccli/internal/config"
 	mclogging "github.com/materials-commons/mccli/internal/logging"
 	"github.com/urfave/cli/v3"
 )
@@ -38,17 +37,17 @@ var (
 func main() {
 	// We want to check if mccli hasn't been configured yet. However, if the user has requested
 	// the setup command, then we don't need to check the status.
-	if !userRequestedSetup(os.Args) {
-		globalCfg, err := config.LoadGlobal(context.Background(), "")
-		if err != nil || !globalCfg.SetupRun {
-			// mccli hasn't been configured yet. Drop the user into setup.
-			if err := runSetupCmd(globalCfg, err); err != nil {
-				fmt.Println("Setup failed", err)
-				os.Exit(1)
-			}
-			os.Exit(0)
-		}
-	}
+	//if !userRequestedSetup(os.Args) {
+	//	globalCfg, err := config.LoadGlobal(context.Background(), "")
+	//	if err != nil || !globalCfg.SetupRun {
+	//		// mccli hasn't been configured yet. Drop the user into setup.
+	//		if err := runSetupCmd(globalCfg, err); err != nil {
+	//			fmt.Println("Setup failed", err)
+	//			os.Exit(1)
+	//		}
+	//		os.Exit(0)
+	//	}
+	//}
 
 	cmd := newCommand()
 
@@ -119,6 +118,7 @@ func newCommand() *cli.Command {
 			rmCommand(),
 			remotesCommand(),
 			searchCommand(),
+			selfUpdateCommand(),
 			setupCommand(),
 			upCommand(),
 			versionCommand(),
