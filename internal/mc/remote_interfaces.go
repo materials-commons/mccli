@@ -30,6 +30,16 @@ type FileDeleter interface {
 	DeleteFile(projectID int, fileID int) error
 }
 
+type FileMover interface {
+	MoveFile(projectID int, fileID int, toDirectoryID int) error
+	MoveDirectory(projectID int, dirID int, toDirectoryID int) error
+}
+
+type FileRenamer interface {
+	RenameFile(projectID int, fileID int, newName string) error
+	RenameDirectory(projectID int, dirID int, newName string) error
+}
+
 type DirectoryLister interface {
 	ListDirectoryByPath(projectID int, path string) ([]mcmodel.File, error)
 }

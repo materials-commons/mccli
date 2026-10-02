@@ -3,9 +3,15 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/materials-commons/mccli/internal/config"
+	"github.com/materials-commons/mccli/internal/di"
+	"github.com/materials-commons/mccli/internal/mc"
+	"github.com/materials-commons/mccli/internal/services"
 	"github.com/urfave/cli/v3"
 )
 
@@ -63,25 +69,176 @@ into an existing directory.
 }
 
 func runMvCmd(ctx context.Context, opts mvOpts, slice []string) error {
+	deps := di.Production()
+	mover, err := newMover(ctx, deps)
+	if err != nil {
+		return err
+	}
+
+	mr := moveRunner{
+		deps:  di.Production(),
+		mover: mover,
+	}
 	switch {
 	case len(slice) < 2:
 		return errors.New("mv requires at least source and dest arguments")
 	case opts.dryRun:
-		return runDryRun(ctx, opts, slice)
+		return mr.runDryRun(ctx, opts, slice)
 	case opts.remoteOnly:
-		return runRemoteOnly(ctx, opts, slice)
+		return mr.runRemoteOnly(ctx, opts, slice)
 	case opts.localOnly:
-		return runLocalOnly(ctx, opts, slice)
+		return mr.runLocalOnly(ctx, opts, slice)
 	case opts.view:
-		return runViewOutstandingTransactions(ctx, opts, slice)
+		return mr.runViewOutstandingTransactions(ctx, opts, slice)
 	case opts.rollback:
-		return runRollbackOutstandingTransactions(ctx, opts, slice)
+		return mr.runRollbackOutstandingTransactions(ctx, opts, slice)
 	default:
-		// If we are here then both remoteOnly and localOnly are false. This means
-		// that the user didn't specify either. In this case we move both
+		// If we are here, then both remoteOnly and localOnly are false. This
+		// means that the user didn't specify either. In this case we move both
 		// local and remote files/directories.
-		return runLocalAndRemote(ctx, opts, slice)
+		return mr.runLocalAndRemote(ctx, opts, slice)
 	}
+}
+
+type moveRunner struct {
+	deps  di.Dependencies
+	mover *Mover
+}
+
+type fileType int
+
+const (
+	FileTypeFile fileType = iota
+	FileTypeDir
+)
+
+func (m moveRunner) runDryRun(ctx context.Context, opts mvOpts, slice []string) error {
+	return errors.New("dry run not implemented")
+}
+
+func (m moveRunner) runRemoteOnly(ctx context.Context, opts mvOpts, slice []string) error {
+	return errors.New("remote only not implemented")
+}
+
+func (m moveRunner) runLocalOnly(ctx context.Context, opts mvOpts, slice []string) error {
+	return errors.New("local only not implemented")
+}
+
+func (m moveRunner) runViewOutstandingTransactions(ctx context.Context, opts mvOpts, slice []string) error {
+	return errors.New("view outstanding transactions not implemented")
+}
+
+func (m moveRunner) runRollbackOutstandingTransactions(ctx context.Context, opts mvOpts, slice []string) error {
+	return errors.New("rollback outstanding transactions not implemented")
+}
+
+type FileInfo struct {
+	FileInfo os.FileInfo
+	FileType fileType
+}
+
+func (m moveRunner) runLocalAndRemote(ctx context.Context, opts mvOpts, files []string) error {
+	destExists := true
+	destType := FileTypeFile
+
+	dest := files[len(files)-1]
+
+	destInfo, err := os.Stat(dest)
+	if err != nil {
+		destExists = false
+	} else {
+		if destInfo.IsDir() {
+			destType = FileTypeDir
+		}
+	}
+
+	// TODO: This check, and thus the checks above probably need to be lifted up as all function will probably do them
+	if destType == FileTypeFile && len(files) > 2 {
+		// The user has specified a move that sends multiple sources to a
+		// destination file. This is a mistake as each of the sources will
+		// overwrite the file. We catch this early and return an error as
+		// running this is expensive with all the network calls.
+		return errors.New("cannot move multiple sources to a single destination file")
+	}
+
+	for _, src := range files[:len(files)-1] {
+		// We need to figure out if this is a move or a rename.
+		// A rename would be file -> file, or dir -> to non-existant.
+		// If file -> file, then we want to prevent overwriting the
+		// destination file (if it exists), as a safety precaution.
+		// We instead force the user to deal with this by having
+		// them remove the destination file if that is really their
+		// intent.
+		srcInfo, err := m.mover.getFileInfo(src)
+		if err != nil {
+			return err
+		}
+
+		if srcInfo.FileType == FileTypeFile {
+			if destType == FileTypeFile && destExists {
+				// Attempt to overwrite an existing file
+				return errors.New("cannot move multiple sources to a single destination file")
+			}
+		}
+
+		if srcInfo.FileType == FileTypeDir {
+			if destType == FileTypeFile {
+				return errors.New("cannot move a directory to a file")
+			}
+		}
+
+		// We've validated locally. There is still validation to do remotely. The
+		// remote validation will be done in the methods that handle the move/rename.
+		// Here we figure out if this is a move or rename, and what type of move or
+		// rename it is.
+		switch {
+		case srcInfo.FileType == FileTypeFile && destType == FileTypeFile:
+			return m.mover.renameFile(src, dest)
+		case srcInfo.FileType == FileTypeDir && destType == FileTypeDir:
+			return m.mover.moveDir(src, dest)
+		case srcInfo.FileType == FileTypeFile && destType == FileTypeDir:
+			return m.mover.moveFile(src, dest)
+		case srcInfo.FileType == FileTypeDir && !destExists:
+			return m.mover.renameDir(src, dest)
+		}
+	}
+
+	return errors.New("local and remote not implemented")
+}
+
+func (m *Mover) renameFile(src, dest string) error {
+	return errors.New("rename file not implemented")
+}
+
+func (m *Mover) renameDir(src, dest string) error {
+	return errors.New("rename file not implemented")
+}
+
+func (m *Mover) moveFile(src, dest string) error {
+	return errors.New("move file not implemented")
+}
+
+func (m *Mover) moveDir(src, dest string) error {
+	return errors.New("move dir not implemented")
+}
+
+func (m *Mover) getFileInfo(path string) (*FileInfo, error) {
+	var (
+		finfo FileInfo
+		err   error
+	)
+	finfo.FileInfo, err = os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+
+	if finfo.FileInfo.IsDir() {
+		finfo.FileType = FileTypeDir
+	} else {
+		finfo.FileType = FileTypeFile
+	}
+
+	return &finfo, nil
 }
 
 type MoveTransaction struct {
@@ -124,26 +281,66 @@ type MoveTransaction struct {
 	LastError string `json:"last_error"`
 }
 
-func runDryRun(ctx context.Context, opts mvOpts, slice []string) error {
-	return errors.New("dry run not implemented")
+type Mover struct {
+	projectConfig         config.Project
+	store                 di.Store
+	projectPathTranslator mc.ProjectPathTranslator
+	remoteGetter          mc.FileDirectoryGetter
+	remoteMover           mc.FileMover
+	remoteRenamer         mc.FileRenamer
+	workingDir            string
 }
 
-func runRemoteOnly(ctx context.Context, opts mvOpts, slice []string) error {
-	return errors.New("remote only not implemented")
+func newMover(ctx context.Context, deps di.Dependencies) (*Mover, error) {
+	var (
+		m   Mover
+		err error
+	)
+
+	m.workingDir, err = os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get working directory: %w", err)
+	}
+
+	container := services.NewContainer(deps)
+
+	cmdCtx, err := container.LoadCommandContext(ctx, m.workingDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load command context: %w", err)
+	}
+
+	m.projectConfig = cmdCtx.Project
+
+	if m.store, err = container.Store(ctx); err != nil {
+		return nil, fmt.Errorf("failed to load store: %w", err)
+	}
+
+	if m.remoteGetter, m.remoteMover, m.remoteRenamer, err = getMoverRemotes(container); err != nil {
+		return nil, fmt.Errorf("failed to load remote mover remotes: %w", err)
+	}
+	return &m, nil
 }
 
-func runLocalOnly(ctx context.Context, opts mvOpts, slice []string) error {
-	return errors.New("local only not implemented")
-}
+func getMoverRemotes(container *services.Container) (mc.FileDirectoryGetter, mc.FileMover, mc.FileRenamer, error) {
+	remoteAny, err := container.Remote()
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to load remote: %w", err)
+	}
 
-func runViewOutstandingTransactions(ctx context.Context, opts mvOpts, slice []string) error {
-	return errors.New("view outstanding transactions not implemented")
-}
+	remoteGetter, ok := remoteAny.(mc.FileDirectoryGetter)
+	if !ok {
+		return nil, nil, nil, fmt.Errorf("remote does not implement FileDirectoryGetter")
+	}
 
-func runRollbackOutstandingTransactions(ctx context.Context, opts mvOpts, slice []string) error {
-	return errors.New("rollback outstanding transactions not implemented")
-}
+	remoteMover, ok := remoteAny.(mc.FileMover)
+	if !ok {
+		return nil, nil, nil, fmt.Errorf("remote does not implement FileMover")
+	}
 
-func runLocalAndRemote(ctx context.Context, opts mvOpts, slice []string) error {
-	return errors.New("local and remote not implemented")
+	remoteRenamer, ok := remoteAny.(mc.FileRenamer)
+	if !ok {
+		return nil, nil, nil, fmt.Errorf("remote does not implement FileRename")
+	}
+
+	return remoteGetter, remoteMover, remoteRenamer, nil
 }
