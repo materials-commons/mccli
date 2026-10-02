@@ -3,15 +3,11 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"strings"
-	"time"
 
-	"github.com/materials-commons/mccli/internal/config"
 	"github.com/materials-commons/mccli/internal/di"
-	"github.com/materials-commons/mccli/internal/mc"
-	"github.com/materials-commons/mccli/internal/services"
+	"github.com/materials-commons/mccli/internal/mc/file"
 	"github.com/urfave/cli/v3"
 )
 
@@ -70,7 +66,7 @@ into an existing directory.
 
 func runMvCmd(ctx context.Context, opts mvOpts, slice []string) error {
 	deps := di.Production()
-	mover, err := newMover(ctx, deps)
+	mover, err := file.NewMover(ctx, deps)
 	if err != nil {
 		return err
 	}
@@ -102,15 +98,8 @@ func runMvCmd(ctx context.Context, opts mvOpts, slice []string) error {
 
 type moveRunner struct {
 	deps  di.Dependencies
-	mover *Mover
+	mover *file.Mover
 }
-
-type fileType int
-
-const (
-	FileTypeFile fileType = iota
-	FileTypeDir
-)
 
 func (m moveRunner) runDryRun(ctx context.Context, opts mvOpts, slice []string) error {
 	return errors.New("dry run not implemented")
@@ -132,14 +121,9 @@ func (m moveRunner) runRollbackOutstandingTransactions(ctx context.Context, opts
 	return errors.New("rollback outstanding transactions not implemented")
 }
 
-type FileInfo struct {
-	FileInfo os.FileInfo
-	FileType fileType
-}
-
 func (m moveRunner) runLocalAndRemote(ctx context.Context, opts mvOpts, files []string) error {
 	destExists := true
-	destType := FileTypeFile
+	destType := file.FileTypeFile
 
 	dest := files[len(files)-1]
 
@@ -148,12 +132,12 @@ func (m moveRunner) runLocalAndRemote(ctx context.Context, opts mvOpts, files []
 		destExists = false
 	} else {
 		if destInfo.IsDir() {
-			destType = FileTypeDir
+			destType = file.FileTypeDir
 		}
 	}
 
 	// TODO: This check, and thus the checks above probably need to be lifted up as all function will probably do them
-	if destType == FileTypeFile && len(files) > 2 {
+	if destType == file.FileTypeFile && len(files) > 2 {
 		// The user has specified a move that sends multiple sources to a
 		// destination file. This is a mistake as each of the sources will
 		// overwrite the file. We catch this early and return an error as
@@ -169,20 +153,20 @@ func (m moveRunner) runLocalAndRemote(ctx context.Context, opts mvOpts, files []
 		// We instead force the user to deal with this by having
 		// them remove the destination file if that is really their
 		// intent.
-		srcInfo, err := m.mover.getFileInfo(src)
+		srcInfo, err := m.mover.GetFileInfo(src)
 		if err != nil {
 			return err
 		}
 
-		if srcInfo.FileType == FileTypeFile {
-			if destType == FileTypeFile && destExists {
+		if srcInfo.FileType == file.FileTypeFile {
+			if destType == file.FileTypeFile && destExists {
 				// Attempt to overwrite an existing file
 				return errors.New("cannot move multiple sources to a single destination file")
 			}
 		}
 
-		if srcInfo.FileType == FileTypeDir {
-			if destType == FileTypeFile {
+		if srcInfo.FileType == file.FileTypeDir {
+			if destType == file.FileTypeFile {
 				return errors.New("cannot move a directory to a file")
 			}
 		}
@@ -192,155 +176,16 @@ func (m moveRunner) runLocalAndRemote(ctx context.Context, opts mvOpts, files []
 		// Here we figure out if this is a move or rename, and what type of move or
 		// rename it is.
 		switch {
-		case srcInfo.FileType == FileTypeFile && destType == FileTypeFile:
-			return m.mover.renameFile(src, dest)
-		case srcInfo.FileType == FileTypeDir && destType == FileTypeDir:
-			return m.mover.moveDir(src, dest)
-		case srcInfo.FileType == FileTypeFile && destType == FileTypeDir:
-			return m.mover.moveFile(src, dest)
-		case srcInfo.FileType == FileTypeDir && !destExists:
-			return m.mover.renameDir(src, dest)
+		case srcInfo.FileType == file.FileTypeFile && destType == file.FileTypeFile:
+			return m.mover.RenameFile(src, dest)
+		case srcInfo.FileType == file.FileTypeDir && destType == file.FileTypeDir:
+			return m.mover.MoveDir(src, dest)
+		case srcInfo.FileType == file.FileTypeFile && destType == file.FileTypeDir:
+			return m.mover.MoveFile(src, dest)
+		case srcInfo.FileType == file.FileTypeDir && !destExists:
+			return m.mover.RenameDir(src, dest)
 		}
 	}
 
 	return errors.New("local and remote not implemented")
-}
-
-func (m *Mover) renameFile(src, dest string) error {
-	return errors.New("rename file not implemented")
-}
-
-func (m *Mover) renameDir(src, dest string) error {
-	return errors.New("rename file not implemented")
-}
-
-func (m *Mover) moveFile(src, dest string) error {
-	return errors.New("move file not implemented")
-}
-
-func (m *Mover) moveDir(src, dest string) error {
-	return errors.New("move dir not implemented")
-}
-
-func (m *Mover) getFileInfo(path string) (*FileInfo, error) {
-	var (
-		finfo FileInfo
-		err   error
-	)
-	finfo.FileInfo, err = os.Stat(path)
-	if err != nil {
-		return nil, err
-	}
-
-	if finfo.FileInfo.IsDir() {
-		finfo.FileType = FileTypeDir
-	} else {
-		finfo.FileType = FileTypeFile
-	}
-
-	return &finfo, nil
-}
-
-type MoveTransaction struct {
-	// Unique identifier for the transaction.
-	ID string `json:"id"`
-
-	// The working directory that the command associated with this transaction was run in.
-	CommandWorkingDir string `json:"command_working_dir"`
-
-	// The arguments that the command associated with this transaction was run with.
-	CommandArgs []string `json:"command_args"`
-
-	// Each transaction is a single item. This captures the item in the move args
-	// that failed (e.g., the file or dir that was being moved).
-	SourceArg string `json:"source_arg"`
-
-	// The destination of the move. This could be a file or a directory. For example, you could move
-	// a file to a file-destination to effectively do a rename.
-	DestArg string `json:"dest_arg"`
-
-	// This is the full local path of the source. For example, `mv file1 dir1`, since file1 is the source,
-	// we'd store the full path to file1 here, e.g., /home/user/proj-name/file1
-	SourceLocalPath string `json:"source_local_path"`
-
-	// This is the full local path of the destination. For example, `mv file1 dir1`, since dir1 is the
-	// destination, we'd store the full path to dir1 here, e.g., /home/user/proj-name/dir1
-	DestLocalPath string `json:"dest_local_path"`
-
-	// Since the move was successful on the remote, we store the remote file ID of the destination.
-	RemoteDestFileID *int `json:"remote_dest_file_id"`
-
-	// Date and Time this transaction was created
-	CreatedAt time.Time `json:"created_at"`
-
-	// Date and Time this transaction was updated. This would only happen if it failed again.
-	UpdatedAt time.Time `json:"updated_at"`
-
-	// A user-friendly error message if the transaction failed. This helps the user understand
-	// why the transaction failed and what they can do to fix it.
-	LastError string `json:"last_error"`
-}
-
-type Mover struct {
-	projectConfig         config.Project
-	store                 di.Store
-	projectPathTranslator mc.ProjectPathTranslator
-	remoteGetter          mc.FileDirectoryGetter
-	remoteMover           mc.FileMover
-	remoteRenamer         mc.FileRenamer
-	workingDir            string
-}
-
-func newMover(ctx context.Context, deps di.Dependencies) (*Mover, error) {
-	var (
-		m   Mover
-		err error
-	)
-
-	m.workingDir, err = os.Getwd()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get working directory: %w", err)
-	}
-
-	container := services.NewContainer(deps)
-
-	cmdCtx, err := container.LoadCommandContext(ctx, m.workingDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load command context: %w", err)
-	}
-
-	m.projectConfig = cmdCtx.Project
-
-	if m.store, err = container.Store(ctx); err != nil {
-		return nil, fmt.Errorf("failed to load store: %w", err)
-	}
-
-	if m.remoteGetter, m.remoteMover, m.remoteRenamer, err = getMoverRemotes(container); err != nil {
-		return nil, fmt.Errorf("failed to load remote mover remotes: %w", err)
-	}
-	return &m, nil
-}
-
-func getMoverRemotes(container *services.Container) (mc.FileDirectoryGetter, mc.FileMover, mc.FileRenamer, error) {
-	remoteAny, err := container.Remote()
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to load remote: %w", err)
-	}
-
-	remoteGetter, ok := remoteAny.(mc.FileDirectoryGetter)
-	if !ok {
-		return nil, nil, nil, fmt.Errorf("remote does not implement FileDirectoryGetter")
-	}
-
-	remoteMover, ok := remoteAny.(mc.FileMover)
-	if !ok {
-		return nil, nil, nil, fmt.Errorf("remote does not implement FileMover")
-	}
-
-	remoteRenamer, ok := remoteAny.(mc.FileRenamer)
-	if !ok {
-		return nil, nil, nil, fmt.Errorf("remote does not implement FileRename")
-	}
-
-	return remoteGetter, remoteMover, remoteRenamer, nil
 }
