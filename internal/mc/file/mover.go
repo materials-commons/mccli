@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -55,6 +56,10 @@ func NewMover(ctx context.Context, deps di.Dependencies, dest string) (*Mover, e
 	cmdCtx, err := container.LoadCommandContext(ctx, m.workingDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load command context: %w", err)
+	}
+
+	if m.projectPathTranslator, err = container.ProjectPathTranslator(); err != nil {
+		return nil, fmt.Errorf("failed to load project path translator: %w", err)
 	}
 
 	m.projectConfig = cmdCtx.Project
@@ -110,6 +115,8 @@ func (m *Mover) RenameFile(src, dest string) error {
 		}
 
 		f.Path = destProjectPath
+		f.Dir = path.Dir(destProjectPath)
+		f.Name = path.Base(destProjectPath)
 		if err := m.store.Upsert(context.Background(), f); err != nil {
 			return fmt.Errorf("failed to update local file: %w", err)
 		}
@@ -172,7 +179,8 @@ func (m *Mover) MoveFile(src, dest string) error {
 		}
 
 		// Move the local file
-		if err := os.Rename(sourceProjectPath, destProjectPath); err != nil {
+		destPath := filepath.Join(m.normalizePath(dest), filepath.Base(src))
+		if err := os.Rename(m.normalizePath(src), destPath); err != nil {
 			return fmt.Errorf("failed to move local file: %w", err)
 		}
 
@@ -182,7 +190,8 @@ func (m *Mover) MoveFile(src, dest string) error {
 			return fmt.Errorf("failed to get local file: %w", err)
 		}
 
-		f.Path = filepath.Join(destProjectPath, filepath.Base(sourceProjectPath))
+		f.Path = path.Join(destProjectPath, path.Base(sourceProjectPath))
+		f.Dir = path.Dir(f.Path)
 		if err := m.store.Upsert(context.Background(), f); err != nil {
 			return fmt.Errorf("failed to update local file: %w", err)
 		}
@@ -215,7 +224,8 @@ func (m *Mover) MoveDir(src, dest string) error {
 		}
 
 		// Move the local directory
-		if err := os.Rename(sourceProjectPath, destProjectPath); err != nil {
+		destPath := filepath.Join(m.normalizePath(dest), filepath.Base(src))
+		if err := os.Rename(m.normalizePath(src), destPath); err != nil {
 			return fmt.Errorf("failed to move local directory: %w", err)
 		}
 

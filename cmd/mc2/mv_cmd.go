@@ -66,8 +66,12 @@ into an existing directory.
 
 func runMvCmd(ctx context.Context, opts mvOpts, slice []string) error {
 	deps := di.Production()
-	// TODO: Fix NewMover, dest needs to be passed in
-	mover, err := file.NewMover(ctx, deps, "")
+	if len(slice) < 2 {
+		return errors.New("mv requires at least source and dest arguments")
+	}
+
+	dest := slice[len(slice)-1]
+	mover, err := file.NewMover(ctx, deps, dest)
 	if err != nil {
 		return err
 	}
@@ -143,7 +147,7 @@ func (m moveRunner) runLocalAndRemote(ctx context.Context, opts mvOpts, files []
 		// destination file. This is a mistake as each of the sources will
 		// overwrite the file. We catch this early and return an error as
 		// running this is expensive with all the network calls.
-		return errors.New("cannot move multiple sources to a single destination file")
+		return errors.New("destination file already exists")
 	}
 
 	for _, src := range files[:len(files)-1] {
@@ -178,15 +182,22 @@ func (m moveRunner) runLocalAndRemote(ctx context.Context, opts mvOpts, files []
 		// rename it is.
 		switch {
 		case srcInfo.FileType == file.FileTypeFile && destType == file.FileTypeFile:
-			return m.mover.RenameFile(src, dest)
+			if err := m.mover.RenameFile(src, dest); err != nil {
+				return err
+			}
 		case srcInfo.FileType == file.FileTypeDir && destType == file.FileTypeDir:
-			return m.mover.MoveDir(src, dest)
+			if err := m.mover.MoveDir(src, dest); err != nil {
+				return err
+			}
 		case srcInfo.FileType == file.FileTypeFile && destType == file.FileTypeDir:
-			return m.mover.MoveFile(src, dest)
+			if err := m.mover.MoveFile(src, dest); err != nil {
+				return err
+			}
 		case srcInfo.FileType == file.FileTypeDir && !destExists:
-			return m.mover.RenameDir(src, dest)
+			if err := m.mover.RenameDir(src, dest); err != nil {
+			}
 		}
 	}
 
-	return errors.New("local and remote not implemented")
+	return nil
 }
