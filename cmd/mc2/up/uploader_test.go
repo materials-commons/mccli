@@ -20,7 +20,7 @@ func TestNewUploaderRequiresClientUUID(t *testing.T) {
 	store := openStore(t, ctx, projectRoot)
 
 	deps := testDeps(projectRoot, store, &fakeRemote{files: map[string]mcmodel.File{}}, newFakeManager())
-	deps.LoadGlobal = func(ctx context.Context, cfgPath string) (config.Global, error) {
+	deps.LoadGlobalConfig = func(ctx context.Context, cfgPath string) (config.Global, error) {
 		return config.Global{
 			DefaultRemote: config.Remote{
 				MCURL:  "https://example.test/api",
@@ -51,7 +51,7 @@ func TestNewUploaderRequiresConfiguredRemote(t *testing.T) {
 	store := openStore(t, ctx, projectRoot)
 
 	deps := testDeps(projectRoot, store, &fakeRemote{files: map[string]mcmodel.File{}}, newFakeManager())
-	deps.LoadGlobal = func(ctx context.Context, cfgPath string) (config.Global, error) {
+	deps.LoadGlobalConfig = func(ctx context.Context, cfgPath string) (config.Global, error) {
 		return config.Global{
 			DefaultRemote: config.Remote{
 				MCURL: "https://example.test/api",

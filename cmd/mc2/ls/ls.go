@@ -77,7 +77,7 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("remote is not a FileGetter")
 	}
 
-	translator, err := container.Translator()
+	translator, err := container.ProjectPathTranslator()
 	if err != nil {
 		return err
 	}
@@ -154,11 +154,11 @@ func listDirectory(ctx context.Context, req listRequest) error {
 	}
 
 	walkParams := reconcile.WalkNodesAndReconcileParams{
-		Root: node,
-		ListDir: mergedListDirFunc,
+		Root:             node,
+		ListDir:          mergedListDirFunc,
 		DirRecordsGetter: req.store,
-		Reconciler: req.reconciler,
-		Options: options,
+		Reconciler:       req.reconciler,
+		Options:          options,
 		CallbackFunc: func(ctx context.Context, node reconcile.WalkNode, states map[string]reconcile.FileState) error {
 			return printStates(req.opts.Out, states, req.opts.Action)
 		},

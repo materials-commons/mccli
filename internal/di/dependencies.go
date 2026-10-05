@@ -72,8 +72,8 @@ type RemoteClient = any
 // initialized command dependency graph. Higher-level packages decide which
 // services are needed and request them lazily.
 type Dependencies struct {
-	LoadProject            func(ctx context.Context, start string) (config.Project, error)
-	LoadGlobal             func(ctx context.Context, path string) (config.Global, error)
+	LoadProjectConfig      func(ctx context.Context, start string) (config.Project, error)
+	LoadGlobalConfig       func(ctx context.Context, path string) (config.Global, error)
 	OpenStore              func(ctx context.Context, projectRoot string) (Store, error)
 	NewRemoteClient        func(project config.Project, global config.Global) (RemoteClient, error)
 	NewDefaultRemoteClient func(global config.Global) (RemoteClient, error)
@@ -90,8 +90,8 @@ type Dependencies struct {
 // themselves. Command-specific service construction belongs in pkg/services.
 func Production() Dependencies {
 	return Dependencies{
-		LoadProject: config.LoadProject,
-		LoadGlobal:  config.LoadGlobal,
+		LoadProjectConfig: config.LoadProject,
+		LoadGlobalConfig:  config.LoadGlobal,
 		OpenStore: func(ctx context.Context, projectRoot string) (Store, error) {
 			return filedb.Open(ctx, projectRoot)
 		},
@@ -121,11 +121,11 @@ func Production() Dependencies {
 func WithDefaults(deps Dependencies) Dependencies {
 	prod := Production()
 
-	if deps.LoadProject == nil {
-		deps.LoadProject = prod.LoadProject
+	if deps.LoadProjectConfig == nil {
+		deps.LoadProjectConfig = prod.LoadProjectConfig
 	}
-	if deps.LoadGlobal == nil {
-		deps.LoadGlobal = prod.LoadGlobal
+	if deps.LoadGlobalConfig == nil {
+		deps.LoadGlobalConfig = prod.LoadGlobalConfig
 	}
 	if deps.OpenStore == nil {
 		deps.OpenStore = prod.OpenStore

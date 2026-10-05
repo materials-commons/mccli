@@ -27,7 +27,7 @@ func TestContainerLoadCommandContextDoesNotInitializeCommandSpecificServices(t *
 	var remoteCalls int
 
 	container := NewContainer(di.Dependencies{
-		LoadProject: func(ctx context.Context, start string) (config.Project, error) {
+		LoadProjectConfig: func(ctx context.Context, start string) (config.Project, error) {
 			return config.Project{
 				ProjectID: 10,
 				Remote: config.Remote{
@@ -36,7 +36,7 @@ func TestContainerLoadCommandContextDoesNotInitializeCommandSpecificServices(t *
 				},
 			}, nil
 		},
-		LoadGlobal: func(ctx context.Context, path string) (config.Global, error) {
+		LoadGlobalConfig: func(ctx context.Context, path string) (config.Global, error) {
 			return config.Global{
 				ClientUUID: "client-1",
 				DefaultRemote: config.Remote{
@@ -97,10 +97,10 @@ func TestContainerStoreIsLazyAndCached(t *testing.T) {
 	var storeCalls int
 
 	container := NewContainer(di.Dependencies{
-		LoadProject: func(ctx context.Context, start string) (config.Project, error) {
+		LoadProjectConfig: func(ctx context.Context, start string) (config.Project, error) {
 			return config.Project{ProjectID: 10}, nil
 		},
-		LoadGlobal: func(ctx context.Context, path string) (config.Global, error) {
+		LoadGlobalConfig: func(ctx context.Context, path string) (config.Global, error) {
 			return config.Global{}, nil
 		},
 		OpenStore: func(ctx context.Context, projectRoot string) (di.Store, error) {

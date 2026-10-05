@@ -28,7 +28,7 @@ func (f *fakeProjectGetter) GetProject(id int) (*mcmodel.Project, error) {
 
 func testDeps(getter mc.ProjectGetter, getterErr error) di.Dependencies {
 	return di.Dependencies{
-		LoadGlobal: func(ctx context.Context, path string) (config.Global, error) {
+		LoadGlobalConfig: func(ctx context.Context, path string) (config.Global, error) {
 			return config.Global{
 				DefaultRemote: config.Remote{
 					MCURL:  "https://example.test/api",
@@ -107,7 +107,7 @@ func TestRunner_Run_LoadGlobalError(t *testing.T) {
 
 	expectedErr := errors.New("failed to load global config")
 	deps := di.Dependencies{
-		LoadGlobal: func(ctx context.Context, path string) (config.Global, error) {
+		LoadGlobalConfig: func(ctx context.Context, path string) (config.Global, error) {
 			return config.Global{}, expectedErr
 		},
 	}
@@ -139,7 +139,7 @@ func TestRunner_Run_RemoteClientNotProjectGetter(t *testing.T) {
 	t.Chdir(workDir)
 
 	deps := di.Dependencies{
-		LoadGlobal: func(ctx context.Context, path string) (config.Global, error) {
+		LoadGlobalConfig: func(ctx context.Context, path string) (config.Global, error) {
 			return config.Global{}, nil
 		},
 		NewDefaultRemoteClient: func(global config.Global) (di.RemoteClient, error) {

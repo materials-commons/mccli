@@ -1351,10 +1351,10 @@ func TestNewRemoverDoesNotCloseStoreBeforeUseRegression(t *testing.T) {
 	store := &fakeRmStore{}
 	remote := &fakeRmRemote{}
 	deps := di.Dependencies{
-		LoadProject: func(ctx context.Context, start string) (config.Project, error) {
+		LoadProjectConfig: func(ctx context.Context, start string) (config.Project, error) {
 			return loadedProject, nil
 		},
-		LoadGlobal: func(ctx context.Context, path string) (config.Global, error) {
+		LoadGlobalConfig: func(ctx context.Context, path string) (config.Global, error) {
 			return config.Global{
 				DefaultRemote: config.Remote{
 					MCURL:  "https://example.test/api",

@@ -11,10 +11,10 @@ import (
 func TestWithDefaultsFillsMissingDependencies(t *testing.T) {
 	deps := WithDefaults(Dependencies{})
 
-	if deps.LoadProject == nil {
+	if deps.LoadProjectConfig == nil {
 		t.Fatal("LoadProject is nil")
 	}
-	if deps.LoadGlobal == nil {
+	if deps.LoadGlobalConfig == nil {
 		t.Fatal("LoadGlobal is nil")
 	}
 	if deps.OpenStore == nil {
@@ -47,15 +47,15 @@ func TestWithDefaultsPreservesProvidedDependencies(t *testing.T) {
 	}
 
 	deps := WithDefaults(Dependencies{
-		Now:        now,
-		LoadGlobal: loadGlobal,
+		Now:              now,
+		LoadGlobalConfig: loadGlobal,
 	})
 
 	if got := deps.Now(); got.Unix() != 123 {
 		t.Fatalf("Now() = %v, want Unix 123", got)
 	}
 
-	global, err := deps.LoadGlobal(context.Background(), "")
+	global, err := deps.LoadGlobalConfig(context.Background(), "")
 	if err != nil {
 		t.Fatalf("LoadGlobal() error = %v", err)
 	}

@@ -70,7 +70,7 @@ func NewRemover(deps di.Dependencies, ctx context.Context, opts RemoverOpts) (*R
 		return nil, fmt.Errorf("failed to load remote removers: %w", err)
 	}
 
-	if r.translator, err = r.container.Translator(); err != nil {
+	if r.translator, err = r.container.ProjectPathTranslator(); err != nil {
 		return nil, fmt.Errorf("failed to load translator: %w", err)
 	}
 

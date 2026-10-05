@@ -43,7 +43,7 @@ func RunCloneCmd(ctx context.Context, projectID int) error {
 // config.json and mc2.sqlite files.
 func (r *cloneRunner) Run(ctx context.Context, projectID int) error {
 	// Load Global Config and create the remote client
-	globalConfig, err := r.deps.LoadGlobal(ctx, "")
+	globalConfig, err := r.deps.LoadGlobalConfig(ctx, "")
 	if err != nil {
 		return err
 	}

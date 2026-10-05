@@ -64,7 +64,7 @@ func newUploader(ctx context.Context, deps di.Dependencies, opts Options) (*uplo
 	}
 
 	// Crate the project path translator for handling local and remote project paths.
-	translator, err := container.Translator()
+	translator, err := container.ProjectPathTranslator()
 	if err != nil {
 		return nil, err
 	}

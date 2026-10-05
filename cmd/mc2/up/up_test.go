@@ -170,10 +170,10 @@ func testDeps(projectRoot string, store di.Store, remote di.RemoteClient, manage
 	}
 
 	return di.Dependencies{
-		LoadProject: func(ctx context.Context, start string) (config.Project, error) {
+		LoadProjectConfig: func(ctx context.Context, start string) (config.Project, error) {
 			return config.LoadProject(ctx, projectRoot)
 		},
-		LoadGlobal: func(ctx context.Context, cfgPath string) (config.Global, error) {
+		LoadGlobalConfig: func(ctx context.Context, cfgPath string) (config.Global, error) {
 			return config.Global{
 				DefaultRemote: config.Remote{
 					MCURL:  "https://example.test/api",

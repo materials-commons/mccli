@@ -274,7 +274,7 @@ func TestLoginRunner_Run(t *testing.T) {
 	t.Run("LoadGlobal error calls setupGlobalConfig which propagates getBaseRemoteClient error", func(t *testing.T) {
 		r := loginRunner{
 			deps: di.Dependencies{
-				LoadGlobal: func(ctx context.Context, path string) (config.Global, error) {
+				LoadGlobalConfig: func(ctx context.Context, path string) (config.Global, error) {
 					return config.Global{}, errors.New("config not found")
 				},
 			},
@@ -290,7 +290,7 @@ func TestLoginRunner_Run(t *testing.T) {
 		expectedErr := errors.New("client error")
 		r := loginRunner{
 			deps: di.Dependencies{
-				LoadGlobal: func(ctx context.Context, path string) (config.Global, error) {
+				LoadGlobalConfig: func(ctx context.Context, path string) (config.Global, error) {
 					return config.Global{
 						DefaultRemote: config.Remote{
 							Email: "user@example.com",
@@ -313,7 +313,7 @@ func TestLoginRunner_Run(t *testing.T) {
 		loginer := &fakeLoginer{apiKey: "apikey-123"}
 		r := loginRunner{
 			deps: di.Dependencies{
-				LoadGlobal: func(ctx context.Context, path string) (config.Global, error) {
+				LoadGlobalConfig: func(ctx context.Context, path string) (config.Global, error) {
 					return config.Global{
 						DefaultRemote: config.Remote{
 							Email: "user@example.com",

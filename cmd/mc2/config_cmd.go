@@ -84,7 +84,7 @@ func (r configRunner) showAll(ctx context.Context, showAPIKey bool) error {
 }
 
 func (r configRunner) showGlobal(ctx context.Context, showAPIKey bool) error {
-	cfg, err := r.deps.LoadGlobal(ctx, "")
+	cfg, err := r.deps.LoadGlobalConfig(ctx, "")
 	if err != nil {
 		fmt.Printf("No global config - Please login to set up\n")
 		return err
@@ -118,7 +118,7 @@ func (r configRunner) showGlobal(ctx context.Context, showAPIKey bool) error {
 }
 
 func (r configRunner) showProject(ctx context.Context) error {
-	cfg, err := r.deps.LoadProject(ctx, "")
+	cfg, err := r.deps.LoadProjectConfig(ctx, "")
 	if err != nil {
 		fmt.Printf("No project config - Are you in a project?\n")
 		return err

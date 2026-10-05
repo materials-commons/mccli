@@ -138,7 +138,7 @@ func (w *recordingWebSocket) Run(ctx context.Context) error {
 
 func testDependencies() di.Dependencies {
 	return di.Dependencies{
-		LoadProject: func(ctx context.Context, start string) (config.Project, error) {
+		LoadProjectConfig: func(ctx context.Context, start string) (config.Project, error) {
 			return config.Project{
 				ProjectID: 10,
 				Remote: config.Remote{
@@ -147,7 +147,7 @@ func testDependencies() di.Dependencies {
 				},
 			}, nil
 		},
-		LoadGlobal: func(ctx context.Context, path string) (config.Global, error) {
+		LoadGlobalConfig: func(ctx context.Context, path string) (config.Global, error) {
 			return config.Global{
 				ClientUUID: "client-1",
 				DefaultRemote: config.Remote{

@@ -98,7 +98,7 @@ func (r *initRunner) Run(ctx context.Context, opts initOpts) error {
 	projectDir := mc.CleanProjectDirName(projectName)
 
 	// Load Global config and create the remote client
-	globalConfig, err := r.deps.LoadGlobal(ctx, "")
+	globalConfig, err := r.deps.LoadGlobalConfig(ctx, "")
 	if err != nil {
 		return err
 	}

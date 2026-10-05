@@ -129,7 +129,7 @@ func (r downRunner) Run(ctx context.Context, opts downOpts) error {
 		return fmt.Errorf("remote is not a FileGetter")
 	}
 
-	translator, err := container.Translator()
+	translator, err := container.ProjectPathTranslator()
 	if err != nil {
 		return err
 	}
@@ -256,11 +256,11 @@ func queueDirectoryDownloads(ctx context.Context, req queueRequest, remoteDir st
 	var transferIDs []string
 
 	walkParams := reconcile.WalkNodesAndReconcileParams{
-		Root: reconcile.WalkNode{RemotePath: remoteDir},
-		ListDir: remoteListDirFunc,
+		Root:             reconcile.WalkNode{RemotePath: remoteDir},
+		ListDir:          remoteListDirFunc,
 		DirRecordsGetter: req.store,
-		Reconciler: req.reconciler,
-		Options: options,
+		Reconciler:       req.reconciler,
+		Options:          options,
 		CallbackFunc: func(ctx context.Context, node reconcile.WalkNode, states map[string]reconcile.FileState) error {
 			for _, state := range states {
 				if state.Observation.RemoteEntry == nil || state.Observation.RemoteEntry.Kind != reconcile.KindFile {

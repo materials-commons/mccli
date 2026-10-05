@@ -49,7 +49,7 @@ func runLoginCmd(ctx context.Context, opts loginOpts) error {
 }
 
 func (r loginRunner) Run(ctx context.Context, opts loginOpts) error {
-	globalConfig, err := r.deps.LoadGlobal(ctx, "")
+	globalConfig, err := r.deps.LoadGlobalConfig(ctx, "")
 	if err != nil {
 		if err := r.setupGlobalConfig(ctx, opts); err != nil {
 			return err

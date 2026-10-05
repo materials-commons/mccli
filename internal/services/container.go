@@ -19,16 +19,16 @@ import (
 type Container struct {
 	deps di.Dependencies
 
-	project    config.Project
-	global     config.Global
-	projectSet bool
-	globalSet  bool
+	projectConfig config.Project
+	globalConfig  config.Global
+	projectSet    bool
+	globalSet     bool
 
 	projectRoot string
 
-	store      di.Store
-	remote     di.RemoteClient
-	translator mc.ProjectPathTranslator
+	store                 di.Store
+	remote                di.RemoteClient
+	projectPathTranslator mc.ProjectPathTranslator
 
 	sendQueue *wsclient.Queue[wsclient.OutboundMessage]
 
@@ -54,7 +54,7 @@ func (c *Container) LoadCommandContext(ctx context.Context, workingDir string) (
 		workingDir = "."
 	}
 
-	projectCfg, err := c.deps.LoadProject(ctx, workingDir)
+	projectCfg, err := c.deps.LoadProjectConfig(ctx, workingDir)
 	if err != nil {
 		return nil, err
 	}
@@ -67,13 +67,13 @@ func (c *Container) LoadCommandContext(ctx context.Context, workingDir string) (
 		}
 	}
 
-	globalCfg, err := c.deps.LoadGlobal(ctx, "")
+	globalCfg, err := c.deps.LoadGlobalConfig(ctx, "")
 	if err != nil {
 		return nil, err
 	}
 
-	c.project = projectCfg
-	c.global = globalCfg
+	c.projectConfig = projectCfg
+	c.globalConfig = globalCfg
 	c.projectSet = true
 	c.globalSet = true
 	c.projectRoot = projectRoot
@@ -86,18 +86,18 @@ func (c *Container) LoadCommandContext(ctx context.Context, workingDir string) (
 	}, nil
 }
 
-func (c *Container) Project() (config.Project, error) {
+func (c *Container) ProjectConfig() (config.Project, error) {
 	if !c.projectSet {
 		return config.Project{}, fmt.Errorf("project config has not been loaded")
 	}
-	return c.project, nil
+	return c.projectConfig, nil
 }
 
-func (c *Container) Global() (config.Global, error) {
+func (c *Container) GlobalConfig() (config.Global, error) {
 	if !c.globalSet {
 		return config.Global{}, fmt.Errorf("global config has not been loaded")
 	}
-	return c.global, nil
+	return c.globalConfig, nil
 }
 
 func (c *Container) Store(ctx context.Context) (di.Store, error) {
@@ -128,7 +128,7 @@ func (c *Container) Remote() (di.RemoteClient, error) {
 		return nil, fmt.Errorf("global config has not been loaded")
 	}
 
-	remote, err := c.deps.NewRemoteClient(c.project, c.global)
+	remote, err := c.deps.NewRemoteClient(c.projectConfig, c.globalConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +137,7 @@ func (c *Container) Remote() (di.RemoteClient, error) {
 	return c.remote, nil
 }
 
-func (c *Container) Translator() (mc.ProjectPathTranslator, error) {
+func (c *Container) ProjectPathTranslator() (mc.ProjectPathTranslator, error) {
 	if c.projectRoot == "" {
 		return mc.ProjectPathTranslator{}, fmt.Errorf("project root has not been resolved")
 	}
@@ -147,8 +147,8 @@ func (c *Container) Translator() (mc.ProjectPathTranslator, error) {
 		return mc.ProjectPathTranslator{}, err
 	}
 
-	c.translator = translator
-	return c.translator, nil
+	c.projectPathTranslator = translator
+	return c.projectPathTranslator, nil
 }
 
 func (c *Container) SendQueue() *wsclient.Queue[wsclient.OutboundMessage] {
@@ -188,7 +188,7 @@ func (c *Container) UploadManager(ctx context.Context, opts UploadManagerOptions
 	manager, err := c.deps.NewUploadManager(transfer.UploadConfig{
 		SendQueue:     c.SendQueue(),
 		Store:         store,
-		ClientID:      c.global.ClientUUID,
+		ClientID:      c.globalConfig.ClientUUID,
 		MaxConcurrent: maxConcurrent,
 		Progress:      progress,
 	})
@@ -229,7 +229,7 @@ func (c *Container) DownloadManager(ctx context.Context, opts DownloadManagerOpt
 
 	manager, err := c.deps.NewDownloadManager(transfer.DownloadConfig{
 		Store:         store,
-		ClientID:      c.global.ClientUUID,
+		ClientID:      c.globalConfig.ClientUUID,
 		MaxConcurrent: maxConcurrent,
 		Progress:      progress,
 	})
@@ -257,26 +257,26 @@ func (c *Container) WebSocket(opts WebSocketOptions) (di.WebSocketRunner, error)
 		return nil, fmt.Errorf("global config has not been loaded")
 	}
 
-	remoteCfg, err := RequireConfiguredRemote(c.project, c.global)
+	remoteCfg, err := RequireConfiguredRemote(c.projectConfig, c.globalConfig)
 	if err != nil {
 		return nil, err
 	}
 
 	wsURL := opts.URL
 	if wsURL == "" {
-		wsURL, err = config.ToWebSocketURLFromRemoteURL(c.project.Remote.MCURL)
+		wsURL, err = config.ToWebSocketURLFromRemoteURL(c.projectConfig.Remote.MCURL)
 		if err != nil {
-			return nil, fmt.Errorf("invalid remote MCURL (%s) can't construct websocket URL: %w", c.project.Remote.MCURL, err)
+			return nil, fmt.Errorf("invalid remote MCURL (%s) can't construct websocket URL: %w", c.projectConfig.Remote.MCURL, err)
 		}
 	}
 
 	c.websocket = c.deps.NewWebSocket(di.WebSocketConfig{
 		URL:        wsURL,
 		Token:      remoteCfg.APIKey,
-		ClientID:   c.global.ClientUUID,
+		ClientID:   c.globalConfig.ClientUUID,
 		Outbound:   c.SendQueue(),
 		Handle:     opts.Handle,
-		ProjectIDs: []int{c.project.ProjectID},
+		ProjectIDs: []int{c.projectConfig.ProjectID},
 	})
 
 	return c.websocket, nil

@@ -31,7 +31,7 @@ func (f *fakeProjectCreater) CreateProject(req mcapi.CreateProjectRequest) (*mcm
 
 func testInitDeps(creater mc.ProjectCreater, createrErr error) di.Dependencies {
 	return di.Dependencies{
-		LoadGlobal: func(ctx context.Context, path string) (config.Global, error) {
+		LoadGlobalConfig: func(ctx context.Context, path string) (config.Global, error) {
 			return config.Global{
 				DefaultRemote: config.Remote{
 					MCURL:  "https://example.test/api",
@@ -233,7 +233,7 @@ func TestInitRunner_Run_LoadGlobalError(t *testing.T) {
 
 	expectedErr := errors.New("failed to load global config")
 	deps := di.Dependencies{
-		LoadGlobal: func(ctx context.Context, path string) (config.Global, error) {
+		LoadGlobalConfig: func(ctx context.Context, path string) (config.Global, error) {
 			return config.Global{}, expectedErr
 		},
 	}
@@ -265,7 +265,7 @@ func TestInitRunner_Run_RemoteClientNotProjectCreater(t *testing.T) {
 	t.Chdir(workDir)
 
 	deps := di.Dependencies{
-		LoadGlobal: func(ctx context.Context, path string) (config.Global, error) {
+		LoadGlobalConfig: func(ctx context.Context, path string) (config.Global, error) {
 			return config.Global{}, nil
 		},
 		NewDefaultRemoteClient: func(global config.Global) (di.RemoteClient, error) {
