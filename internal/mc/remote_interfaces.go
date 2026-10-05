@@ -27,7 +27,8 @@ type FileGetter interface {
 }
 
 type FileDeleter interface {
-	DeleteFile(projectID int, fileID int) error
+	DeleteFile(projectID int, fileID int, force bool) error
+	DeleteDirectory(projectID int, directoryID int) error
 }
 
 type FileMover interface {

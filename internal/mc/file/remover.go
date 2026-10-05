@@ -588,7 +588,7 @@ func (r *Remover) removeRemoteFile(ctx context.Context, state reconcile.FileStat
 	default:
 		// Delete the remote file
 		fileID := int(*state.Observation.RemoteEntry.RemoteFileID)
-		if err := r.remoteFileDeleter.DeleteFile(r.project.ProjectID, fileID); err != nil {
+		if err := r.remoteFileDeleter.DeleteFile(r.project.ProjectID, fileID, true); err != nil {
 			return fmt.Errorf("remove remote file %q: %w", state.Observation.RemotePath, err)
 		}
 

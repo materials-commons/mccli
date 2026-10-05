@@ -1772,9 +1772,19 @@ func (r *fakeRmRemote) ListDirectoryByPath(projectID int, path string) ([]mcmode
 	return r.listByPath[path], nil
 }
 
-func (r *fakeRmRemote) DeleteFile(projectID int, fileID int) error {
+func (r *fakeRmRemote) DeleteFile(projectID int, fileID int, force bool) error {
 	r.gotProjectID = projectID
 	r.deletedFileIDs = append(r.deletedFileIDs, fileID)
+
+	if r.deleteErr != nil {
+		return r.deleteErr
+	}
+
+	return nil
+}
+
+func (r *fakeRmRemote) DeleteDirectory(projectID int, directoryID int) error {
+	r.gotProjectID = projectID
 
 	if r.deleteErr != nil {
 		return r.deleteErr
