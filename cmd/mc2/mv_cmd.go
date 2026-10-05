@@ -66,7 +66,8 @@ into an existing directory.
 
 func runMvCmd(ctx context.Context, opts mvOpts, slice []string) error {
 	deps := di.Production()
-	mover, err := file.NewMover(ctx, deps)
+	// TODO: Fix NewMover, dest needs to be passed in
+	mover, err := file.NewMover(ctx, deps, "")
 	if err != nil {
 		return err
 	}
