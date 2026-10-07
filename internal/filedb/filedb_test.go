@@ -476,6 +476,145 @@ func TestClearRemoteByPathRejectsMissingRecord(t *testing.T) {
 	}
 }
 
+func TestRenamePathPrefixRenamesDirectoryTree(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	records := []FileRecord{
+		testRecord("/Old"),
+		testRecord("/Old/a.txt"),
+		testRecord("/Old/Sub"),
+		testRecord("/Old/Sub/b.txt"),
+		testRecord("/Old/Sub/Nested"),
+		testRecord("/Old/Sub/Nested/c.txt"),
+		testRecord("/Oldish/not-renamed.txt"),
+		testRecord("/Other/unchanged.txt"),
+	}
+
+	if err := store.UpsertMany(ctx, records); err != nil {
+		t.Fatalf("UpsertMany() error = %v", err)
+	}
+
+	if err := store.RenamePathPrefix(ctx, "/Old", "/New"); err != nil {
+		t.Fatalf("RenamePathPrefix() error = %v", err)
+	}
+
+	assertRecordPathFields(t, store, ctx, "/New", "/", "New")
+	assertRecordPathFields(t, store, ctx, "/New/a.txt", "/New", "a.txt")
+	assertRecordPathFields(t, store, ctx, "/New/Sub", "/New", "Sub")
+	assertRecordPathFields(t, store, ctx, "/New/Sub/b.txt", "/New/Sub", "b.txt")
+	assertRecordPathFields(t, store, ctx, "/New/Sub/Nested", "/New/Sub", "Nested")
+	assertRecordPathFields(t, store, ctx, "/New/Sub/Nested/c.txt", "/New/Sub/Nested", "c.txt")
+
+	assertRecordPathFields(t, store, ctx, "/Oldish/not-renamed.txt", "/Oldish", "not-renamed.txt")
+	assertRecordPathFields(t, store, ctx, "/Other/unchanged.txt", "/Other", "unchanged.txt")
+
+	for _, oldPath := range []string{
+		"/Old",
+		"/Old/a.txt",
+		"/Old/Sub",
+		"/Old/Sub/b.txt",
+		"/Old/Sub/Nested",
+		"/Old/Sub/Nested/c.txt",
+	} {
+		_, err := store.GetByPath(ctx, oldPath)
+		if !errors.Is(err, ErrRecordNotFound) {
+			t.Fatalf("GetByPath(%q) error = %v, want ErrRecordNotFound", oldPath, err)
+		}
+	}
+}
+
+func TestRenamePathPrefixRenamesIntoNestedDestination(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	records := []FileRecord{
+		testRecord("/Old"),
+		testRecord("/Old/file.txt"),
+		testRecord("/Old/Sub"),
+		testRecord("/Old/Sub/nested.txt"),
+	}
+
+	if err := store.UpsertMany(ctx, records); err != nil {
+		t.Fatalf("UpsertMany() error = %v", err)
+	}
+
+	if err := store.RenamePathPrefix(ctx, "/Old", "/Parent/New"); err != nil {
+		t.Fatalf("RenamePathPrefix() error = %v", err)
+	}
+
+	assertRecordPathFields(t, store, ctx, "/Parent/New", "/Parent", "New")
+	assertRecordPathFields(t, store, ctx, "/Parent/New/file.txt", "/Parent/New", "file.txt")
+	assertRecordPathFields(t, store, ctx, "/Parent/New/Sub", "/Parent/New", "Sub")
+	assertRecordPathFields(t, store, ctx, "/Parent/New/Sub/nested.txt", "/Parent/New/Sub", "nested.txt")
+}
+
+func TestRenamePathPrefixCleansPrefixes(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	records := []FileRecord{
+		testRecord("/Old"),
+		testRecord("/Old/file.txt"),
+	}
+
+	if err := store.UpsertMany(ctx, records); err != nil {
+		t.Fatalf("UpsertMany() error = %v", err)
+	}
+
+	if err := store.RenamePathPrefix(ctx, "/Old/.", "/New/."); err != nil {
+		t.Fatalf("RenamePathPrefix() error = %v", err)
+	}
+
+	assertRecordPathFields(t, store, ctx, "/New", "/", "New")
+	assertRecordPathFields(t, store, ctx, "/New/file.txt", "/New", "file.txt")
+}
+
+func TestRenamePathPrefixRejectsInvalidOldPrefix(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	err := store.RenamePathPrefix(ctx, "Old", "/New")
+	if !errors.Is(err, ErrInvalidRecord) {
+		t.Fatalf("RenamePathPrefix() error = %v, want ErrInvalidRecord", err)
+	}
+}
+
+func TestRenamePathPrefixRejectsInvalidNewPrefix(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	err := store.RenamePathPrefix(ctx, "/Old", "New")
+	if !errors.Is(err, ErrInvalidRecord) {
+		t.Fatalf("RenamePathPrefix() error = %v, want ErrInvalidRecord", err)
+	}
+}
+
+func TestRenamePathPrefixRejectsProjectRoot(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	err := store.RenamePathPrefix(ctx, "/", "/New")
+	if !errors.Is(err, ErrInvalidRecord) {
+		t.Fatalf("RenamePathPrefix() error = %v, want ErrInvalidRecord", err)
+	}
+}
+
+func TestRenamePathPrefixAllowsNoMatchingRecords(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	if err := store.Upsert(ctx, testRecord("/Other/file.txt")); err != nil {
+		t.Fatalf("Upsert() error = %v", err)
+	}
+
+	if err := store.RenamePathPrefix(ctx, "/Missing", "/New"); err != nil {
+		t.Fatalf("RenamePathPrefix() error = %v, want nil", err)
+	}
+
+	assertRecordPathFields(t, store, ctx, "/Other/file.txt", "/Other", "file.txt")
+}
+
 func TestUpsertNilRemoteFieldsPreservesExistingRemoteFields(t *testing.T) {
 	ctx := context.Background()
 	store := openTestStore(t, ctx)
@@ -547,6 +686,25 @@ func openTestStore(t *testing.T, ctx context.Context) *Store {
 	})
 
 	return store
+}
+
+func assertRecordPathFields(t *testing.T, store *Store, ctx context.Context, recordPath, wantDir, wantName string) {
+	t.Helper()
+
+	got, err := store.GetByPath(ctx, recordPath)
+	if err != nil {
+		t.Fatalf("GetByPath(%q) error = %v", recordPath, err)
+	}
+
+	if got.Path != recordPath {
+		t.Fatalf("Path = %q, want %q", got.Path, recordPath)
+	}
+	if got.Dir != wantDir {
+		t.Fatalf("Dir for %q = %q, want %q", recordPath, got.Dir, wantDir)
+	}
+	if got.Name != wantName {
+		t.Fatalf("Name for %q = %q, want %q", recordPath, got.Name, wantName)
+	}
 }
 
 func testRecord(recordPath string) FileRecord {

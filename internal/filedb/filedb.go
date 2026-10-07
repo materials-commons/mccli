@@ -424,6 +424,70 @@ func (s *Store) ClearRemoteByPath(ctx context.Context, filePath string) error {
 	return nil
 }
 
+// RenamePathPrefix updates all records at oldPrefix and below it to newPrefix.
+//
+// For example:
+//
+//	/old          -> /new
+//	/old/a.txt    -> /new/a.txt
+//	/old/sub/b    -> /new/sub/b
+func (s *Store) RenamePathPrefix(ctx context.Context, oldPrefix, newPrefix string) error {
+	if err := validateRemotePath(oldPrefix, "old path prefix"); err != nil {
+		return err
+	}
+	if err := validateRemotePath(newPrefix, "new path prefix"); err != nil {
+		return err
+	}
+	if oldPrefix == "/" {
+		return fmt.Errorf("%w: refusing to rename project root", ErrInvalidRecord)
+	}
+
+	oldPrefix = path.Clean(oldPrefix)
+	newPrefix = path.Clean(newPrefix)
+
+	newDir := path.Dir(newPrefix)
+	if newDir == "." {
+		newDir = "/"
+	}
+
+	newName := path.Base(newPrefix)
+	if newPrefix == "/" {
+		newDir = "/"
+		newName = "/"
+	}
+
+	result := s.db.WithContext(ctx).
+		Model(&FileRecord{}).
+		Where("path = ? OR path LIKE ?", oldPrefix, oldPrefix+"/%").
+		Updates(map[string]any{
+			"path": gorm.Expr("? || substr(path, ?)", newPrefix, len(oldPrefix)+1),
+			"dir": gorm.Expr(
+				"CASE "+
+					"WHEN path = ? THEN ? "+
+					"WHEN dir = ? THEN ? "+
+					"ELSE ? || substr(dir, ?) "+
+					"END",
+				oldPrefix,
+				newDir,
+				oldPrefix,
+				newPrefix,
+				newPrefix,
+				len(oldPrefix)+1,
+			),
+			"name": gorm.Expr(
+				"CASE WHEN path = ? THEN ? ELSE name END",
+				oldPrefix,
+				newName,
+			),
+		})
+
+	if result.Error != nil {
+		return fmt.Errorf("rename file records from %q to %q: %w", oldPrefix, newPrefix, result.Error)
+	}
+
+	return nil
+}
+
 func validateRecord(record FileRecord) error {
 	if err := validateRemotePath(record.Path, "file record path"); err != nil {
 		return err

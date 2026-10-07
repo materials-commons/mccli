@@ -29,6 +29,7 @@ type Store interface {
 	DeleteByPath(ctx context.Context, filePath string) error
 	Close(ctx context.Context) error
 	Upsert(ctx context.Context, record filedb.FileRecord) error
+	RenamePathPrefix(ctx context.Context, oldPrefix, newPrefix string) error
 }
 
 // UploadManager queues and runs websocket uploads.
