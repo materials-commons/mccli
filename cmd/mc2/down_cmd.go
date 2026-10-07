@@ -106,7 +106,7 @@ func (r downRunner) Run(ctx context.Context, opts downOpts) error {
 		return err
 	}
 
-	remoteCfg, err := services.RequireConfiguredRemote(cmdCtx.Project, cmdCtx.Global)
+	remoteCfg, err := services.RequireConfiguredRemote(cmdCtx.ProjectConfig, cmdCtx.GlobalConfig)
 	if err != nil {
 		return err
 	}
@@ -156,7 +156,7 @@ func (r downRunner) Run(ctx context.Context, opts downOpts) error {
 	reconciler := reconcile.New(reconcile.ModeDownload)
 	transferIDs, err := r.queueDownloads(ctx, queueRequest{
 		opts:       opts,
-		project:    cmdCtx.Project,
+		project:    cmdCtx.ProjectConfig,
 		remoteCfg:  remoteCfg,
 		manager:    manager,
 		store:      store,

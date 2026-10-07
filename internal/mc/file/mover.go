@@ -61,11 +61,11 @@ func NewMover(ctx context.Context, deps di.Dependencies, dest string, opts Mover
 		return nil, fmt.Errorf("failed to load command context: %w", err)
 	}
 
+	m.projectConfig = cmdCtx.ProjectConfig
+
 	if m.projectPathTranslator, err = container.ProjectPathTranslator(); err != nil {
 		return nil, fmt.Errorf("failed to load project path translator: %w", err)
 	}
-
-	m.projectConfig = cmdCtx.Project
 
 	if m.store, err = container.Store(ctx); err != nil {
 		return nil, fmt.Errorf("failed to load store: %w", err)

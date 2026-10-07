@@ -8,7 +8,7 @@ import (
 
 func TestCommandContextRequireClientUUID(t *testing.T) {
 	cmdCtx := CommandContext{
-		Global: config.Global{},
+		GlobalConfig: config.Global{},
 	}
 
 	err := cmdCtx.RequireClientUUID("websocket uploads")
@@ -19,7 +19,7 @@ func TestCommandContextRequireClientUUID(t *testing.T) {
 
 func TestCommandContextRequireClientUUIDAcceptsConfiguredValue(t *testing.T) {
 	cmdCtx := CommandContext{
-		Global: config.Global{
+		GlobalConfig: config.Global{
 			ClientUUID: "client-1",
 		},
 	}

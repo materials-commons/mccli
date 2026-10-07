@@ -38,7 +38,7 @@ func newUploader(ctx context.Context, deps di.Dependencies, opts Options) (*uplo
 	}
 
 	// Validate that everything is correctly configured.
-	if _, err := services.RequireConfiguredRemote(cmdCtx.Project, cmdCtx.Global); err != nil {
+	if _, err := services.RequireConfiguredRemote(cmdCtx.ProjectConfig, cmdCtx.GlobalConfig); err != nil {
 		return nil, err
 	}
 	if err := cmdCtx.RequireClientUUID("websocket uploads"); err != nil {
@@ -102,7 +102,7 @@ func newUploader(ctx context.Context, deps di.Dependencies, opts Options) (*uplo
 	// to do with each file. The Observer looks at each file and calls the reconciler on it.
 	reconciler := reconcile.New(reconcile.ModeUpload)
 	observer := reconcile.NewObservationRunner(
-		cmdCtx.Project.ProjectID,
+		cmdCtx.ProjectConfig.ProjectID,
 		translator,
 		store,
 		remote,
@@ -113,7 +113,7 @@ func newUploader(ctx context.Context, deps di.Dependencies, opts Options) (*uplo
 
 	return &uploader{
 		opts:       opts,
-		project:    cmdCtx.Project,
+		project:    cmdCtx.ProjectConfig,
 		manager:    manager,
 		observer:   observer,
 		translator: translator,

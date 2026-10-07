@@ -8,15 +8,15 @@ import (
 
 // CommandContext contains command-wide shared initialization.
 type CommandContext struct {
-	Container   *Container
-	Project     config.Project
-	Global      config.Global
-	ProjectRoot string
+	Container     *Container
+	ProjectConfig config.Project
+	GlobalConfig  config.Global
+	ProjectRoot   string
 }
 
 // RequireClientUUID validates commands that need websocket/client identity.
 func (c CommandContext) RequireClientUUID(reason string) error {
-	if c.Global.ClientUUID == "" {
+	if c.GlobalConfig.ClientUUID == "" {
 		if reason == "" {
 			reason = "command"
 		}

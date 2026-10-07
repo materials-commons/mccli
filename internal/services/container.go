@@ -79,10 +79,10 @@ func (c *Container) LoadCommandContext(ctx context.Context, workingDir string) (
 	c.projectRoot = projectRoot
 
 	return &CommandContext{
-		Container:   c,
-		Project:     projectCfg,
-		Global:      globalCfg,
-		ProjectRoot: projectRoot,
+		Container:     c,
+		ProjectConfig: projectCfg,
+		GlobalConfig:  globalCfg,
+		ProjectRoot:   projectRoot,
 	}, nil
 }
 

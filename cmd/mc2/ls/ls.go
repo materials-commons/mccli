@@ -94,7 +94,7 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 
 		if err := r.listPath(ctx, listRequest{
 			opts:       opts,
-			project:    cmdCtx.Project,
+			project:    cmdCtx.ProjectConfig,
 			translator: translator,
 			store:      store,
 			remote:     remote,

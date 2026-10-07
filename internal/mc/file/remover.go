@@ -60,7 +60,7 @@ func NewRemover(deps di.Dependencies, ctx context.Context, opts RemoverOpts) (*R
 	if err != nil {
 		return nil, fmt.Errorf("failed to load command context: %w", err)
 	}
-	r.project = cmdCtx.Project
+	r.project = cmdCtx.ProjectConfig
 
 	if r.store, err = r.container.Store(ctx); err != nil {
 		return nil, fmt.Errorf("failed to load store: %w", err)
