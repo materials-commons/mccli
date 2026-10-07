@@ -27,7 +27,7 @@ func selfUpdateCommand() *cli.Command {
 }
 
 func runSelfUpdateCmd(ctx context.Context, cmd *cli.Command) error {
-	latest, found, err := selfupdate.DetectLatest(context.Background(), selfupdate.ParseSlug("materials-commons/mccli"))
+	latest, found, err := selfupdate.DetectLatest(ctx, selfupdate.ParseSlug("materials-commons/mccli"))
 	if err != nil {
 		return fmt.Errorf("error occurred while detecting version: %w", err)
 	}
@@ -41,7 +41,7 @@ func runSelfUpdateCmd(ctx context.Context, cmd *cli.Command) error {
 		return nil
 	}
 
-	return updateToLatest(latest)
+	return updateToLatest(ctx, latest)
 }
 
 func showVersionCheckResults(latest *selfupdate.Release) {
@@ -52,7 +52,7 @@ func showVersionCheckResults(latest *selfupdate.Release) {
 	}
 }
 
-func updateToLatest(latest *selfupdate.Release) error {
+func updateToLatest(ctx context.Context, latest *selfupdate.Release) error {
 	if latest.LessOrEqual(version) {
 		log.Printf("Current version (%s) is the latest", version)
 		return nil
@@ -62,7 +62,7 @@ func updateToLatest(latest *selfupdate.Release) error {
 	if err != nil {
 		return errors.New("could not locate executable path")
 	}
-	if err := selfupdate.UpdateTo(context.Background(), latest.AssetURL, latest.AssetName, exe); err != nil {
+	if err := selfupdate.UpdateTo(ctx, latest.AssetURL, latest.AssetName, exe); err != nil {
 		return fmt.Errorf("error occurred while updating binary: %w", err)
 	}
 	log.Printf("Successfully updated to version %s", latest.Version())
