@@ -107,6 +107,11 @@ func (m *Mover) RenameFile(src, dest string) error {
 				return fmt.Errorf("failed to rename remote file: %w", err)
 			}
 
+			// We've renamed the file so it's now the remote destination. To track this change, we update
+			// m.remoteDest to be the sourceRemoteFile. The Path for sourceRemoteFile will not be correct
+			// because we aren't retrieving the updated remote version. However, all we really need is the ID.
+			m.remoteDest = sourceRemoteFile
+
 			return nil
 		},
 		localMoveFunc: func(m *Mover, src, dest, sourceProjectPath, destProjectPath string) error {
@@ -159,7 +164,7 @@ func (m *Mover) RenameDir(src, dest string) error {
 			}
 
 			// We've renamed the directory so it's now the remote destination. To track this change, we update
-			// m.remoteDest to be the sourceRemoteDir. The Path and for sourceRemoteDir will not be correct
+			// m.remoteDest to be the sourceRemoteDir. The Path for sourceRemoteDir will not be correct
 			// because we aren't retrieving the updated remote version. However, all we really need is the ID.
 			m.remoteDest = sourceRemoteDir
 
@@ -172,7 +177,10 @@ func (m *Mover) RenameDir(src, dest string) error {
 				return fmt.Errorf("failed to rename local dir: %w", err)
 			}
 
-			// TODO: Rename database paths from old to new path for all files in that path
+			if err := m.store.RenamePathPrefix(context.Background(), sourceProjectPath, destProjectPath); err != nil {
+				return fmt.Errorf("failed to rename database paths: %w", err)
+			}
+
 			return nil
 		},
 
@@ -226,6 +234,7 @@ func (m *Mover) MoveFile(src, dest string) error {
 
 			f.Path = path.Join(destProjectPath, path.Base(sourceProjectPath))
 			f.Dir = path.Dir(f.Path)
+			f.Name = path.Base(f.Path)
 			if err := m.store.Upsert(context.Background(), f); err != nil {
 				return fmt.Errorf("failed to update local file: %w", err)
 			}
@@ -274,7 +283,9 @@ func (m *Mover) MoveDir(src, dest string) error {
 				return fmt.Errorf("failed to move local directory: %w", err)
 			}
 
-			// TODO: Rename database paths from old to new path for all files in that path
+			if err := m.store.RenamePathPrefix(context.Background(), sourceProjectPath, destProjectPath); err != nil {
+				return fmt.Errorf("failed to rename database paths: %w", err)
+			}
 
 			return nil
 		},
