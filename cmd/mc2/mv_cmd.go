@@ -64,46 +64,67 @@ func runMvCmd(ctx context.Context, opts file.MoverOpts, slice []string) error {
 	}
 
 	mr := moveRunner{
-		deps:  di.Production(),
 		mover: mover,
 	}
 
-	return mr.run(ctx, slice)
+	return mr.run(ctx, opts, slice)
 }
 
 type moveRunner struct {
-	deps  di.Dependencies
 	mover *file.Mover
 }
 
-func isDir(finfo os.FileInfo) bool {
+type fileTyper interface {
+	IsDir() bool
+}
+
+func isDir(finfo fileTyper) bool {
 	if finfo == nil {
 		return false
 	}
 	return finfo.IsDir()
 }
 
-func isFile(finfo os.FileInfo) bool {
+func isFile(finfo fileTyper) bool {
 	if finfo == nil {
 		return false
 	}
 	return !finfo.IsDir()
 }
 
-// run performs the move and rename operations. It will go through the list of files, using the last
-// file as the destination.
-func (m moveRunner) run(ctx context.Context, files []string) error {
+type getFileTypeFunc func(path string) (fileTyper, error)
+
+// run performs the move and rename operations.
+func (m moveRunner) run(ctx context.Context, opts file.MoverOpts, files []string) error {
+	if opts.MoveRemoteOnly {
+		// Remote only move. Send a file lookup function that gets the type information from
+		// the remote server.
+		return m.doMoves(ctx, files, func(path string) (fileTyper, error) {
+			return m.mover.GetRemoteFile(path)
+		})
+	}
+
+	// LocalOnly, or Local/Remote. In all these cases we need to get the
+	// type information for the files locally.
+	return m.doMoves(ctx, files, func(path string) (fileTyper, error) {
+		return os.Stat(path)
+	})
+}
+
+// doMoves handles the file movement. The getFileType passed in function allows this method to work
+// for remote only, and local files.
+func (m moveRunner) doMoves(ctx context.Context, files []string, getFileType getFileTypeFunc) error {
 	destExists := true
 	dest := files[len(files)-1]
 
 	// Figure out the state of the destination. A destination that doesn't exist would mean that we are doing a rename.
-	destInfo, err := os.Stat(dest)
+	destType, err := getFileType(dest)
 	if err != nil {
 		destExists = false
 	}
 
 	// Make sure the user isn't trying to move multiple files to a file destination. We don't allow overwrites.
-	if isFile(destInfo) && len(files) > 2 {
+	if isFile(destType) && len(files) > 2 {
 		// The user has specified a move that sends multiple sources to a
 		// destination file. This is a mistake as each of the sources will
 		// overwrite the file. We catch this early and return an error as
@@ -114,7 +135,7 @@ func (m moveRunner) run(ctx context.Context, files []string) error {
 	// Loop through and perform the moves/renames. We stop at the first error.
 	for _, src := range files[:len(files)-1] {
 		// Make sure that the source of the move exists.
-		srcInfo, err := os.Stat(src)
+		srcType, err := getFileType(src)
 		if err != nil {
 			// The user specified a source that doesn't exist.
 			return err
@@ -123,14 +144,14 @@ func (m moveRunner) run(ctx context.Context, files []string) error {
 		// Check if the move is valid. A source file cannot be moved over an existing file. And a source directory
 		// cannot be moved over an existing file.
 		switch {
-		case isFile(srcInfo):
-			if destExists && isFile(destInfo) {
+		case isFile(srcType):
+			if destExists && isFile(destType) {
 				// User has specified a move of a file to an existing file. This would overwrite the existing file,
 				// which is not allowed.
 				return errors.New("cannot move over an existing file")
 			}
-		case isDir(srcInfo):
-			if destExists && isFile(destInfo) {
+		case isDir(srcType):
+			if destExists && isFile(destType) {
 				// The user has specified a move of a directory to an existing file. A directory cannot be moved "over"
 				// a file.
 				return errors.New("cannot move a directory to a file")
@@ -139,22 +160,22 @@ func (m moveRunner) run(ctx context.Context, files []string) error {
 
 		// We've done local validation. Now we need to check if this is a move or a rename.
 		switch {
-		case isFile(srcInfo) && !destExists:
+		case isFile(srcType) && !destExists:
 			// Moving a file to a non-existing destination will result in a rename.
 			if err := m.mover.RenameFile(src, dest); err != nil {
 				return err
 			}
-		case isDir(srcInfo) && !destExists:
+		case isDir(srcType) && !destExists:
 			// Moving a directory to a non-existing destination will result in a rename.
 			if err := m.mover.RenameDir(src, dest); err != nil {
 				return err
 			}
-		case isFile(srcInfo) && isDir(destInfo):
+		case isFile(srcType) && isDir(destType):
 			// Moving a file to a directory will result in a move.
 			if err := m.mover.MoveFile(src, dest); err != nil {
 				return err
 			}
-		case isDir(srcInfo) && isDir(destInfo):
+		case isDir(srcType) && isDir(destType):
 			// Moving a directory to a directory will result in a move.
 			if err := m.mover.MoveDir(src, dest); err != nil {
 				return err
@@ -171,7 +192,7 @@ func (m moveRunner) run(ctx context.Context, files []string) error {
 		// of dest won't change.
 		if !destExists {
 			// Last time through the loop dest didn't exist, lets re-establish its state.
-			destInfo, err = os.Stat(dest)
+			destType, err = getFileType(dest)
 			if err == nil {
 				destExists = true
 			}

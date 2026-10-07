@@ -24,7 +24,6 @@ type Mover struct {
 	remoteGetter          mc.FileDirectoryGetter
 	remoteMover           mc.FileMover
 	remoteRenamer         mc.FileRenamer
-	workingDir            string
 	remoteDest            *mcmodel.File
 	opts                  MoverOpts
 }
@@ -53,14 +52,11 @@ func NewMover(ctx context.Context, deps di.Dependencies, dest string, opts Mover
 		err error
 	)
 
-	m.workingDir, err = os.Getwd()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get working directory: %w", err)
-	}
+	m.opts = opts
 
 	container := services.NewContainer(deps)
 
-	cmdCtx, err := container.LoadCommandContext(ctx, m.workingDir)
+	cmdCtx, err := container.LoadCommandContext(ctx, m.opts.WorkingDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load command context: %w", err)
 	}
@@ -291,6 +287,15 @@ func (m *Mover) MoveDir(src, dest string) error {
 	return m.do(src, dest, funcs)
 }
 
+func (m *Mover) GetRemoteFile(filePath string) (*mcmodel.File, error) {
+	projectPath, err := m.projectPathTranslator.LocalToRemote(m.normalizePath(filePath))
+	if err != nil {
+		return nil, err
+	}
+
+	return m.remoteGetter.GetFileByPath(m.projectConfig.ProjectID, projectPath)
+}
+
 func (m *Mover) do(src, dest string, params doerFuncs) error {
 	var (
 		err               error
@@ -365,7 +370,7 @@ func (m *Mover) createMoveTransaction(src, dest string) *MoveTransaction {
 		DestFullPath:      m.normalizePath(dest),
 		CreatedAt:         now,
 		UpdatedAt:         now,
-		CommandWorkingDir: m.workingDir,
+		CommandWorkingDir: m.opts.WorkingDir,
 	}
 }
 
@@ -376,7 +381,7 @@ func (m *Mover) normalizePath(path string) string {
 	}
 
 	// They specified a relative path to the working directory
-	return filepath.Clean(filepath.Join(m.workingDir, path))
+	return filepath.Clean(filepath.Join(m.opts.WorkingDir, path))
 }
 
 // loadRemoteDest loads the remote destination file for the mover. It should only be called from
