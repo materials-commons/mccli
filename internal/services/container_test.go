@@ -178,6 +178,11 @@ func makeServiceTestProject(t *testing.T) string {
 
 type fakeStore struct{}
 
+func (fakeStore) RenamePathPrefix(ctx context.Context, oldPrefix, newPrefix string) error {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (fakeStore) DeleteByPath(ctx context.Context, filePath string) error {
 	//TODO implement me
 	panic("implement me")

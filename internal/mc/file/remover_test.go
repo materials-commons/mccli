@@ -1678,6 +1678,11 @@ type fakeRmStore struct {
 	closed       bool
 }
 
+func (s *fakeRmStore) RenamePathPrefix(ctx context.Context, oldPrefix, newPrefix string) error {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (s *fakeRmStore) GetByPath(ctx context.Context, filePath string) (filedb.FileRecord, error) {
 	if s.getErr != nil {
 		return filedb.FileRecord{}, s.getErr
