@@ -54,22 +54,18 @@ func NewMover(ctx context.Context, deps di.Dependencies, dest string, opts Mover
 
 	m.opts = opts
 
-	container := services.NewContainer(deps)
-
-	cmdCtx, err := container.LoadCommandContext(ctx, m.opts.WorkingDir)
+	container, err := services.NewContainer(ctx, deps,
+		services.WithCommandServices(),
+		services.WithRemote(),
+		services.WithProjectPathTranslator(),
+		services.WithStore())
 	if err != nil {
-		return nil, fmt.Errorf("failed to load command context: %w", err)
+		return nil, err
 	}
 
-	m.projectConfig = cmdCtx.ProjectConfig
-
-	if m.projectPathTranslator, err = container.ProjectPathTranslator(); err != nil {
-		return nil, fmt.Errorf("failed to load project path translator: %w", err)
-	}
-
-	if m.store, err = container.Store(ctx); err != nil {
-		return nil, fmt.Errorf("failed to load store: %w", err)
-	}
+	m.projectConfig = container.MustProjectConfig()
+	m.projectPathTranslator = container.MustProjectPathTranslator()
+	m.store = container.MustStore()
 
 	if m.remoteGetter, m.remoteMover, m.remoteRenamer, err = getMoverRemotes(container); err != nil {
 		return nil, fmt.Errorf("failed to load remote mover remotes: %w", err)
@@ -413,24 +409,20 @@ func (m *Mover) loadRemoteDest(destFullPath string) error {
 }
 
 func getMoverRemotes(container *services.Container) (mc.FileDirectoryGetter, mc.FileMover, mc.FileRenamer, error) {
-	remoteAny, err := container.Remote()
+
+	remoteGetter, err := services.RequireRemoteAs[mc.FileDirectoryGetter](container, "FileDirectoryGetter")
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to load remote: %w", err)
+		return nil, nil, nil, err
 	}
 
-	remoteGetter, ok := remoteAny.(mc.FileDirectoryGetter)
-	if !ok {
-		return nil, nil, nil, fmt.Errorf("remote does not implement FileDirectoryGetter")
+	remoteMover, err := services.RequireRemoteAs[mc.FileMover](container, "FileMover")
+	if err != nil {
+		return nil, nil, nil, err
 	}
 
-	remoteMover, ok := remoteAny.(mc.FileMover)
-	if !ok {
-		return nil, nil, nil, fmt.Errorf("remote does not implement FileMover")
-	}
-
-	remoteRenamer, ok := remoteAny.(mc.FileRenamer)
-	if !ok {
-		return nil, nil, nil, fmt.Errorf("remote does not implement FileRename")
+	remoteRenamer, err := services.RequireRemoteAs[mc.FileRenamer](container, "FileRenamer")
+	if err != nil {
+		return nil, nil, nil, err
 	}
 
 	return remoteGetter, remoteMover, remoteRenamer, nil

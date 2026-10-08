@@ -132,6 +132,13 @@ func (g Global) FindRemote(email, mcurl string) (Remote, bool) {
 	return Remote{}, false
 }
 
+func (g Global) RequireClientUUID(action string) error {
+	if g.ClientUUID == "" {
+		return fmt.Errorf("cannot %s without a client UUID", action)
+	}
+	return nil
+}
+
 // ToWebSocketURLFromRemoteURL converts a remote URL to a WebSocket URL. It looks at the MCURL used
 // to connect to a Materials Commons server to construct the WebSocket URL. If the MCURL uses the
 // https scheme, then the websocket url contains WSS, otherwise it uses ws. Examples:

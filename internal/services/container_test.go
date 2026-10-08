@@ -26,7 +26,7 @@ func TestContainerLoadCommandContextDoesNotInitializeCommandSpecificServices(t *
 	var storeCalls int
 	var remoteCalls int
 
-	container := NewContainer(di.Dependencies{
+	container, err := NewContainer(ctx, di.Dependencies{
 		LoadProjectConfig: func(ctx context.Context, start string) (config.Project, error) {
 			return config.Project{
 				ProjectID: 10,
@@ -68,7 +68,11 @@ func TestContainerLoadCommandContextDoesNotInitializeCommandSpecificServices(t *
 		},
 	})
 
-	_, err := container.LoadCommandContext(ctx, projectRoot)
+	if err != nil {
+		t.Fatalf("NewContainer() error = %v", err)
+	}
+
+	_, err = container.LoadCommandContext(ctx, projectRoot)
 	if err != nil {
 		t.Fatalf("LoadCommandContext() error = %v", err)
 	}
@@ -96,7 +100,7 @@ func TestContainerStoreIsLazyAndCached(t *testing.T) {
 
 	var storeCalls int
 
-	container := NewContainer(di.Dependencies{
+	container, err := NewContainer(ctx, di.Dependencies{
 		LoadProjectConfig: func(ctx context.Context, start string) (config.Project, error) {
 			return config.Project{ProjectID: 10}, nil
 		},
@@ -108,6 +112,10 @@ func TestContainerStoreIsLazyAndCached(t *testing.T) {
 			return fakeStore{}, nil
 		},
 	})
+
+	if err != nil {
+		t.Fatalf("NewContainer() error = %v", err)
+	}
 
 	container.projectRoot = projectRoot
 

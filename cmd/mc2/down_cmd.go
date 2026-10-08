@@ -100,37 +100,30 @@ func (r downRunner) Run(ctx context.Context, opts downOpts) error {
 
 	deps := di.WithDefaults(r.Deps)
 
-	container := services.NewContainer(deps)
-	cmdCtx, err := container.LoadCommandContext(ctx, opts.WorkingDir)
+	container, err := services.NewContainer(ctx, deps,
+		services.WithCommandServices(),
+		services.WithRemote(),
+		services.WithProjectPathTranslator(),
+		services.WithStore())
 	if err != nil {
 		return err
 	}
 
-	remoteCfg, err := services.RequireConfiguredRemote(cmdCtx.ProjectConfig, cmdCtx.GlobalConfig)
-	if err != nil {
-		return err
-	}
-	if err := cmdCtx.RequireClientUUID("websocket downloads"); err != nil {
-		return err
-	}
+	projectConfig := container.MustProjectConfig()
+	globalConfig := container.MustGlobalConfig()
+	store := container.MustStore()
+	translator := container.MustProjectPathTranslator()
 
-	store, err := container.Store(ctx)
-	if err != nil {
-		return err
-	}
-
-	remoteAny, err := container.Remote()
+	remote, err := services.RequireRemoteAs[mc.FileDirectoryGetter](container, "FileDirectoryGetter")
 	if err != nil {
 		return err
 	}
 
-	remote, ok := remoteAny.(mc.FileDirectoryGetter)
-	if !ok {
-		return fmt.Errorf("remote is not a FileGetter")
-	}
-
-	translator, err := container.ProjectPathTranslator()
+	remoteCfg, err := services.RequireConfiguredRemote(projectConfig, globalConfig)
 	if err != nil {
+		return err
+	}
+	if err := globalConfig.RequireClientUUID("websocket downloads"); err != nil {
 		return err
 	}
 
@@ -156,7 +149,7 @@ func (r downRunner) Run(ctx context.Context, opts downOpts) error {
 	reconciler := reconcile.New(reconcile.ModeDownload)
 	transferIDs, err := r.queueDownloads(ctx, queueRequest{
 		opts:       opts,
-		project:    cmdCtx.ProjectConfig,
+		project:    projectConfig,
 		remoteCfg:  remoteCfg,
 		manager:    manager,
 		store:      store,

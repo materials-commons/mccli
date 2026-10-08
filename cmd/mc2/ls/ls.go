@@ -53,8 +53,11 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 	opts = normalizeOptions(opts)
 	deps := di.WithDefaults(r.Deps)
 
-	container := services.NewContainer(deps)
-	cmdCtx, err := container.LoadCommandContext(ctx, opts.WorkingDir)
+	container, err := services.NewContainer(ctx, deps,
+		services.WithCommandServices(),
+		services.WithRemote(),
+		services.WithProjectPathTranslator(),
+		services.WithStore())
 	if err != nil {
 		return err
 	}
@@ -62,22 +65,11 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 		_ = container.Close(ctx)
 	}()
 
-	store, err := container.Store(ctx)
-	if err != nil {
-		return err
-	}
+	store := container.MustStore()
+	translator := container.MustProjectPathTranslator()
+	projectConfig := container.MustProjectConfig()
 
-	remoteAny, err := container.Remote()
-	if err != nil {
-		return err
-	}
-
-	remote, ok := remoteAny.(mc.FileDirectoryGetter)
-	if !ok {
-		return fmt.Errorf("remote is not a FileGetter")
-	}
-
-	translator, err := container.ProjectPathTranslator()
+	remote, err := services.RequireRemoteAs[mc.FileDirectoryGetter](container, "FileDirectoryGetter")
 	if err != nil {
 		return err
 	}
@@ -94,7 +86,7 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 
 		if err := r.listPath(ctx, listRequest{
 			opts:       opts,
-			project:    cmdCtx.ProjectConfig,
+			project:    projectConfig,
 			translator: translator,
 			store:      store,
 			remote:     remote,

@@ -54,24 +54,21 @@ func NewRemover(deps di.Dependencies, ctx context.Context, opts RemoverOpts) (*R
 	// hasn't done anything with.
 	r.reconciler = reconcile.New(reconcile.ModeDownload)
 
-	r.container = services.NewContainer(deps)
-
-	cmdCtx, err := r.container.LoadCommandContext(ctx, opts.WorkingDir)
+	r.container, err = services.NewContainer(ctx, deps,
+		services.WithCommandServices(),
+		services.WithRemote(),
+		services.WithProjectPathTranslator(),
+		services.WithStore())
 	if err != nil {
-		return nil, fmt.Errorf("failed to load command context: %w", err)
+		return nil, err
 	}
-	r.project = cmdCtx.ProjectConfig
 
-	if r.store, err = r.container.Store(ctx); err != nil {
-		return nil, fmt.Errorf("failed to load store: %w", err)
-	}
+	r.project = r.container.MustProjectConfig()
+	r.store = r.container.MustStore()
+	r.translator = r.container.MustProjectPathTranslator()
 
 	if r.remoteGetter, r.remoteFileDeleter, err = getRemoverRemotes(r.container); err != nil {
 		return nil, fmt.Errorf("failed to load remote removers: %w", err)
-	}
-
-	if r.translator, err = r.container.ProjectPathTranslator(); err != nil {
-		return nil, fmt.Errorf("failed to load translator: %w", err)
 	}
 
 	return &r, nil
@@ -715,19 +712,14 @@ func stateRemotePathDepth(state reconcile.FileState) int {
 }
 
 func getRemoverRemotes(container *services.Container) (mc.FileDirectoryGetter, mc.FileDeleter, error) {
-	remoteAny, err := container.Remote()
+	remoteGetter, err := services.RequireRemoteAs[mc.FileDirectoryGetter](container, "FileDirectoryGetter")
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load remote: %w", err)
+		return nil, nil, err
 	}
 
-	remoteGetter, ok := remoteAny.(mc.FileDirectoryGetter)
-	if !ok {
-		return nil, nil, fmt.Errorf("remote does not implement FileDirectoryGetter")
-	}
-
-	remoteRemover, ok := remoteAny.(mc.FileDeleter)
-	if !ok {
-		return nil, nil, fmt.Errorf("remote does not implement FileDeleter")
+	remoteRemover, err := services.RequireRemoteAs[mc.FileDeleter](container, "FileDeleter")
+	if err != nil {
+		return nil, nil, err
 	}
 
 	return remoteGetter, remoteRemover, nil

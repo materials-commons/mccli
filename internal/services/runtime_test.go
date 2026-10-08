@@ -13,7 +13,10 @@ import (
 
 func TestRuntimeStartsAndStopsInOrder(t *testing.T) {
 	ctx := context.Background()
-	container := NewContainer(testDependencies())
+	container, err := NewContainer(ctx, testDependencies())
+	if err != nil {
+		t.Fatalf("NewContainer() error = %v", err)
+	}
 
 	var events []string
 
@@ -56,7 +59,10 @@ func TestRuntimeStartsAndStopsInOrder(t *testing.T) {
 
 func TestRuntimeStopIsIdempotent(t *testing.T) {
 	ctx := context.Background()
-	container := NewContainer(testDependencies())
+	container, err := NewContainer(ctx, testDependencies())
+	if err != nil {
+		t.Fatalf("NewContainer() error = %v", err)
+	}
 
 	var events []string
 

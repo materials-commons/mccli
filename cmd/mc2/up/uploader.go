@@ -26,48 +26,43 @@ type uploader struct {
 	runtime    *services.Runtime
 }
 
-// newUploader performs all the setup nescessary to create an uploader.
+// newUploader performs all the setup necessary to create an uploader.
 func newUploader(ctx context.Context, deps di.Dependencies, opts Options) (*uploader, error) {
 	deps = di.WithDefaults(deps)
 
 	// Create the service container that manages the dependencies for the uploader.
-	container := services.NewContainer(deps)
-	cmdCtx, err := container.LoadCommandContext(ctx, opts.WorkingDir)
+	container, err := services.NewContainer(ctx, deps,
+		services.WithCommandServices(),
+		services.WithRemote(),
+		services.WithProjectPathTranslator(),
+		services.WithStore())
 	if err != nil {
 		return nil, err
 	}
 
+	projectConfig := container.MustProjectConfig()
+	globalConfig := container.MustGlobalConfig()
+
 	// Validate that everything is correctly configured.
-	if _, err := services.RequireConfiguredRemote(cmdCtx.ProjectConfig, cmdCtx.GlobalConfig); err != nil {
+	if _, err := services.RequireConfiguredRemote(projectConfig, globalConfig); err != nil {
 		return nil, err
 	}
-	if err := cmdCtx.RequireClientUUID("websocket uploads"); err != nil {
+
+	if err := globalConfig.RequireClientUUID("websocket uploads"); err != nil {
 		return nil, err
 	}
 
 	// Create the store where file state is stored.
-	store, err := container.Store(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create the remote client.
-	remoteAny, err := container.Remote()
-	if err != nil {
-		return nil, err
-	}
+	store := container.MustStore()
 
 	// Cast it to just the interface we need.
-	remote, ok := remoteAny.(mc.FileGetter)
-	if !ok {
+	remote, err := services.RequireRemoteAs[mc.FileGetter](container, "FileGetter")
+	if err != nil {
 		return nil, fmt.Errorf("remote is not a FileGetter")
 	}
 
-	// Crate the project path translator for handling local and remote project paths.
-	translator, err := container.ProjectPathTranslator()
-	if err != nil {
-		return nil, err
-	}
+	// Create the project path translator for handling local and remote project paths.
+	translator := container.MustProjectPathTranslator()
 
 	// Create the upload manager. This manages the queue of upload requests and controls parallelism.
 	manager, err := container.UploadManager(ctx, services.UploadManagerOptions{
@@ -102,7 +97,7 @@ func newUploader(ctx context.Context, deps di.Dependencies, opts Options) (*uplo
 	// to do with each file. The Observer looks at each file and calls the reconciler on it.
 	reconciler := reconcile.New(reconcile.ModeUpload)
 	observer := reconcile.NewObservationRunner(
-		cmdCtx.ProjectConfig.ProjectID,
+		projectConfig.ProjectID,
 		translator,
 		store,
 		remote,
@@ -113,7 +108,7 @@ func newUploader(ctx context.Context, deps di.Dependencies, opts Options) (*uplo
 
 	return &uploader{
 		opts:       opts,
-		project:    cmdCtx.ProjectConfig,
+		project:    projectConfig,
 		manager:    manager,
 		observer:   observer,
 		translator: translator,
