@@ -101,7 +101,9 @@ func (r downRunner) Run(ctx context.Context, opts downOpts) error {
 	deps := di.WithDefaults(r.Deps)
 
 	container, err := services.NewContainer(ctx, deps,
-		services.WithCommandServices(),
+		services.WithProjectConfig(),
+		services.WithProjectRoot(),
+		services.WithGlobalConfig(),
 		services.WithRemote(),
 		services.WithProjectPathTranslator(),
 		services.WithStore())

@@ -54,7 +54,9 @@ func (r Runner) Run(ctx context.Context, opts Options) error {
 	deps := di.WithDefaults(r.Deps)
 
 	container, err := services.NewContainer(ctx, deps,
-		services.WithCommandServices(),
+		services.WithProjectConfig(),
+		services.WithProjectRoot(),
+		services.WithGlobalConfig(),
 		services.WithRemote(),
 		services.WithProjectPathTranslator(),
 		services.WithStore())

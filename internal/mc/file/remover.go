@@ -55,7 +55,9 @@ func NewRemover(deps di.Dependencies, ctx context.Context, opts RemoverOpts) (*R
 	r.reconciler = reconcile.New(reconcile.ModeDownload)
 
 	r.container, err = services.NewContainer(ctx, deps,
-		services.WithCommandServices(),
+		services.WithProjectConfig(),
+		services.WithProjectRoot(),
+		services.WithGlobalConfig(),
 		services.WithRemote(),
 		services.WithProjectPathTranslator(),
 		services.WithStore())

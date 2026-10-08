@@ -32,7 +32,9 @@ func newUploader(ctx context.Context, deps di.Dependencies, opts Options) (*uplo
 
 	// Create the service container that manages the dependencies for the uploader.
 	container, err := services.NewContainer(ctx, deps,
-		services.WithCommandServices(),
+		services.WithProjectConfig(),
+		services.WithProjectRoot(),
+		services.WithGlobalConfig(),
 		services.WithRemote(),
 		services.WithProjectPathTranslator(),
 		services.WithStore())
