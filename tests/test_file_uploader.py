@@ -7,11 +7,13 @@ from unittest.mock import AsyncMock
 import pytest
 
 from materials_commons.cli.server.uploader.file_uploader import FileUploader
+from materials_commons.cli.subcommands.up import ws_upload
 
 
 @dataclass(frozen=True)
 class FakeUpdatedRecord:
     local_checksum: str = "local-checksum"
+    local_last_seen_ts: int = 0
     remote_checksum: str = ""
     remote_size: int = 0
     remote_file_id: int = 0
@@ -81,6 +83,276 @@ def drain_queue(queue):
         items.append(queue.get_nowait())
     return items
 
+def test_wait_for_acceptance_already_uploaded_writes_updated_record_to_db_queue(tmp_path):
+    """
+    Intent:
+    Verify TRANSFER_ALREADY_UPLOADED updates the file database queue.
+
+    When the server reports that a file has already been uploaded, the uploader
+    should treat acceptance as complete, mark the upload as already uploaded, and
+    enqueue the updated remote metadata for persistence.
+    """
+
+    async def run_test():
+        uploader, _, db_write_queue = make_uploader(tmp_path, file_bytes=b"hello")
+
+        await uploader.handle_response(
+            {
+                "command": "TRANSFER_ALREADY_UPLOADED",
+                "payload": {
+                    "file_checksum": "remote-checksum",
+                    "file_size": 5,
+                    "file_id": 4321,
+                    "file_created_at_ns": 987654321,
+                },
+            }
+        )
+
+        result = await uploader._wait_for_acceptance()
+
+        assert result is False
+        assert uploader._already_uploaded is True
+        assert uploader.waiting_for_response is None
+
+        db_write_request = await db_write_queue.get()
+        assert db_write_request.project == uploader.upload_request.project
+        assert db_write_request.command == "single"
+        assert db_write_request.data.remote_checksum == "remote-checksum"
+        assert db_write_request.data.remote_size == 5
+        assert db_write_request.data.remote_file_id == 4321
+        assert db_write_request.data.remote_ctime_ns == 987654321
+
+    asyncio.run(run_test())
+
+
+def test_upload_returns_true_and_updates_db_when_server_says_already_uploaded(tmp_path):
+    """
+    Intent:
+    Verify the upload-level TRANSFER_ALREADY_UPLOADED path.
+
+    upload() should return success without sending chunks or TRANSFER_COMPLETE,
+    and it should preserve the database update produced during acceptance.
+    """
+
+    async def run_test():
+        uploader, ws_send_queue, db_write_queue = make_uploader(
+            tmp_path,
+            file_bytes=b"hello",
+        )
+
+        await uploader.handle_response(
+            {
+                "command": "TRANSFER_ALREADY_UPLOADED",
+                "payload": {
+                    "file_checksum": "remote-checksum",
+                    "file_size": 5,
+                    "file_id": 2468,
+                    "file_created_at_ns": 13579,
+                },
+            }
+        )
+
+        result = await uploader.upload()
+
+        assert result is True
+
+        sent_messages = drain_queue(ws_send_queue)
+        assert len(sent_messages) == 1
+        assert sent_messages[0]["command"] == "TRANSFER_INIT"
+
+        db_write_request = await db_write_queue.get()
+        assert db_write_request.command == "single"
+        assert db_write_request.data.remote_checksum == "remote-checksum"
+        assert db_write_request.data.remote_size == 5
+        assert db_write_request.data.remote_file_id == 2468
+        assert db_write_request.data.remote_ctime_ns == 13579
+
+    asyncio.run(run_test())
+
+
+def test_ws_upload_single_file_in_mcignore_is_not_uploaded_or_reconciled(tmp_path, monkeypatch):
+    """
+    Intent:
+    Verify websocket single-file upload honors .mcignore.
+
+    If the requested file matches .mcignore, ws_upload() should skip it before
+    reconciliation and should not enqueue an upload.
+    """
+
+    async def run_test():
+        project_root = tmp_path
+        ignored_file = project_root / "ignored.txt"
+        ignored_file.write_text("do not upload")
+        (project_root / ".mcignore").write_text("ignored.txt\n")
+
+        db = SimpleNamespace(close=AsyncMock())
+        proj = SimpleNamespace(local_path=project_root, get_filedb=AsyncMock(return_value=db))
+
+        class FakeLocalProject:
+            @staticmethod
+            def load(_working_dir):
+                return proj
+
+        class FakeServiceRuntime:
+            def __init__(self, _container):
+                pass
+
+            async def start(self, websocket_listener=True):
+                return None
+
+            async def stop(self, drain=True):
+                return None
+
+        upload_file = AsyncMock()
+
+        fake_container = SimpleNamespace(
+            file_upload_manager=SimpleNamespace(
+                upload_file=upload_file,
+                wait_all=AsyncMock(),
+            )
+        )
+
+        class FakeServiceContainer:
+            @staticmethod
+            def create(ws_url):
+                return fake_container
+
+        reconcile_file = AsyncMock()
+
+        class FakeAsyncReconciler:
+            def __init__(self, db, proj, reconcile_mode):
+                pass
+
+            async def reconcile_file(self, path):
+                return await reconcile_file(path)
+
+        monkeypatch.setattr("materials_commons.cli.subcommands.up.LocalProject", FakeLocalProject)
+        monkeypatch.setattr("materials_commons.cli.subcommands.up.ServiceRuntime", FakeServiceRuntime)
+        monkeypatch.setattr("materials_commons.cli.subcommands.up.ServiceContainer", FakeServiceContainer)
+        monkeypatch.setattr("materials_commons.cli.subcommands.up.AsyncReconciler", FakeAsyncReconciler)
+
+        args = SimpleNamespace(
+            paths=[ignored_file.as_posix()],
+            recursive=False,
+            ws_url="ws://example.test",
+        )
+
+        await ws_upload(args, project_root)
+
+        reconcile_file.assert_not_awaited()
+        upload_file.assert_not_awaited()
+        fake_container.file_upload_manager.wait_all.assert_awaited_once()
+        db.close.assert_awaited_once()
+
+    asyncio.run(run_test())
+
+
+def test_ws_upload_directory_walk_does_not_upload_files_in_mcignore(tmp_path, monkeypatch):
+    """
+    Intent:
+    Verify websocket directory upload honors .mcignore during walk.
+
+    The directory walk should receive and use the ignore function, causing ignored
+    files to be excluded from upload while non-ignored files are still uploaded.
+    """
+
+    async def run_test():
+        project_root = tmp_path
+        allowed_file = project_root / "allowed.txt"
+        ignored_file = project_root / "ignored.txt"
+        ignored_dir = project_root / "ignored-dir"
+        ignored_dir_file = ignored_dir / "nested.txt"
+
+        allowed_file.write_text("upload me")
+        ignored_file.write_text("do not upload me")
+        ignored_dir.mkdir()
+        ignored_dir_file.write_text("do not walk me")
+        (project_root / ".mcignore").write_text("ignored.txt\nignored-dir/\n")
+
+        db = SimpleNamespace(close=AsyncMock())
+        proj = SimpleNamespace(local_path=project_root, get_filedb=AsyncMock(return_value=db))
+
+        class FakeLocalProject:
+            @staticmethod
+            def load(_working_dir):
+                return proj
+
+        class FakeServiceRuntime:
+            def __init__(self, _container):
+                pass
+
+            async def start(self, websocket_listener=True):
+                return None
+
+            async def stop(self, drain=True):
+                return None
+
+        upload_file = AsyncMock(side_effect=["transfer-allowed"])
+
+        fake_container = SimpleNamespace(
+            file_upload_manager=SimpleNamespace(
+                upload_file=upload_file,
+                wait_all=AsyncMock(),
+            )
+        )
+
+        class FakeServiceContainer:
+            @staticmethod
+            def create(ws_url):
+                return fake_container
+
+        observed_ignore_results = {}
+
+        class FakeAsyncReconciler:
+            def __init__(self, db, proj, reconcile_mode):
+                pass
+
+            async def walk(self, path, listdir_fn, recursive=False, ignore_fn=None):
+                observed_ignore_results["allowed_file"] = ignore_fn(allowed_file, False)
+                observed_ignore_results["ignored_file"] = ignore_fn(ignored_file, False)
+                observed_ignore_results["ignored_dir"] = ignore_fn(ignored_dir, True)
+                observed_ignore_results["ignored_dir_file"] = ignore_fn(ignored_dir_file, False)
+
+                yield Path(path), {
+                    "allowed.txt": SimpleNamespace(
+                        exception=None,
+                        observation=SimpleNamespace(name="allowed.txt"),
+                        file_decision=SimpleNamespace(
+                            action="upload",
+                            updated_record=FakeUpdatedRecord(local_checksum="allowed-checksum"),
+                        ),
+                    )
+                }
+
+        monkeypatch.setattr("materials_commons.cli.subcommands.up.LocalProject", FakeLocalProject)
+        monkeypatch.setattr("materials_commons.cli.subcommands.up.ServiceRuntime", FakeServiceRuntime)
+        monkeypatch.setattr("materials_commons.cli.subcommands.up.ServiceContainer", FakeServiceContainer)
+        monkeypatch.setattr("materials_commons.cli.subcommands.up.AsyncReconciler", FakeAsyncReconciler)
+
+        args = SimpleNamespace(
+            paths=[project_root.as_posix()],
+            recursive=True,
+            ws_url="ws://example.test",
+        )
+
+        await ws_upload(args, project_root)
+
+        assert observed_ignore_results == {
+            "allowed_file": False,
+            "ignored_file": True,
+            "ignored_dir": True,
+            "ignored_dir_file": True,
+        }
+
+        upload_file.assert_awaited_once()
+        upload_request = upload_file.await_args.args[0]
+        assert upload_request.observation.name == "allowed.txt"
+        assert upload_request.updated_record.local_checksum == "allowed-checksum"
+
+        fake_container.file_upload_manager.wait_all.assert_awaited_once()
+        db.close.assert_awaited_once()
+
+    asyncio.run(run_test())
 
 def test_send_transfer_init_puts_expected_message_on_websocket_queue(tmp_path):
     """
