@@ -26,7 +26,6 @@ from materials_commons.cli.subcommands.globus import globus_subcommand
 from materials_commons.cli.subcommands.init import init_subcommand
 from materials_commons.cli.subcommands.ls import ls_subcommand
 from materials_commons.cli.subcommands.ls2 import ls2_subcommand
-from materials_commons.cli.subcommands.mcp import mcp_subcommand
 from materials_commons.cli.subcommands.mkdir import mkdir_subcommand
 from materials_commons.cli.subcommands.mv import mv_subcommand
 # from materials_commons.cli.subcommands.proc import ProcSubcommand
@@ -61,7 +60,6 @@ standard_usage = [
     # {'name': 'down2', 'desc': 'Donwload files (experimental)', 'subcommand': down2_subcommand},
     {'name': 'config', 'desc': 'Configure `mc`', 'subcommand': config_subcommand},
     {'name': 'server', 'desc': 'Run MC Server', 'subcommand': server_subcommand},
-    {'name': 'mcp', 'desc': 'Run MCP Server', 'subcommand': mcp_subcommand},
 ]
 standard_interfaces = {d['name']: d for d in standard_usage}
 

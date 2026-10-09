@@ -71,6 +71,5 @@ setup(
         "sortedcontainers~=2.4",
         "tabulate~=0.9",
         "aiosqlite~=0.22",
-        "fastmcp~=3.4",
     ]
 )
