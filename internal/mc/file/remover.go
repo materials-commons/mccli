@@ -24,6 +24,7 @@ type RemoverOpts struct {
 	Recursive  bool
 	RemoteOnly bool
 	LocalOnly  bool
+	RemoveBoth bool
 	Force      bool
 	DryRun     bool
 	Out        io.Writer
