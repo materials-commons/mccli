@@ -209,6 +209,21 @@ class FileUploader:
                 logger.error(f"Transfer rejected: {reason}")
             return False
 
+        elif msg["command"] == "TRANSFER_ALREADY_UPLOADED":
+            payload = msg["payload"]
+            updated_record = replace(self.upload_request.updated_record,
+                                     local_last_seen_ts=int(time.time()),
+                                     remote_checksum=payload.get("file_checksum", ""),
+                                     remote_size=payload.get("file_size", 0),
+                                     remote_file_id=payload.get("file_id", 0),
+                                     remote_ctime_ns=payload.get("file_created_at_ns", 0))
+            db_write_request = DBWriteRequest(project=self.upload_request.project,
+                                              data=updated_record,
+                                              command="single")
+            await self.db_write_queue.put(db_write_request)
+            self._already_uploaded = True
+            return False
+
         logger.error(f"Unexpected response: {msg['command']}")
         return False
 

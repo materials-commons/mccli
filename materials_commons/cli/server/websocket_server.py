@@ -241,7 +241,7 @@ class WebSocketCommandListener:
 
         headers["MC-Client-ID"] = self.client_uuid
         headers["MC-Client-Hostname"] = socket.gethostname()
-        headers["MC-Connection-Type"] = "cli"
+        headers["MC-Connection-Type"] = "pycli"
 
         try:
             projects = server.list_local_projects()
