@@ -192,6 +192,9 @@ async def ws_upload(args, working_dir):
     ignore_parser = igittigitt.IgnoreParser()
     ignore_parser.parse_rule_files(base_dir=proj.local_path, filename=".mcignore", add_default_patterns=False)
 
+    def ignore(path, _ignore):
+        return ignore_parser.match(path)
+
     # Start services
     container = ServiceContainer.create(ws_url=args.ws_url)
     service_runtime = ServiceRuntime(container)
@@ -204,7 +207,7 @@ async def ws_upload(args, working_dir):
             p = Path(path)
             if p.is_dir():
                 async for current_path, path_entries in async_reconciler.walk(path=path, listdir_fn=local_listdir,
-                                                                              recursive=args.recursive, ignore_fn=None):
+                                                                              recursive=args.recursive, ignore_fn=ignore):
                     for entry_name in sorted(path_entries):
                         file_state = path_entries[entry_name]
                         if file_state.exception:
@@ -218,6 +221,8 @@ async def ws_upload(args, working_dir):
                             transfer_id = await container.file_upload_manager.upload_file(upload_request)
                             transfer_ids.append(transfer_id)
             elif p.is_file():
+                if ignore(p, True):
+                    continue
                 file_state = await async_reconciler.reconcile_file(p)
                 if file_state.exception:
                     logger.error(f"Error encountered while processing {p}: {file_state.exception}")
