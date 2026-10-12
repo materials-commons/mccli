@@ -1,16 +1,15 @@
 import argparse
 import json
 import logging
+import materials_commons.api as mcapi
 import os
 import sys
 from datetime import datetime, timedelta
 from importlib.metadata import PackageNotFoundError, version as pkg_version
 from io import StringIO
 
-import materials_commons.api as mcapi
-import requests
-
 import materials_commons.cli.old.functions as clifuncs
+import requests
 from materials_commons.cli.old.exceptions import MCCLIException, MissingRemoteException, \
     MultipleRemoteException, NoDefaultRemoteException
 from materials_commons.cli.old.user_config import Config
@@ -18,14 +17,12 @@ from materials_commons.cli.subcommands.clone import clone_subcommand
 from materials_commons.cli.subcommands.config import config_subcommand
 from materials_commons.cli.subcommands.dataset import DatasetSubcommand
 from materials_commons.cli.subcommands.down import down_subcommand
-from materials_commons.cli.subcommands.down2 import down2_subcommand
 from materials_commons.cli.subcommands.expt import ExptSubcommand
 from materials_commons.cli.subcommands.fetch import fetch_subcommand
 # from materials_commons.cli.subcommands.samp import SampSubcommand
 from materials_commons.cli.subcommands.globus import globus_subcommand
 from materials_commons.cli.subcommands.init import init_subcommand
 from materials_commons.cli.subcommands.ls import ls_subcommand
-from materials_commons.cli.subcommands.ls2 import ls2_subcommand
 from materials_commons.cli.subcommands.mkdir import mkdir_subcommand
 from materials_commons.cli.subcommands.mv import mv_subcommand
 # from materials_commons.cli.subcommands.proc import ProcSubcommand
@@ -167,7 +164,7 @@ def main(argv=None, working_dir=None):
 
         if args.command in standard_interfaces:
             result = standard_interfaces[args.command]['subcommand'](argv[2:], working_dir)
-            check_package_version()
+            # check_package_version()
             return result
 
         else:
